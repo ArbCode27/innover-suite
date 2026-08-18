@@ -1,0 +1,96 @@
+import { Bot, CalendarDays, KeyRound, MessageCircle, Settings2, ShieldCheck } from "lucide-react";
+import { ModuleShell } from "@/components/suite/module-shell";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
+const settingsGroups = [
+  {
+    title: "Meta y WhatsApp",
+    description: "Webhook, token de acceso y número conectado para recibir conversaciones.",
+    status: "Pendiente",
+    icon: MessageCircle,
+  },
+  {
+    title: "IA y handoff",
+    description: "Reglas de respuesta automática, escalamiento humano y horarios de atención.",
+    status: "Base",
+    icon: Bot,
+  },
+  {
+    title: "Google Calendar",
+    description: "Sincronización de citas, disponibilidad y confirmaciones desde chat.",
+    status: "Próximo",
+    icon: CalendarDays,
+  },
+  {
+    title: "Seguridad",
+    description: "Roles, sesiones, trazabilidad y permisos por organización.",
+    status: "Activo",
+    icon: ShieldCheck,
+  },
+];
+
+export default function SettingsPage() {
+  return (
+    <ModuleShell
+      title="Configuración del CRM"
+      description="Gestiona integraciones, reglas de IA, seguridad y datos de operación para activar el CRM."
+      eyebrow="Centro de control"
+      actions={
+        <Button type="button">
+          <KeyRound />
+          Revisar credenciales
+        </Button>
+      }
+    >
+      <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+        <div className="grid gap-4 md:grid-cols-2">
+          {settingsGroups.map((group) => (
+            <Card key={group.title} className="border-primary/15 bg-card/70">
+              <CardHeader className="flex flex-row items-start justify-between gap-4">
+                <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <group.icon className="size-5" />
+                </span>
+                <Badge variant="outline">{group.status}</Badge>
+              </CardHeader>
+              <CardContent>
+                <CardTitle>{group.title}</CardTitle>
+                <CardDescription className="mt-2 leading-6">
+                  {group.description}
+                </CardDescription>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card className="border-primary/15 bg-card/70">
+          <CardHeader>
+            <Badge className="w-fit" variant="outline">
+              Paso principal
+            </Badge>
+            <CardTitle>Vincular Meta Business</CardTitle>
+            <CardDescription>
+              Esta conexión desbloquea chats, contactos, embudos y reservas
+              nacidas desde conversaciones.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {["Validar webhook", "Configurar token", "Seleccionar número"].map((item, index) => (
+              <div key={item} className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/8 p-3">
+                <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                  {index + 1}
+                </span>
+                <span className="text-sm font-medium">{item}</span>
+              </div>
+            ))}
+            <Button className="w-full" type="button" variant="outline">
+              <Settings2 />
+              Configurar integración
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </ModuleShell>
+  );
+}
