@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { signOut } from "@/lib/auth/actions";
+import { getCurrentMembership } from "@/lib/organizations/membership";
 import { ThemeToggle } from "@/components/suite/theme-toggle";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -26,6 +27,7 @@ const navItems = [
 
 const SuiteLayout = async ({ children }: { children: ReactNode }) => {
   const supabase = await createSupabaseServerClient();
+  const membership = await getCurrentMembership();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -71,7 +73,9 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
             </p>
             <p className="mt-2 text-sm font-medium">Meta pendiente</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Vincula WhatsApp para recibir mensajes, contactos y oportunidades.
+              {membership?.organizationName
+                ? `${membership.organizationName}: vincula Instagram o WhatsApp para activar el inbox.`
+                : "Vincula Instagram o WhatsApp para recibir mensajes, contactos y oportunidades."}
             </p>
           </div>
           <div className="mt-auto space-y-4 pt-6">
@@ -83,6 +87,11 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
                 <p className="text-sm font-medium whitespace-nowrap">Asesor CRM</p>
                 {user?.email ? (
                   <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                ) : null}
+                {membership ? (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {membership.role.toUpperCase()} · {membership.organizationName}
+                  </p>
                 ) : null}
               </div>
             </div>

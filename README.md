@@ -47,6 +47,7 @@ npm run dev
 - `src/app/(suite)/funnels`: embudos de venta
 - `src/app/(suite)/contacts`: contactos/afiliaciones
 - `src/app/(suite)/settings`: configuracion del CRM
+- `src/app/onboarding/organization`: alta inicial de organización
 
 ## API base incluida
 
@@ -71,6 +72,7 @@ Variables necesarias:
 - `SUPABASE_SERVICE_ROLE_KEY` para persistir contactos, conversaciones y mensajes
 
 Aplica `supabase/schema.sql` antes de recibir tráfico real. Los eventos se deduplican por `external_message_id`.
+Los eventos que no tengan cuenta conectada en `channel_accounts` se ignoran para evitar mezclar organizaciones.
 
 ## Base de datos
 
@@ -78,12 +80,12 @@ El esquema base de este proyecto vive en:
 
 - `supabase/schema.sql`
 
-Incluye tablas para contactos, conversaciones, mensajes, agenda, funnels, cuentas de canal y eventos de webhook.
+Incluye tablas multi-tenant para organizaciones, miembros, invitaciones, cuentas de canal, contactos, conversaciones, mensajes, agenda, funnels y eventos de webhook.
 
 ## Siguientes pasos recomendados
 
 1. Configurar proyecto Supabase y aplicar `supabase/schema.sql`.
-2. Aplicar `supabase/schema.sql` y configurar `META_WEBHOOK_VERIFY_TOKEN` + `META_APP_SECRET`.
+2. Configurar `META_WEBHOOK_VERIFY_TOKEN`, `META_APP_SECRET` y `SUPABASE_SERVICE_ROLE_KEY`.
 3. Integrar OAuth de Google Calendar.
 4. Crear motor de tools del agente IA (calendar, funnels, handoff).
 5. Añadir drag & drop real en embudos + auditoria de movimientos.

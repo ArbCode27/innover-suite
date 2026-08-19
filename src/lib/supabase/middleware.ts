@@ -67,8 +67,22 @@ export const updateSession = async (request: NextRequest) => {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user && (pathname === "/login" || pathname === "/")) {
-    return redirectWithCookies(request, sessionResponse, "/inbox");
+  if (user) {
+    const { data: membership } = await supabase
+      .from("organization_members")
+      .select("organization_id")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+
+    if (!membership?.organization_id && !pathname.startsWith("/onboarding")) {
+      return redirectWithCookies(request, sessionResponse, "/onboarding/organization");
+    }
+
+    if (membership?.organization_id && (pathname === "/login" || pathname === "/")) {
+      return redirectWithCookies(request, sessionResponse, "/inbox");
+    }
   }
 
   if (!user && !isPublicPath(pathname)) {

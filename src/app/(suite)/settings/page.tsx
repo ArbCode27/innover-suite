@@ -1,4 +1,6 @@
 import { Bot, CalendarDays, KeyRound, MessageCircle, Settings2, ShieldCheck } from "lucide-react";
+import { TeamAndIntegrationsForm } from "./team-and-integrations-form";
+import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { ModuleShell } from "@/components/suite/module-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +33,10 @@ const settingsGroups = [
   },
 ];
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const membership = await getCurrentMembership();
+  const canManageOrganization = hasOrganizationRole(membership, ["owner", "admin"]);
+
   return (
     <ModuleShell
       title="Configuración del CRM"
@@ -84,6 +89,15 @@ export default function SettingsPage() {
                 <span className="text-sm font-medium">{item}</span>
               </div>
             ))}
+            <div className="rounded-xl border border-primary/15 bg-muted/40 p-4">
+              {canManageOrganization ? (
+                <TeamAndIntegrationsForm />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Solo owner/admin pueden invitar asesores y vincular cuentas de Instagram.
+                </p>
+              )}
+            </div>
             <div className="space-y-3 rounded-xl border border-dashed border-primary/30 p-3">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Messenger e Instagram</p>

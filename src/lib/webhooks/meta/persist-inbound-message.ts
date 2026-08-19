@@ -3,11 +3,14 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { InboundMessageEvent, PersistResult } from "@/lib/webhooks/meta/types";
 
 const POSTGRES_UNIQUE_VIOLATION = "23505";
-const DEFAULT_ORGANIZATION_NAME = "Innover Suite";
 const PLACEHOLDER_CONTACT_PREFIX = "Contacto ";
 
 type AdminClient = ReturnType<typeof getSupabaseAdminClient>;
-type PersistStatus = "processed" | "duplicate";
+type PersistStatus = "processed" | "duplicate" | "unmapped";
+type OrganizationContext = {
+  organizationId: number;
+  channelAccountId: number;
+};
 
 const CONTACT_SOURCE_BY_CHANNEL: Record<MetaChannel, ContactSource> = {
   messenger: "meta",
@@ -21,39 +24,13 @@ const isUniqueViolation = (error: { code?: string } | null) =>
 const fallbackContactName = (event: InboundMessageEvent) =>
   event.displayName || `${PLACEHOLDER_CONTACT_PREFIX}${event.channel}`;
 
-const getDefaultOrganizationId = async (supabase: AdminClient) => {
-  const { data: existing, error: existingError } = await supabase
-    .from("organizations")
-    .select("id")
-    .order("id", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (existingError) {
-    throw existingError;
-  }
-
-  if (existing?.id) {
-    return existing.id as number;
-  }
-
-  const { data: created, error: createError } = await supabase
-    .from("organizations")
-    .insert({ name: DEFAULT_ORGANIZATION_NAME })
-    .select("id")
-    .single();
-
-  if (createError || !created?.id) {
-    throw createError || new Error("Failed to create default organization");
-  }
-
-  return created.id as number;
-};
-
-const resolveOrganizationId = async (supabase: AdminClient, event: InboundMessageEvent) => {
+const resolveOrganizationContext = async (
+  supabase: AdminClient,
+  event: InboundMessageEvent,
+): Promise<OrganizationContext | null> => {
   const { data: account, error: accountError } = await supabase
     .from("channel_accounts")
-    .select("organization_id")
+    .select("id, organization_id")
     .eq("channel", event.channel)
     .eq("external_account_id", event.accountId)
     .maybeSingle();
@@ -62,36 +39,14 @@ const resolveOrganizationId = async (supabase: AdminClient, event: InboundMessag
     throw accountError;
   }
 
-  if (account?.organization_id) {
-    return account.organization_id as number;
+  if (!account?.organization_id || !account?.id) {
+    return null;
   }
 
-  const organizationId = await getDefaultOrganizationId(supabase);
-  const { error: upsertError } = await supabase.from("channel_accounts").upsert(
-    {
-      organization_id: organizationId,
-      channel: event.channel,
-      external_account_id: event.accountId,
-    },
-    { onConflict: "channel,external_account_id", ignoreDuplicates: true },
-  );
-
-  if (upsertError) {
-    throw upsertError;
-  }
-
-  const { data: mapped, error: mappedError } = await supabase
-    .from("channel_accounts")
-    .select("organization_id")
-    .eq("channel", event.channel)
-    .eq("external_account_id", event.accountId)
-    .single();
-
-  if (mappedError || !mapped?.organization_id) {
-    throw mappedError || new Error("Failed to map channel account");
-  }
-
-  return mapped.organization_id as number;
+  return {
+    organizationId: account.organization_id as number,
+    channelAccountId: account.id as number,
+  };
 };
 
 const claimWebhookEvent = async (
@@ -137,10 +92,15 @@ const claimWebhookEvent = async (
   };
 };
 
-const findContactIdByChannel = async (supabase: AdminClient, event: InboundMessageEvent) => {
+const findContactIdByChannel = async (
+  supabase: AdminClient,
+  event: InboundMessageEvent,
+  organizationId: number,
+) => {
   const { data, error } = await supabase
     .from("contact_channels")
     .select("contact_id")
+    .eq("organization_id", organizationId)
     .eq("channel", event.channel)
     .eq("external_id", event.externalUserId)
     .maybeSingle();
@@ -157,7 +117,7 @@ const resolveContactId = async (
   event: InboundMessageEvent,
   organizationId: number,
 ) => {
-  const existingContactId = await findContactIdByChannel(supabase, event);
+  const existingContactId = await findContactIdByChannel(supabase, event, organizationId);
   if (existingContactId) {
     return existingContactId;
   }
@@ -178,6 +138,7 @@ const resolveContactId = async (
   }
 
   const { error: channelError } = await supabase.from("contact_channels").insert({
+    organization_id: organizationId,
     contact_id: contact.id,
     channel: event.channel,
     external_id: event.externalUserId,
@@ -191,7 +152,7 @@ const resolveContactId = async (
     throw channelError;
   }
 
-  const racedContactId = await findContactIdByChannel(supabase, event);
+  const racedContactId = await findContactIdByChannel(supabase, event, organizationId);
   if (!racedContactId) {
     throw new Error("Failed to resolve contact after unique conflict");
   }
@@ -203,6 +164,7 @@ const resolveConversationId = async (
   supabase: AdminClient,
   event: InboundMessageEvent,
   organizationId: number,
+  channelAccountId: number,
   contactId: number,
 ) => {
   const { data: existing, error: existingError } = await supabase
@@ -228,6 +190,7 @@ const resolveConversationId = async (
     .insert({
       organization_id: organizationId,
       contact_id: contactId,
+      channel_account_id: channelAccountId,
       channel: event.channel,
       mode: "ai",
       status: "open",
@@ -265,21 +228,27 @@ const persistInboundMessage = async (
   supabase: AdminClient,
   event: InboundMessageEvent,
 ): Promise<PersistStatus> => {
-  const organizationId = await resolveOrganizationId(supabase, event);
-  const claimed = await claimWebhookEvent(supabase, event, organizationId);
+  const organizationContext = await resolveOrganizationContext(supabase, event);
+  if (!organizationContext) {
+    return "unmapped";
+  }
+
+  const claimed = await claimWebhookEvent(supabase, event, organizationContext.organizationId);
   if (claimed.alreadyProcessed) {
     return "duplicate";
   }
 
-  const contactId = await resolveContactId(supabase, event, organizationId);
+  const contactId = await resolveContactId(supabase, event, organizationContext.organizationId);
   const conversationId = await resolveConversationId(
     supabase,
     event,
-    organizationId,
+    organizationContext.organizationId,
+    organizationContext.channelAccountId,
     contactId,
   );
 
   const { error: messageError } = await supabase.from("messages").insert({
+    organization_id: organizationContext.organizationId,
     conversation_id: conversationId,
     direction: "inbound",
     sender_type: "contact",
@@ -337,11 +306,14 @@ export const persistInboundMessages = async (
   const failures: unknown[] = [];
   let processed = 0;
   let duplicates = 0;
+  let ignored = 0;
 
   for (const event of events) {
     try {
       const status = await persistInboundMessage(supabase, event);
-      if (status === "duplicate") {
+      if (status === "unmapped") {
+        ignored += 1;
+      } else if (status === "duplicate") {
         duplicates += 1;
       } else {
         processed += 1;
@@ -360,5 +332,5 @@ export const persistInboundMessages = async (
     throw new Error("One or more webhook events failed to persist");
   }
 
-  return { processed, duplicates, ignored: 0 };
+  return { processed, duplicates, ignored };
 };
