@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = [
   "/login",
+  "/privacy",
   "/api/health",
   "/api/meta/webhook",
   "/api/webhooks/meta",
@@ -38,7 +39,7 @@ export const updateSession = async (request: NextRequest) => {
   const { pathname } = request.nextUrl;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    if (pathname !== "/login") {
+    if (!isPublicPath(pathname)) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       return NextResponse.redirect(url);
