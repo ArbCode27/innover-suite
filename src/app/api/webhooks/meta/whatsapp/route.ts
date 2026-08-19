@@ -7,4 +7,4 @@ export const dynamic = "force-dynamic";
 
 export const GET = (request: NextRequest) => handleMetaVerification(request);
 
-export const POST = (request: NextRequest) => handleMetaEvent(request, "auto");
+export const POST = (request: NextRequest) => handleMetaEvent(request, "whatsapp");

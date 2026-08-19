@@ -14,6 +14,7 @@ export const env = {
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "",
   geminiApiKey: process.env.GEMINI_API_KEY?.trim() || "",
   metaAccessToken: process.env.META_ACCESS_TOKEN?.trim() || "",
+  metaAppSecret: process.env.META_APP_SECRET?.trim() || "",
   metaWebhookVerifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN?.trim() || "",
   googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim() || "",

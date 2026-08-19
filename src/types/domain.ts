@@ -1,13 +1,15 @@
 export type ConversationMode = "ai" | "human";
 export type ConversationStatus = "open" | "in_progress" | "resolved";
 export type AppointmentStatus = "pending" | "confirmed" | "cancelled" | "done";
+export type MetaChannel = "messenger" | "instagram" | "whatsapp";
+export type ContactSource = "meta" | "whatsapp" | "instagram" | "manual" | "other";
 
 export type Contact = {
   id: number;
   fullName: string;
   phone: string | null;
   email: string | null;
-  source: "meta" | "whatsapp" | "instagram" | "manual" | "other";
+  source: ContactSource;
   createdAt: string;
 };
 

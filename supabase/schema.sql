@@ -30,6 +30,7 @@ create table if not exists conversations (
   id bigint generated always as identity primary key,
   organization_id bigint not null references organizations(id) on delete cascade,
   contact_id bigint references contacts(id) on delete set null,
+  channel text not null default 'meta',
   mode text not null default 'ai',
   status text not null default 'open',
   assigned_user_id uuid,
@@ -45,6 +46,7 @@ create table if not exists messages (
   sender_type text not null,
   content text,
   media_url text,
+  external_message_id text,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
@@ -102,3 +104,36 @@ create table if not exists funnel_cards (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create table if not exists channel_accounts (
+  id bigint generated always as identity primary key,
+  organization_id bigint not null references organizations(id) on delete cascade,
+  channel text not null,
+  external_account_id text not null,
+  display_name text,
+  created_at timestamptz not null default now(),
+  unique(channel, external_account_id)
+);
+
+create table if not exists webhook_events (
+  id bigint generated always as identity primary key,
+  organization_id bigint references organizations(id) on delete set null,
+  provider text not null default 'meta',
+  channel text not null,
+  external_event_id text not null,
+  payload jsonb not null default '{}'::jsonb,
+  processed_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique(provider, channel, external_event_id)
+);
+
+alter table conversations add column if not exists channel text not null default 'meta';
+alter table messages add column if not exists external_message_id text;
+
+create unique index if not exists messages_external_message_id_uidx
+  on messages (external_message_id)
+  where external_message_id is not null;
+
+create unique index if not exists conversations_open_contact_channel_uidx
+  on conversations (contact_id, channel)
+  where contact_id is not null and status in ('open', 'in_progress');

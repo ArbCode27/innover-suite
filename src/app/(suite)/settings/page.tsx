@@ -84,6 +84,16 @@ export default function SettingsPage() {
                 <span className="text-sm font-medium">{item}</span>
               </div>
             ))}
+            <div className="space-y-3 rounded-xl border border-dashed border-primary/30 p-3">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Messenger e Instagram</p>
+                <code className="mt-1 block break-all text-xs">/api/webhooks/meta/social</code>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">WhatsApp Cloud API</p>
+                <code className="mt-1 block break-all text-xs">/api/webhooks/meta/whatsapp</code>
+              </div>
+            </div>
             <Button className="w-full" type="button" variant="outline">
               <Settings2 />
               Configurar integración

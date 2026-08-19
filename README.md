@@ -51,9 +51,26 @@ npm run dev
 ## API base incluida
 
 - `GET /api/health`
-- `GET|POST /api/meta/webhook`
+- `GET|POST /api/webhooks/meta/social` (Messenger e Instagram)
+- `GET|POST /api/webhooks/meta/whatsapp` (WhatsApp Cloud API)
+- `GET|POST /api/meta/webhook` (compatibilidad: despacha según `object`)
 - `POST /api/ai/reply`
 - `POST /api/calendar/events`
+
+## Webhooks Meta
+
+En Meta Developers configura:
+
+- Messenger/Instagram: `https://tu-dominio/api/webhooks/meta/social`
+- WhatsApp: `https://tu-dominio/api/webhooks/meta/whatsapp`
+
+Variables necesarias:
+
+- `META_WEBHOOK_VERIFY_TOKEN` para el `GET` de validación
+- `META_APP_SECRET` para validar `X-Hub-Signature-256`
+- `SUPABASE_SERVICE_ROLE_KEY` para persistir contactos, conversaciones y mensajes
+
+Aplica `supabase/schema.sql` antes de recibir tráfico real. Los eventos se deduplican por `external_message_id`.
 
 ## Base de datos
 
@@ -61,12 +78,12 @@ El esquema base de este proyecto vive en:
 
 - `supabase/schema.sql`
 
-Incluye tablas para contactos, conversaciones, mensajes, agenda, funnels y tarjetas.
+Incluye tablas para contactos, conversaciones, mensajes, agenda, funnels, cuentas de canal y eventos de webhook.
 
 ## Siguientes pasos recomendados
 
 1. Configurar proyecto Supabase y aplicar `supabase/schema.sql`.
-2. Implementar idempotencia de webhooks Meta (`webhook_events`).
+2. Aplicar `supabase/schema.sql` y configurar `META_WEBHOOK_VERIFY_TOKEN` + `META_APP_SECRET`.
 3. Integrar OAuth de Google Calendar.
 4. Crear motor de tools del agente IA (calendar, funnels, handoff).
 5. Añadir drag & drop real en embudos + auditoria de movimientos.
