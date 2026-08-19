@@ -1,5 +1,6 @@
 import type { ContactSource, MetaChannel } from "@/types/domain";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { logMetaWebhook, maskIdentifier } from "@/lib/webhooks/meta/logger";
 import type { InboundMessageEvent, PersistResult } from "@/lib/webhooks/meta/types";
 
 const POSTGRES_UNIQUE_VIOLATION = "23505";
@@ -10,6 +11,11 @@ type PersistStatus = "processed" | "duplicate" | "unmapped";
 type OrganizationContext = {
   organizationId: number;
   channelAccountId: number;
+};
+type PersistContext = {
+  requestId: string;
+  channelGroup: "social" | "whatsapp";
+  objectType: string | null;
 };
 
 const CONTACT_SOURCE_BY_CHANNEL: Record<MetaChannel, ContactSource> = {
@@ -297,6 +303,7 @@ const persistInboundMessage = async (
 
 export const persistInboundMessages = async (
   events: InboundMessageEvent[],
+  context?: PersistContext,
 ): Promise<PersistResult> => {
   if (events.length === 0) {
     return { processed: 0, duplicates: 0, ignored: 0 };
@@ -313,6 +320,14 @@ export const persistInboundMessages = async (
       const status = await persistInboundMessage(supabase, event);
       if (status === "unmapped") {
         ignored += 1;
+        logMetaWebhook("warn", "persist.unmapped_channel_account", {
+          requestId: context?.requestId,
+          channelGroup: context?.channelGroup,
+          objectType: context?.objectType,
+          channel: event.channel,
+          accountIdMasked: maskIdentifier(event.accountId),
+          externalMessageIdMasked: maskIdentifier(event.externalMessageId),
+        });
       } else if (status === "duplicate") {
         duplicates += 1;
       } else {
@@ -320,17 +335,41 @@ export const persistInboundMessages = async (
       }
     } catch (error) {
       failures.push(error);
-      console.error("[META_WEBHOOK] persist failed", {
+      logMetaWebhook("error", "persist.event_failed", {
+        requestId: context?.requestId,
+        channelGroup: context?.channelGroup,
+        objectType: context?.objectType,
         channel: event.channel,
-        externalMessageId: event.externalMessageId,
-        error,
+        accountIdMasked: maskIdentifier(event.accountId),
+        externalMessageIdMasked: maskIdentifier(event.externalMessageId),
+        error: error instanceof Error ? error.message : "Unknown error",
       });
     }
   }
 
   if (failures.length > 0) {
+    logMetaWebhook("error", "persist.summary_failed", {
+      requestId: context?.requestId,
+      channelGroup: context?.channelGroup,
+      objectType: context?.objectType,
+      totalEvents: events.length,
+      processed,
+      duplicates,
+      ignored,
+      failures: failures.length,
+    });
     throw new Error("One or more webhook events failed to persist");
   }
+
+  logMetaWebhook("info", "persist.summary", {
+    requestId: context?.requestId,
+    channelGroup: context?.channelGroup,
+    objectType: context?.objectType,
+    totalEvents: events.length,
+    processed,
+    duplicates,
+    ignored,
+  });
 
   return { processed, duplicates, ignored };
 };
