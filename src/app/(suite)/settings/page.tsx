@@ -1,6 +1,7 @@
 import { Bot, CalendarDays, KeyRound, MessageCircle, Settings2, ShieldCheck } from "lucide-react";
 import { TeamAndIntegrationsForm } from "./team-and-integrations-form";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ModuleShell } from "@/components/suite/module-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,17 @@ const settingsGroups = [
 export default async function SettingsPage() {
   const membership = await getCurrentMembership();
   const canManageOrganization = hasOrganizationRole(membership, ["owner", "admin"]);
+  const supabase = await createSupabaseServerClient();
+  const instagramConnection = membership
+    ? await supabase
+        .from("instagram_connections")
+        .select("instagram_user_id, instagram_username, token_expires_at")
+        .eq("organization_id", membership.organizationId)
+        .is("revoked_at", null)
+        .order("connected_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null, error: null };
 
   return (
     <ModuleShell
@@ -91,7 +103,10 @@ export default async function SettingsPage() {
             ))}
             <div className="rounded-xl border border-primary/15 bg-muted/40 p-4">
               {canManageOrganization ? (
-                <TeamAndIntegrationsForm />
+                <TeamAndIntegrationsForm
+                  instagramConnection={instagramConnection.data}
+                  organizationName={membership?.organizationName || "Organización"}
+                />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Solo owner/admin pueden invitar asesores y vincular cuentas de Instagram.

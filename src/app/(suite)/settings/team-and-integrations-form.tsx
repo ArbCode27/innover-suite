@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, UserPlus, Waypoints } from "lucide-react";
-import {
-  connectInstagramAccountAction,
-  inviteAdvisorAction,
-} from "@/lib/organizations/actions";
+import { Loader2, MessageCircle, Unplug, UserPlus } from "lucide-react";
+import { inviteAdvisorAction } from "@/lib/organizations/actions";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -17,27 +16,48 @@ const inviteSchema = z.object({
   email: z.email("Ingresa un correo válido"),
 });
 
-const instagramSchema = z.object({
-  instagramAccountId: z.string().trim().min(2, "Ingresa un identificador válido"),
-  displayName: z.string().trim().min(2, "Ingresa un nombre visible"),
-});
-
 type InviteValues = z.infer<typeof inviteSchema>;
-type InstagramValues = z.infer<typeof instagramSchema>;
 
-export const TeamAndIntegrationsForm = () => {
+type TeamAndIntegrationsFormProps = {
+  organizationName: string;
+  instagramConnection: {
+    instagram_user_id: string;
+    instagram_username: string | null;
+    token_expires_at: string;
+  } | null;
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  connected: "Cuenta de Instagram conectada correctamente.",
+  cancelled: "Conexión cancelada por el usuario.",
+  invalid_callback: "Instagram devolvió un callback incompleto. Inténtalo de nuevo.",
+  invalid_state: "La sesión de conexión expiró o no es válida. Reintenta desde el panel.",
+  token_exchange_failed: "No se pudo completar el intercambio de token con Instagram.",
+  long_token_failed: "No se pudo generar el token de larga duración.",
+  persist_failed: "Se conectó Instagram, pero no se pudo guardar la conexión en el CRM.",
+  disconnect_failed: "No se pudo desconectar la cuenta en este intento.",
+  disconnected: "Cuenta de Instagram desconectada correctamente.",
+  missing_env: "Faltan variables de entorno para OAuth de Instagram.",
+  state_error: "No se pudo iniciar el flujo OAuth en este momento.",
+  auth_required: "Tu sesión expiró. Inicia sesión nuevamente para conectar Instagram.",
+  forbidden: "No tienes permisos para gestionar integraciones de Instagram.",
+};
+
+const formatDate = (value: string) =>
+  new Intl.DateTimeFormat("es-DO", {
+    dateStyle: "medium",
+  }).format(new Date(value));
+
+export const TeamAndIntegrationsForm = ({
+  instagramConnection,
+  organizationName,
+}: TeamAndIntegrationsFormProps) => {
+  const searchParams = useSearchParams();
+  const igStatus = searchParams.get("ig");
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
-  const [connectMessage, setConnectMessage] = useState<string | null>(null);
   const inviteForm = useForm<InviteValues>({
     resolver: zodResolver(inviteSchema),
     defaultValues: { email: "" },
-  });
-  const instagramForm = useForm<InstagramValues>({
-    resolver: zodResolver(instagramSchema),
-    defaultValues: {
-      instagramAccountId: "",
-      displayName: "",
-    },
   });
 
   const handleInvite = inviteForm.handleSubmit(async (values) => {
@@ -46,18 +66,58 @@ export const TeamAndIntegrationsForm = () => {
     setInviteMessage(result?.success || result?.error || null);
   });
 
-  const handleConnectInstagram = instagramForm.handleSubmit(async (values) => {
-    setConnectMessage(null);
-    const result = await connectInstagramAccountAction(values);
-    setConnectMessage(result?.success || result?.error || null);
-  });
-
   const inviteError = inviteMessage && !inviteMessage.toLowerCase().includes("registrada");
-  const connectError =
-    connectMessage && !connectMessage.toLowerCase().includes("correctamente");
+  const statusMessage = igStatus ? STATUS_LABELS[igStatus] : null;
+  const statusIsError = Boolean(
+    igStatus &&
+      !["connected", "disconnected"].includes(igStatus),
+  );
 
   return (
     <div className="space-y-6">
+      <section className="space-y-4 rounded-xl border border-primary/15 bg-background/70 p-4">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <MessageCircle className="size-4 text-primary" />
+          Integración de Instagram
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Conecta una cuenta profesional de Instagram para que <strong>{organizationName}</strong>{" "}
+          reciba mensajes entrantes en el CRM.
+        </p>
+
+        {statusMessage ? (
+          <p className={`text-sm ${statusIsError ? "text-destructive" : "text-emerald-600"}`}>
+            {statusMessage}
+          </p>
+        ) : null}
+
+        {instagramConnection ? (
+          <div className="space-y-3 rounded-lg border border-emerald-400/30 bg-emerald-500/5 p-3">
+            <p className="text-sm font-medium">
+              Conectada:{" "}
+              <span className="text-emerald-700 dark:text-emerald-400">
+                {instagramConnection.instagram_username
+                  ? `@${instagramConnection.instagram_username}`
+                  : instagramConnection.instagram_user_id}
+              </span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Token válido hasta: {formatDate(instagramConnection.token_expires_at)}
+            </p>
+            <form action="/api/auth/instagram/disconnect" method="post">
+              <Button type="submit" variant="outline">
+                <Unplug />
+                Desconectar
+              </Button>
+            </form>
+          </div>
+        ) : (
+          <Button asChild>
+            <Link href="/api/auth/instagram/start">Conectar con Instagram</Link>
+          </Button>
+        )}
+      </section>
+
       <form className="space-y-4" onSubmit={handleInvite} noValidate>
         <div className="flex items-center gap-2 text-sm font-semibold">
           <UserPlus className="size-4 text-primary" />
@@ -89,56 +149,6 @@ export const TeamAndIntegrationsForm = () => {
             </>
           ) : (
             "Invitar asesor"
-          )}
-        </Button>
-      </form>
-
-      <form className="space-y-4" onSubmit={handleConnectInstagram} noValidate>
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <Waypoints className="size-4 text-primary" />
-          Vincular cuenta de Instagram
-        </div>
-        <FieldGroup>
-          <Field
-            data-invalid={Boolean(instagramForm.formState.errors.displayName) || undefined}
-          >
-            <FieldLabel htmlFor="instagram-display">Nombre visible</FieldLabel>
-            <Input
-              id="instagram-display"
-              placeholder="Clínica Acme"
-              aria-invalid={Boolean(instagramForm.formState.errors.displayName)}
-              {...instagramForm.register("displayName")}
-            />
-            <FieldError>{instagramForm.formState.errors.displayName?.message}</FieldError>
-          </Field>
-          <Field
-            data-invalid={Boolean(instagramForm.formState.errors.instagramAccountId) || undefined}
-          >
-            <FieldLabel htmlFor="instagram-account-id">Instagram Account ID</FieldLabel>
-            <Input
-              id="instagram-account-id"
-              placeholder="1784xxxxxxxxxxxx"
-              aria-invalid={Boolean(instagramForm.formState.errors.instagramAccountId)}
-              {...instagramForm.register("instagramAccountId")}
-            />
-            <FieldError>
-              {instagramForm.formState.errors.instagramAccountId?.message}
-            </FieldError>
-          </Field>
-        </FieldGroup>
-        {connectMessage ? (
-          <p className={`text-sm ${connectError ? "text-destructive" : "text-emerald-600"}`}>
-            {connectMessage}
-          </p>
-        ) : null}
-        <Button disabled={instagramForm.formState.isSubmitting} type="submit">
-          {instagramForm.formState.isSubmitting ? (
-            <>
-              <Loader2 className="animate-spin" />
-              Vinculando...
-            </>
-          ) : (
-            "Vincular Instagram"
           )}
         </Button>
       </form>

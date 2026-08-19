@@ -16,6 +16,10 @@ export const env = {
   metaAccessToken: process.env.META_ACCESS_TOKEN?.trim() || "",
   metaAppSecret: process.env.META_APP_SECRET?.trim() || "",
   metaWebhookVerifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN?.trim() || "",
+  instagramAppId: process.env.INSTAGRAM_APP_ID?.trim() || "",
+  instagramAppSecret: process.env.INSTAGRAM_APP_SECRET?.trim() || "",
+  instagramRedirectUri: process.env.INSTAGRAM_REDIRECT_URI?.trim() || "",
+  cronSecret: process.env.CRON_SECRET?.trim() || "",
   googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim() || "",
 };

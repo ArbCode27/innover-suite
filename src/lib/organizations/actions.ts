@@ -15,11 +15,6 @@ const inviteAdvisorSchema = z.object({
   role: z.enum(["admin", "agent", "viewer"]),
 });
 
-const connectInstagramSchema = z.object({
-  instagramAccountId: z.string().trim().min(2, "Ingresa un identificador válido"),
-  displayName: z.string().trim().min(2, "Ingresa un nombre para la cuenta"),
-});
-
 export const createOrganizationAction = async (rawValues: unknown) => {
   const parsed = createOrganizationSchema.safeParse(rawValues);
   if (!parsed.success) {
@@ -84,43 +79,4 @@ export const inviteAdvisorAction = async (rawValues: unknown) => {
 
   revalidatePath("/settings");
   return { success: "Invitación registrada. Comparte el enlace de onboarding al asesor." };
-};
-
-export const connectInstagramAccountAction = async (rawValues: unknown) => {
-  const parsed = connectInstagramSchema.safeParse(rawValues);
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
-  }
-
-  const membership = await getCurrentMembership();
-  if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
-    return { error: "No tienes permisos para conectar cuentas." };
-  }
-
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
-  }
-
-  const { error } = await supabase.from("channel_accounts").upsert(
-    {
-      organization_id: membership.organizationId,
-      channel: "instagram",
-      external_account_id: parsed.data.instagramAccountId,
-      display_name: parsed.data.displayName,
-      connected_by_user_id: user.id,
-    },
-    { onConflict: "channel,external_account_id" },
-  );
-
-  if (error) {
-    return { error: error.message || "No se pudo vincular la cuenta de Instagram" };
-  }
-
-  revalidatePath("/settings");
-  return { success: "Cuenta de Instagram vinculada correctamente." };
 };

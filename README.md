@@ -55,6 +55,10 @@ npm run dev
 - `GET|POST /api/webhooks/meta/social` (Messenger e Instagram)
 - `GET|POST /api/webhooks/meta/whatsapp` (WhatsApp Cloud API)
 - `GET|POST /api/meta/webhook` (compatibilidad: despacha según `object`)
+- `GET /api/auth/instagram/start` (inicia OAuth por organización)
+- `GET /api/auth/instagram/callback` (callback OAuth)
+- `POST /api/auth/instagram/disconnect` (desconectar cuenta vinculada)
+- `GET /api/cron/instagram/refresh` (renovar tokens próximos a expirar)
 - `POST /api/ai/reply`
 - `POST /api/calendar/events`
 
@@ -70,6 +74,8 @@ Variables necesarias:
 - `META_WEBHOOK_VERIFY_TOKEN` para el `GET` de validación
 - `META_APP_SECRET` para validar `X-Hub-Signature-256`
 - `SUPABASE_SERVICE_ROLE_KEY` para persistir contactos, conversaciones y mensajes
+- `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` y `INSTAGRAM_REDIRECT_URI` para OAuth
+- `CRON_SECRET` para proteger el endpoint de refresco de tokens
 
 Aplica `supabase/schema.sql` antes de recibir tráfico real. Los eventos se deduplican por `external_message_id`.
 Los eventos que no tengan cuenta conectada en `channel_accounts` se ignoran para evitar mezclar organizaciones.
