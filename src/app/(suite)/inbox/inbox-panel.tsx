@@ -73,6 +73,7 @@ const attachmentAccept: Record<AttachmentKind, string> = {
   audio: "audio/*",
   document: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv",
 };
+const previewCharLimit = 72;
 
 const formatTime = (value: string) =>
   new Intl.DateTimeFormat("es-DO", {
@@ -110,6 +111,11 @@ const resolveInitials = (name: string) => {
   if (!words.length) return "SN";
   if (words.length === 1) return words[0]!.slice(0, 2).toUpperCase();
   return `${words[0]![0]}${words[1]![0]}`.toUpperCase();
+};
+
+const limitPreview = (text: string) => {
+  if (text.length <= previewCharLimit) return text;
+  return `${text.slice(0, previewCharLimit - 1).trimEnd()}…`;
 };
 
 const normalizeMessage = (row: {
@@ -460,7 +466,7 @@ export const InboxPanel = ({
                             </span>
                           </div>
                           <p className="mt-1 truncate text-xs text-muted-foreground">
-                            {conversation.lastMessagePreview || "Sin mensajes recientes"}
+                            {limitPreview(conversation.lastMessagePreview || "Sin mensajes recientes")}
                           </p>
                           <div className="mt-2 flex items-center gap-2">
                             <Badge variant="outline">{conversation.channel}</Badge>
@@ -651,7 +657,7 @@ export const InboxPanel = ({
                 <textarea
                   aria-label="Escribe una respuesta"
                   placeholder="Escribe un mensaje..."
-                  className="min-h-[44px] max-h-32 flex-1 resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring/50 transition focus-visible:ring-3"
+                  className="h-8 min-h-8 max-h-8 flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-5 outline-none ring-ring/50 transition focus-visible:ring-3"
                   value={composerText}
                   onChange={(event) => setComposerText(event.target.value)}
                   onKeyDown={handleComposerKeyDown}
@@ -680,7 +686,7 @@ export const InboxPanel = ({
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
                   <Clock3 className="size-3.5" />
-                  Enter para enviar · Shift + Enter para salto de línea
+                  Enter para enviar mensaje
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <Bot className="size-3.5" />

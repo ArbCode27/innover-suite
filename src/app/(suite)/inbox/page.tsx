@@ -1,15 +1,6 @@
-import { Bot, Headphones, Inbox, MessageCircle } from "lucide-react";
 import { redirect } from "next/navigation";
 import { getCurrentMembership } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { ModuleShell } from "@/components/suite/module-shell";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { InboxPanel } from "./inbox-panel";
 import type { InboxConversation, InboxMessage } from "./types";
 
@@ -161,51 +152,14 @@ export default async function InboxPage() {
     });
   }
 
-  const aiOpenCount = conversations.filter(
-    (item) => item.mode === "ai" && item.status !== "resolved",
-  ).length;
-  const humanCount = conversations.filter((item) => item.mode === "human").length;
-  const unassignedCount = conversations.filter((item) => !item.assignedUserId).length;
-
-  const metrics = [
-    { label: "Conversaciones", value: String(conversations.length), icon: MessageCircle },
-    { label: "Pendientes IA", value: String(aiOpenCount), icon: Bot },
-    { label: "En humano", value: String(humanCount), icon: Headphones },
-    { label: "Sin asignar", value: String(unassignedCount), icon: Inbox },
-  ];
-
   return (
-    <ModuleShell
-      title="Centro de conversaciones"
-      description="Gestiona chats de Meta y WhatsApp con IA, handoff humano, etiquetas y trazabilidad por conversación."
-      eyebrow="Inbox Omnicanal"
-      actions={
-        <Button type="button">
-          {membership.organizationName}
-        </Button>
-      }
-    >
-      <div className="grid gap-4 md:grid-cols-4">
-        {metrics.map((metric) => (
-          <Card key={metric.label} className="border-primary/15 bg-card/70">
-            <CardHeader className="flex flex-row items-center justify-between gap-3 p-4">
-              <div>
-                <CardDescription>{metric.label}</CardDescription>
-                <CardTitle className="mt-2 text-3xl">{metric.value}</CardTitle>
-              </div>
-              <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <metric.icon className="size-5" />
-              </span>
-            </CardHeader>
-          </Card>
-        ))}
-      </div>
+    <section>
       <InboxPanel
         organizationName={membership.organizationName}
         currentUserId={user?.id ?? null}
         initialConversations={conversations}
         initialMessagesByConversation={initialMessagesByConversation}
       />
-    </ModuleShell>
+    </section>
   );
 }
