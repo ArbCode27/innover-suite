@@ -6,6 +6,7 @@ const PUBLIC_PATHS = [
   "/privacy",
   "/api/health",
   "/api/auth/instagram/callback",
+  "/api/auth/messenger/callback",
   "/api/cron/instagram/refresh",
   "/api/meta/webhook",
   "/api/webhooks/meta",

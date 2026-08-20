@@ -55,6 +55,16 @@ create table if not exists organization_invitations (
   unique(organization_id, email)
 );
 
+create table if not exists messenger_oauth_states (
+  id uuid primary key default gen_random_uuid(),
+  organization_id bigint not null references organizations(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  state_token text not null unique,
+  expires_at timestamptz not null,
+  consumed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 create or replace function public.is_org_member(target_organization_id bigint)
 returns boolean
 language sql
@@ -304,6 +314,7 @@ create index if not exists messages_conversation_created_idx
 alter table organizations enable row level security;
 alter table organization_members enable row level security;
 alter table organization_invitations enable row level security;
+alter table messenger_oauth_states enable row level security;
 alter table channel_accounts enable row level security;
 alter table contacts enable row level security;
 alter table contact_channels enable row level security;

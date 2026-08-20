@@ -25,9 +25,14 @@ type TeamAndIntegrationsFormProps = {
     instagram_username: string | null;
     token_expires_at: string;
   } | null;
+  messengerConnections: Array<{
+    external_account_id: string;
+    display_name: string | null;
+    updated_at: string;
+  }>;
 };
 
-const STATUS_LABELS: Record<string, string> = {
+const INSTAGRAM_STATUS_LABELS: Record<string, string> = {
   connected: "Cuenta de Instagram conectada correctamente.",
   cancelled: "Conexión cancelada por el usuario.",
   invalid_callback: "Instagram devolvió un callback incompleto. Inténtalo de nuevo.",
@@ -43,6 +48,25 @@ const STATUS_LABELS: Record<string, string> = {
   forbidden: "No tienes permisos para gestionar integraciones de Instagram.",
 };
 
+const MESSENGER_STATUS_LABELS: Record<string, string> = {
+  connected: "Messenger conectado correctamente.",
+  cancelled: "Conexión de Messenger cancelada por el usuario.",
+  invalid_callback: "Facebook devolvió un callback incompleto. Inténtalo de nuevo.",
+  invalid_state: "La sesión de conexión de Messenger expiró o no es válida. Reintenta desde el panel.",
+  token_exchange_failed: "No se pudo completar el intercambio de token con Facebook.",
+  long_token_failed: "No se pudo generar el token de larga duración de Facebook.",
+  pages_fetch_failed: "No se pudieron obtener las páginas de Facebook autorizadas.",
+  no_pages: "No se encontró ninguna página de Facebook autorizada para conectar.",
+  subscription_failed: "No se pudo suscribir la página al webhook de Messenger.",
+  persist_failed: "Se conectó Messenger, pero no se pudo guardar la conexión en el CRM.",
+  disconnect_failed: "No se pudo desconectar Messenger en este intento.",
+  disconnected: "Messenger desconectado correctamente.",
+  missing_env: "Faltan variables de entorno para OAuth de Messenger.",
+  state_error: "No se pudo iniciar el flujo OAuth de Messenger.",
+  auth_required: "Tu sesión expiró. Inicia sesión nuevamente para conectar Messenger.",
+  forbidden: "No tienes permisos para gestionar integraciones de Messenger.",
+};
+
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat("es-DO", {
     dateStyle: "medium",
@@ -50,10 +74,12 @@ const formatDate = (value: string) =>
 
 export const TeamAndIntegrationsForm = ({
   instagramConnection,
+  messengerConnections,
   organizationName,
 }: TeamAndIntegrationsFormProps) => {
   const searchParams = useSearchParams();
   const igStatus = searchParams.get("ig");
+  const messengerStatus = searchParams.get("ms");
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const inviteForm = useForm<InviteValues>({
     resolver: zodResolver(inviteSchema),
@@ -67,11 +93,17 @@ export const TeamAndIntegrationsForm = ({
   });
 
   const inviteError = inviteMessage && !inviteMessage.toLowerCase().includes("registrada");
-  const statusMessage = igStatus ? STATUS_LABELS[igStatus] : null;
-  const statusIsError = Boolean(
+  const instagramStatusMessage = igStatus ? INSTAGRAM_STATUS_LABELS[igStatus] : null;
+  const instagramStatusIsError = Boolean(
     igStatus &&
       !["connected", "disconnected"].includes(igStatus),
   );
+  const messengerStatusMessage = messengerStatus ? MESSENGER_STATUS_LABELS[messengerStatus] : null;
+  const messengerStatusIsError = Boolean(
+    messengerStatus &&
+      !["connected", "disconnected"].includes(messengerStatus),
+  );
+  const hasMessengerConnections = messengerConnections.length > 0;
 
   return (
     <div className="space-y-6">
@@ -85,9 +117,9 @@ export const TeamAndIntegrationsForm = ({
           reciba mensajes entrantes en el CRM.
         </p>
 
-        {statusMessage ? (
-          <p className={`text-sm ${statusIsError ? "text-destructive" : "text-emerald-600"}`}>
-            {statusMessage}
+        {instagramStatusMessage ? (
+          <p className={`text-sm ${instagramStatusIsError ? "text-destructive" : "text-emerald-600"}`}>
+            {instagramStatusMessage}
           </p>
         ) : null}
 
@@ -114,6 +146,57 @@ export const TeamAndIntegrationsForm = ({
         ) : (
           <Button asChild>
             <Link href="/api/auth/instagram/start">Conectar con Instagram</Link>
+          </Button>
+        )}
+      </section>
+
+      <section className="space-y-4 rounded-xl border border-primary/15 bg-background/70 p-4">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <MessageCircle className="size-4 text-primary" />
+          Integración de Messenger
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Conecta una o más páginas de Facebook para que <strong>{organizationName}</strong>{" "}
+          reciba mensajes de Messenger en el CRM.
+        </p>
+
+        {messengerStatusMessage ? (
+          <p className={`text-sm ${messengerStatusIsError ? "text-destructive" : "text-emerald-600"}`}>
+            {messengerStatusMessage}
+          </p>
+        ) : null}
+
+        {hasMessengerConnections ? (
+          <div className="space-y-3 rounded-lg border border-emerald-400/30 bg-emerald-500/5 p-3">
+            <div className="space-y-2">
+              {messengerConnections.map((connection) => (
+                <div
+                  key={connection.external_account_id}
+                  className="rounded-lg border border-emerald-400/20 bg-background/60 p-3"
+                >
+                  <p className="text-sm font-medium">
+                    Página conectada:{" "}
+                    <span className="text-emerald-700 dark:text-emerald-400">
+                      {connection.display_name || connection.external_account_id}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Page ID: {connection.external_account_id} · Actualizada:{" "}
+                    {formatDate(connection.updated_at)}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <form action="/api/auth/messenger/disconnect" method="post">
+              <Button type="submit" variant="outline">
+                <Unplug />
+                Desconectar Messenger
+              </Button>
+            </form>
+          </div>
+        ) : (
+          <Button asChild>
+            <Link href="/api/auth/messenger/start">Conectar Messenger</Link>
           </Button>
         )}
       </section>

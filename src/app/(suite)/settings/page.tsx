@@ -48,6 +48,14 @@ export default async function SettingsPage() {
         .limit(1)
         .maybeSingle()
     : { data: null, error: null };
+  const messengerConnections = membership
+    ? await supabase
+        .from("channel_accounts")
+        .select("external_account_id, display_name, updated_at")
+        .eq("organization_id", membership.organizationId)
+        .eq("channel", "messenger")
+        .order("updated_at", { ascending: false })
+    : { data: null, error: null };
 
   return (
     <ModuleShell
@@ -105,6 +113,7 @@ export default async function SettingsPage() {
               {canManageOrganization ? (
                 <TeamAndIntegrationsForm
                   instagramConnection={instagramConnection.data}
+                  messengerConnections={messengerConnections.data ?? []}
                   organizationName={membership?.organizationName || "Organización"}
                 />
               ) : (

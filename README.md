@@ -58,6 +58,9 @@ npm run dev
 - `GET /api/auth/instagram/start` (inicia OAuth por organización)
 - `GET /api/auth/instagram/callback` (callback OAuth)
 - `POST /api/auth/instagram/disconnect` (desconectar cuenta vinculada)
+- `GET /api/auth/messenger/start` (inicia Facebook Login para páginas)
+- `GET /api/auth/messenger/callback` (callback OAuth de Messenger)
+- `POST /api/auth/messenger/disconnect` (desconectar páginas vinculadas)
 - `GET /api/cron/instagram/refresh` (renovar tokens próximos a expirar)
 - `POST /api/ai/reply`
 - `POST /api/calendar/events`
@@ -75,6 +78,7 @@ Variables necesarias:
 - `META_APP_SECRET` para validar `X-Hub-Signature-256`
 - `SUPABASE_SERVICE_ROLE_KEY` para persistir contactos, conversaciones y mensajes
 - `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` y `INSTAGRAM_REDIRECT_URI` para OAuth
+- `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` y `FACEBOOK_REDIRECT_URI` para OAuth de Messenger
 - `CRON_SECRET` para proteger el endpoint de refresco de tokens
 
 Aplica `supabase/schema.sql` antes de recibir tráfico real. Los eventos se deduplican por `external_message_id`.
