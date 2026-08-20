@@ -11,9 +11,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import {
-  Bot,
   CheckCircle2,
-  Clock3,
   FileText,
   Headphones,
   ImageIcon,
@@ -390,7 +388,7 @@ export const InboxPanel = ({
     });
   };
 
-  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void handleSendMessage();
@@ -398,6 +396,7 @@ export const InboxPanel = ({
   };
 
   const canSend = Boolean(selectedConversation) && !isPending && !isUploadingAttachment;
+  const showAudioQuickAction = !composerText.trim() && !composerAttachment;
 
   return (
     <div className="grid min-h-[640px] gap-4 lg:grid-cols-[360px_1fr]">
@@ -654,10 +653,10 @@ export const InboxPanel = ({
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <textarea
+                <Input
                   aria-label="Escribe una respuesta"
                   placeholder="Escribe un mensaje..."
-                  className="h-8 min-h-8 max-h-8 flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-5 outline-none ring-ring/50 transition focus-visible:ring-3"
+                  className="h-8 flex-1"
                   value={composerText}
                   onChange={(event) => setComposerText(event.target.value)}
                   onKeyDown={handleComposerKeyDown}
@@ -667,11 +666,17 @@ export const InboxPanel = ({
                 <Button
                   type="button"
                   size="icon"
-                  aria-label="Enviar mensaje"
-                  onClick={handleSendMessage}
-                  disabled={!canSend || (!composerText.trim() && !composerAttachment)}
+                  aria-label={showAudioQuickAction ? "Grabar o adjuntar audio" : "Enviar mensaje"}
+                  onClick={showAudioQuickAction ? () => handleSelectAttachmentKind("audio") : handleSendMessage}
+                  disabled={!canSend}
                 >
-                  {isPending || isUploadingAttachment ? <Loader2 className="animate-spin" /> : <SendHorizontal />}
+                  {isPending || isUploadingAttachment ? (
+                    <Loader2 className="animate-spin" />
+                  ) : showAudioQuickAction ? (
+                    <Mic />
+                  ) : (
+                    <SendHorizontal />
+                  )}
                 </Button>
               </div>
 
@@ -682,17 +687,6 @@ export const InboxPanel = ({
                 accept={attachmentAccept[pendingAttachmentKind]}
                 onChange={handleAttachmentFileChange}
               />
-
-              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1">
-                  <Clock3 className="size-3.5" />
-                  Enter para enviar mensaje
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <Bot className="size-3.5" />
-                  Al responder, el chat pasa a modo humano
-                </span>
-              </div>
             </div>
           </CardContent>
         </Card>
