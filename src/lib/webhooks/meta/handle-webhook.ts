@@ -6,7 +6,7 @@ import { normalizeSocialEvents } from "@/lib/webhooks/meta/normalize-social";
 import { normalizeWhatsappEvents } from "@/lib/webhooks/meta/normalize-whatsapp";
 import { persistInboundMessages } from "@/lib/webhooks/meta/persist-inbound-message";
 import type { MetaWebhookKind } from "@/lib/webhooks/meta/types";
-import { verifyMetaSignature } from "@/lib/webhooks/meta/verify-signature";
+import { getSignatureDiagnostics } from "@/lib/webhooks/meta/verify-signature";
 import { env } from "@/lib/config/env";
 
 const SOCIAL_OBJECTS = new Set(["page", "instagram"]);
@@ -73,13 +73,38 @@ export const handleMetaEvent = async (request: NextRequest, kind: MetaWebhookKin
     hasSignatureHeader: Boolean(signatureHeader),
   });
 
-  if (!verifyMetaSignature(rawBody, signatureHeader)) {
+  const signatureDiagnostics = getSignatureDiagnostics(rawBody, signatureHeader);
+  if (!signatureDiagnostics.isValid) {
     logMetaWebhook("warn", "request.invalid_signature", {
       requestId,
       kind,
+      reason: signatureDiagnostics.reason,
+      hasHeader: signatureDiagnostics.hasHeader,
+      headerPrefix: signatureDiagnostics.headerPrefix,
+      headerSignatureLength: signatureDiagnostics.headerSignatureLength,
+      candidates: signatureDiagnostics.candidates.map((candidate) => ({
+        secretName: candidate.secretName,
+        fingerprint: candidate.fingerprint,
+        providedLength: candidate.providedLength,
+        expectedLength: candidate.expectedLength,
+        lengthMatches: candidate.lengthMatches,
+        matches: candidate.matches,
+      })),
     });
     return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
   }
+
+  logMetaWebhook("info", "request.signature_valid", {
+    requestId,
+    kind,
+    matchedSecret: signatureDiagnostics.matchedSecret,
+    candidates: signatureDiagnostics.candidates.map((candidate) => ({
+      secretName: candidate.secretName,
+      fingerprint: candidate.fingerprint,
+      lengthMatches: candidate.lengthMatches,
+      matches: candidate.matches,
+    })),
+  });
 
   const payload = parseJsonPayload(rawBody);
   if (!payload) {
