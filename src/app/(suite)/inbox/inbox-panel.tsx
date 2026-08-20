@@ -397,6 +397,7 @@ export const InboxPanel = ({
 
   const canSend = Boolean(selectedConversation) && !isPending && !isUploadingAttachment;
   const showAudioQuickAction = !composerText.trim() && !composerAttachment;
+  const hasComposerMeta = Boolean(composerAttachment || composerError);
 
   return (
     <div className="grid h-[calc(100vh-1.5rem)] max-h-[100vh] gap-3 overflow-hidden md:h-[calc(100vh-2.5rem)] lg:grid-cols-[330px_1fr]">
@@ -581,7 +582,11 @@ export const InboxPanel = ({
               )}
             </ScrollArea>
 
-            <div className="border-t border-primary/10 p-2">
+            <div
+              className={`border-t border-primary/10 px-2 ${
+                hasComposerMeta ? "py-2" : "py-1.5"
+              }`}
+            >
               {composerAttachment ? (
                 <div className="mb-2 flex items-center justify-between rounded-lg border border-primary/20 bg-primary/8 px-2.5 py-1.5 text-xs">
                   <span className="truncate">
@@ -602,7 +607,7 @@ export const InboxPanel = ({
                 <p className="mb-2 text-xs text-destructive">{composerError}</p>
               ) : null}
 
-              <div className="flex min-h-12 items-center gap-2">
+              <div className="flex h-10 items-center gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button type="button" variant="outline" size="icon" aria-label="Insertar emoji">
@@ -658,7 +663,7 @@ export const InboxPanel = ({
                 <Input
                   aria-label="Escribe una respuesta"
                   placeholder="Escribe un mensaje..."
-                  className="h-9 flex-1"
+                  className="h-10 flex-1"
                   value={composerText}
                   onChange={(event) => setComposerText(event.target.value)}
                   onKeyDown={handleComposerKeyDown}
