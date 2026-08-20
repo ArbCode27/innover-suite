@@ -399,33 +399,35 @@ export const InboxPanel = ({
   const showAudioQuickAction = !composerText.trim() && !composerAttachment;
 
   return (
-    <div className="grid min-h-[640px] gap-4 lg:grid-cols-[360px_1fr]">
-      <Card className="border-primary/15 bg-card/70">
-        <CardHeader className="p-5">
-          <div className="flex items-start justify-between gap-3">
+    <div className="grid h-[calc(100vh-1.5rem)] max-h-[100vh] gap-3 overflow-hidden md:h-[calc(100vh-2.5rem)] lg:grid-cols-[330px_1fr]">
+      <Card className="flex h-full min-h-0 flex-col border-primary/15 bg-card/70">
+        <CardHeader className="space-y-3 p-3">
+          <div className="flex items-start justify-between gap-2">
             <div>
               <CardTitle>Conversaciones</CardTitle>
               <CardDescription>{filteredConversations.length} chats en vista</CardDescription>
             </div>
-            <Badge variant="outline">{organizationName}</Badge>
+            <Badge variant="outline" className="max-w-32 truncate">
+              {organizationName}
+            </Badge>
           </div>
 
-          <div className="relative mt-4">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label="Buscar conversación"
-              className="h-10 pl-9"
+              className="h-8 pl-9"
               placeholder="Buscar por nombre, teléfono o texto"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
             />
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {inboxFilters.map((filter) => (
               <Button
                 key={filter.key}
                 type="button"
-                size="sm"
+                size="xs"
                 variant={activeFilter === filter.key ? "default" : "outline"}
                 aria-pressed={activeFilter === filter.key}
                 onClick={() => setActiveFilter(filter.key)}
@@ -436,17 +438,17 @@ export const InboxPanel = ({
           </div>
         </CardHeader>
 
-        <CardContent className="p-0">
+        <CardContent className="min-h-0 flex-1 p-0">
           {filteredConversations.length ? (
-            <ScrollArea className="h-[500px]">
-              <div className="space-y-1 p-3">
+            <ScrollArea className="h-full">
+              <div className="space-y-1 p-2">
                 {filteredConversations.map((conversation) => {
                   const isSelected = activeConversationId === conversation.id;
                   return (
                     <button
                       key={conversation.id}
                       type="button"
-                      className={`w-full rounded-xl border p-3 text-left transition ${
+                      className={`w-full rounded-lg border px-2.5 py-2 text-left transition ${
                         isSelected
                           ? "border-primary/30 bg-primary/10"
                           : "border-primary/10 bg-background/70 hover:bg-accent/70"
@@ -464,10 +466,10 @@ export const InboxPanel = ({
                               {formatTime(conversation.lastMessageAt ?? conversation.updatedAt)}
                             </span>
                           </div>
-                          <p className="mt-1 truncate text-xs text-muted-foreground">
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
                             {limitPreview(conversation.lastMessagePreview || "Sin mensajes recientes")}
                           </p>
-                          <div className="mt-2 flex items-center gap-2">
+                          <div className="mt-1.5 flex items-center gap-1.5">
                             <Badge variant="outline">{conversation.channel}</Badge>
                             <Badge variant="outline">{resolveModeLabel(conversation.mode)}</Badge>
                             {conversation.unreadCount > 0 ? (
@@ -482,8 +484,8 @@ export const InboxPanel = ({
               </div>
             </ScrollArea>
           ) : (
-            <div className="p-4">
-              <div className="rounded-2xl border border-dashed border-primary/20 bg-primary/8 p-6 text-center">
+            <div className="p-3">
+              <div className="rounded-xl border border-dashed border-primary/20 bg-primary/8 p-4 text-center">
                 <p className="font-medium">No hay conversaciones en este filtro</p>
                 <p className="mt-2 text-sm text-muted-foreground">Prueba con otra búsqueda o cambia el filtro.</p>
               </div>
@@ -493,8 +495,8 @@ export const InboxPanel = ({
       </Card>
 
       {selectedConversation ? (
-        <Card className="border-primary/15 bg-card/70">
-          <CardHeader className="border-b border-primary/10 p-4">
+        <Card className="flex h-full min-h-0 flex-col border-primary/15 bg-card/70">
+          <CardHeader className="border-b border-primary/10 p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <Avatar>
@@ -511,7 +513,7 @@ export const InboxPanel = ({
                 <Badge variant="outline">{resolveStatusLabel(selectedConversation.status)}</Badge>
                 <Badge variant="outline">{resolveModeLabel(selectedConversation.mode)}</Badge>
                 {selectedConversation.mode === "ai" ? (
-                  <Button type="button" size="sm" variant="outline" onClick={handleTakeConversation} disabled={isPending}>
+                  <Button type="button" size="xs" variant="outline" onClick={handleTakeConversation} disabled={isPending}>
                     <Headphones />
                     Tomar conversación
                   </Button>
@@ -523,15 +525,15 @@ export const InboxPanel = ({
             </div>
           </CardHeader>
 
-          <CardContent className="flex h-[560px] flex-col p-0">
-            <ScrollArea className="flex-1 bg-[radial-gradient(circle_at_top,rgba(0,0,0,0.02),transparent_30rem)] px-4 py-5">
+          <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+            <ScrollArea className="min-h-0 flex-1 bg-[radial-gradient(circle_at_top,rgba(0,0,0,0.02),transparent_30rem)] px-3 py-3">
               {isLoadingMessages ? (
-                <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+                <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                   <Loader2 className="mr-2 size-4 animate-spin" />
                   Cargando conversación...
                 </div>
               ) : selectedMessages.length ? (
-                <div className="space-y-3">
+                <div className="space-y-2.5 pb-1">
                   {selectedMessages.map((message) => {
                     const isOutbound = message.direction === "outbound";
                     const AttachmentIcon = resolveAttachmentIcon(message.attachmentKind);
@@ -573,15 +575,15 @@ export const InboxPanel = ({
                   <div ref={messagesEndRef} />
                 </div>
               ) : (
-                <div className="py-10 text-center text-sm text-muted-foreground">
+                <div className="py-8 text-center text-sm text-muted-foreground">
                   Esta conversación todavía no tiene mensajes.
                 </div>
               )}
             </ScrollArea>
 
-            <div className="border-t border-primary/10 p-3">
+            <div className="border-t border-primary/10 p-2">
               {composerAttachment ? (
-                <div className="mb-2 flex items-center justify-between rounded-lg border border-primary/20 bg-primary/8 px-3 py-2 text-xs">
+                <div className="mb-2 flex items-center justify-between rounded-lg border border-primary/20 bg-primary/8 px-2.5 py-1.5 text-xs">
                   <span className="truncate">
                     {resolveAttachmentLabel(composerAttachment.kind)}: {composerAttachment.file.name}
                   </span>
@@ -600,10 +602,10 @@ export const InboxPanel = ({
                 <p className="mb-2 text-xs text-destructive">{composerError}</p>
               ) : null}
 
-              <div className="flex items-end gap-2">
+              <div className="flex items-center gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" size="icon" aria-label="Insertar emoji">
+                    <Button type="button" variant="outline" size="icon-sm" aria-label="Insertar emoji">
                       <Smile />
                     </Button>
                   </DropdownMenuTrigger>
@@ -627,7 +629,7 @@ export const InboxPanel = ({
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" size="icon" aria-label="Agregar archivo">
+                    <Button type="button" variant="outline" size="icon-sm" aria-label="Agregar archivo">
                       <Paperclip />
                     </Button>
                   </DropdownMenuTrigger>
@@ -665,7 +667,7 @@ export const InboxPanel = ({
 
                 <Button
                   type="button"
-                  size="icon"
+                  size="icon-sm"
                   aria-label={showAudioQuickAction ? "Grabar o adjuntar audio" : "Enviar mensaje"}
                   onClick={showAudioQuickAction ? () => handleSelectAttachmentKind("audio") : handleSendMessage}
                   disabled={!canSend}
