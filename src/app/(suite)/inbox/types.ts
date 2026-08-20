@@ -1,0 +1,29 @@
+export type InboxFilter = "all" | "unread" | "ai" | "human";
+
+export type AttachmentKind = "image" | "video" | "audio" | "document";
+
+export type InboxConversation = {
+  id: number;
+  channel: "messenger" | "instagram" | "whatsapp";
+  status: "open" | "in_progress" | "resolved";
+  mode: "ai" | "human";
+  assignedUserId: string | null;
+  updatedAt: string;
+  lastMessageAt: string | null;
+  contactName: string;
+  contactPhone: string | null;
+  lastMessagePreview: string;
+  unreadCount: number;
+};
+
+export type InboxMessage = {
+  id: number;
+  conversationId: number;
+  direction: "inbound" | "outbound";
+  senderType: "contact" | "agent" | "ai" | "system";
+  content: string | null;
+  mediaUrl: string | null;
+  createdAt: string;
+  attachmentKind: AttachmentKind | null;
+  attachmentName: string | null;
+};
