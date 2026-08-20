@@ -20,7 +20,6 @@ export const env = {
   instagramAppSecret: process.env.INSTAGRAM_APP_SECRET?.trim() || "",
   instagramRedirectUri: process.env.INSTAGRAM_REDIRECT_URI?.trim() || "",
   facebookAppId: process.env.FACEBOOK_APP_ID?.trim() || "",
-  facebookAppSecret: process.env.FACEBOOK_APP_SECRET?.trim() || "",
   facebookRedirectUri: process.env.FACEBOOK_REDIRECT_URI?.trim() || "",
   cronSecret: process.env.CRON_SECRET?.trim() || "",
   googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || "",

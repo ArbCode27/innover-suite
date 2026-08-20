@@ -31,6 +31,9 @@ const MESSENGER_SCOPES = [
   "pages_read_engagement",
 ];
 
+export const isMessengerOAuthConfigured = () =>
+  Boolean(env.facebookAppId && env.metaAppSecret && env.facebookRedirectUri);
+
 export const getMessengerSettingsRedirectUrl = (status: string) => {
   const redirectUrl = new URL("/settings", env.facebookRedirectUri || "http://localhost:3000");
   redirectUrl.searchParams.set("ms", status);
@@ -50,7 +53,7 @@ export const buildMessengerAuthorizationUrl = (state: string) => {
 export const exchangeFacebookAuthorizationCode = async (code: string) => {
   const url = new URL(`${FACEBOOK_GRAPH_BASE}/oauth/access_token`);
   url.searchParams.set("client_id", env.facebookAppId);
-  url.searchParams.set("client_secret", env.facebookAppSecret);
+  url.searchParams.set("client_secret", env.metaAppSecret);
   url.searchParams.set("redirect_uri", env.facebookRedirectUri);
   url.searchParams.set("code", code);
 
@@ -71,7 +74,7 @@ export const exchangeLongLivedFacebookToken = async (shortLivedToken: string) =>
   const url = new URL(`${FACEBOOK_GRAPH_BASE}/oauth/access_token`);
   url.searchParams.set("grant_type", "fb_exchange_token");
   url.searchParams.set("client_id", env.facebookAppId);
-  url.searchParams.set("client_secret", env.facebookAppSecret);
+  url.searchParams.set("client_secret", env.metaAppSecret);
   url.searchParams.set("fb_exchange_token", shortLivedToken);
 
   const response = await fetch(url);

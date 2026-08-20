@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { env } from "@/lib/config/env";
 import {
   exchangeFacebookAuthorizationCode,
   exchangeLongLivedFacebookToken,
   fetchFacebookPages,
   getMessengerSettingsRedirectUrl,
+  isMessengerOAuthConfigured,
   subscribePageToMessengerWebhooks,
 } from "@/lib/integrations/messenger";
 import { consumeMessengerOAuthState } from "@/lib/integrations/messenger-state";
@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  if (!env.facebookAppId || !env.facebookAppSecret || !env.facebookRedirectUri) {
+  if (!isMessengerOAuthConfigured()) {
     return NextResponse.redirect(getMessengerSettingsRedirectUrl("missing_env"));
   }
 

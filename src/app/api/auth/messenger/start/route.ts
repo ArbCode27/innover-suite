@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { env } from "@/lib/config/env";
 import {
   buildMessengerAuthorizationUrl,
   getMessengerSettingsRedirectUrl,
+  isMessengerOAuthConfigured,
 } from "@/lib/integrations/messenger";
 import { createMessengerOAuthState } from "@/lib/integrations/messenger-state";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  if (!env.facebookAppId || !env.facebookAppSecret || !env.facebookRedirectUri) {
+  if (!isMessengerOAuthConfigured()) {
     return NextResponse.redirect(getMessengerSettingsRedirectUrl("missing_env"));
   }
 

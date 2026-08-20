@@ -78,7 +78,7 @@ Variables necesarias:
 - `META_APP_SECRET` para validar `X-Hub-Signature-256`
 - `SUPABASE_SERVICE_ROLE_KEY` para persistir contactos, conversaciones y mensajes
 - `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` y `INSTAGRAM_REDIRECT_URI` para OAuth
-- `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` y `FACEBOOK_REDIRECT_URI` para OAuth de Messenger
+- `FACEBOOK_APP_ID` y `FACEBOOK_REDIRECT_URI` para OAuth de Messenger; usa `META_APP_SECRET` como clave de la app
 - `CRON_SECRET` para proteger el endpoint de refresco de tokens
 
 Aplica `supabase/schema.sql` antes de recibir tráfico real. Los eventos se deduplican por `external_message_id`.
