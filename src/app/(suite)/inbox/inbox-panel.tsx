@@ -602,10 +602,10 @@ export const InboxPanel = ({
                 <p className="mb-2 text-xs text-destructive">{composerError}</p>
               ) : null}
 
-              <div className="flex items-center gap-2">
+              <div className="flex min-h-12 items-center gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" size="icon-sm" aria-label="Insertar emoji">
+                    <Button type="button" variant="outline" size="icon" aria-label="Insertar emoji">
                       <Smile />
                     </Button>
                   </DropdownMenuTrigger>
@@ -629,7 +629,7 @@ export const InboxPanel = ({
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" size="icon-sm" aria-label="Agregar archivo">
+                    <Button type="button" variant="outline" size="icon" aria-label="Agregar archivo">
                       <Paperclip />
                     </Button>
                   </DropdownMenuTrigger>
@@ -658,7 +658,7 @@ export const InboxPanel = ({
                 <Input
                   aria-label="Escribe una respuesta"
                   placeholder="Escribe un mensaje..."
-                  className="h-8 flex-1"
+                  className="h-9 flex-1"
                   value={composerText}
                   onChange={(event) => setComposerText(event.target.value)}
                   onKeyDown={handleComposerKeyDown}
@@ -667,7 +667,7 @@ export const InboxPanel = ({
 
                 <Button
                   type="button"
-                  size="icon-sm"
+                  size="icon"
                   aria-label={showAudioQuickAction ? "Grabar o adjuntar audio" : "Enviar mensaje"}
                   onClick={showAudioQuickAction ? () => handleSelectAttachmentKind("audio") : handleSendMessage}
                   disabled={!canSend}
