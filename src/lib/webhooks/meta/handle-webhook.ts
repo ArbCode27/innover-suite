@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { asRecord, asString } from "@/lib/webhooks/meta/json";
-import { logMetaWebhook } from "@/lib/webhooks/meta/logger";
+import { asArray, asRecord, asString } from "@/lib/webhooks/meta/json";
+import { logMetaWebhook, maskIdentifier } from "@/lib/webhooks/meta/logger";
 import { normalizeSocialEvents } from "@/lib/webhooks/meta/normalize-social";
 import { normalizeWhatsappEvents } from "@/lib/webhooks/meta/normalize-whatsapp";
 import { persistInboundMessages } from "@/lib/webhooks/meta/persist-inbound-message";
@@ -11,6 +11,7 @@ import { env } from "@/lib/config/env";
 
 const SOCIAL_OBJECTS = new Set(["page", "instagram"]);
 const WHATSAPP_OBJECT = "whatsapp_business_account";
+const MAX_ENTRY_LOG_COUNT = 3;
 
 const parseJsonPayload = (rawBody: string) => {
   try {
@@ -38,6 +39,39 @@ const resolveKind = (kind: MetaWebhookKind, objectType: string | null): "social"
   }
 
   return null;
+};
+
+const summarizeSocialPayload = (payload: unknown) => {
+  const root = asRecord(payload);
+  if (!root) {
+    return null;
+  }
+
+  const entries = asArray(root.entry);
+  return {
+    entryCount: entries.length,
+    entries: entries.slice(0, MAX_ENTRY_LOG_COUNT).map((entry) => {
+      const record = asRecord(entry);
+      if (!record) {
+        return {
+          shape: "invalid_entry",
+        };
+      }
+
+      const changes = asArray(record.changes);
+      return {
+        entryIdMasked: asString(record.id) ? maskIdentifier(asString(record.id) || "") : null,
+        keys: Object.keys(record).slice(0, 10),
+        messagingCount: asArray(record.messaging).length,
+        standbyCount: asArray(record.standby).length,
+        changesCount: changes.length,
+        changeFields: changes
+          .slice(0, 10)
+          .map((change) => asString(asRecord(change)?.field))
+          .filter((value): value is string => Boolean(value)),
+      };
+    }),
+  };
 };
 
 export const handleMetaEvent = async (request: NextRequest, kind: MetaWebhookKind) => {
@@ -116,6 +150,17 @@ export const handleMetaEvent = async (request: NextRequest, kind: MetaWebhookKin
   }
 
   const objectType = asString(asRecord(payload)?.object);
+  if (objectType === "instagram" || objectType === "page") {
+    const summary = summarizeSocialPayload(payload);
+    logMetaWebhook("info", "request.social_payload_shape", {
+      requestId,
+      kind,
+      objectType,
+      entryCount: summary?.entryCount,
+      entries: summary?.entries,
+    });
+  }
+
   const resolvedKind = resolveKind(kind, objectType);
   if (!resolvedKind) {
     logMetaWebhook("info", "request.ignored_object", {

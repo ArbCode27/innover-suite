@@ -21,6 +21,11 @@ const extractAttachmentUrl = (message: Record<string, unknown>) => {
   return null;
 };
 
+const extractRecipientId = (item: Record<string, unknown>) => {
+  const recipient = asRecord(item.recipient);
+  return asString(recipient?.id);
+};
+
 const extractSocialText = (item: Record<string, unknown>) => {
   const message = asRecord(item.message);
   const postback = asRecord(item.postback);
@@ -65,6 +70,50 @@ const toSocialEvent = (
   };
 };
 
+const toSocialEventFromChange = (
+  channel: MetaChannel,
+  accountId: string,
+  change: Record<string, unknown>,
+): InboundMessageEvent | null => {
+  const field = asString(change.field);
+  if (field !== "messages") {
+    return null;
+  }
+
+  const value = asRecord(change.value);
+  if (!value) {
+    return null;
+  }
+
+  return toSocialEvent(channel, accountId, value);
+};
+
+const resolveAccountId = (entry: Record<string, unknown>) => {
+  const entryId = asString(entry.id);
+  if (entryId) {
+    return entryId;
+  }
+
+  for (const item of asArray(entry.messaging)) {
+    const record = asRecord(item);
+    const recipientId = record ? extractRecipientId(record) : null;
+    if (recipientId) {
+      return recipientId;
+    }
+  }
+
+  for (const item of asArray(entry.changes)) {
+    const change = asRecord(item);
+    const value = asRecord(change?.value);
+    const recipientId = value ? extractRecipientId(value) : null;
+    if (recipientId) {
+      return recipientId;
+    }
+  }
+
+  return null;
+};
+
 export const normalizeSocialEvents = (payload: unknown): InboundMessageEvent[] => {
   const root = asRecord(payload);
   const objectType = asString(root?.object);
@@ -79,13 +128,13 @@ export const normalizeSocialEvents = (payload: unknown): InboundMessageEvent[] =
       return [];
     }
 
-    const accountId = asString(record.id);
+    const accountId = resolveAccountId(record);
     if (!accountId) {
       return [];
     }
 
-    const items = [...asArray(record.messaging), ...asArray(record.standby)];
-    return items.flatMap((item) => {
+    const messagingItems = [...asArray(record.messaging), ...asArray(record.standby)];
+    const eventsFromMessaging = messagingItems.flatMap((item) => {
       const messagingItem = asRecord(item);
       if (!messagingItem) {
         return [];
@@ -94,5 +143,17 @@ export const normalizeSocialEvents = (payload: unknown): InboundMessageEvent[] =
       const event = toSocialEvent(channel, accountId, messagingItem);
       return event ? [event] : [];
     });
+
+    const eventsFromChanges = asArray(record.changes).flatMap((item) => {
+      const change = asRecord(item);
+      if (!change) {
+        return [];
+      }
+
+      const event = toSocialEventFromChange(channel, accountId, change);
+      return event ? [event] : [];
+    });
+
+    return [...eventsFromMessaging, ...eventsFromChanges];
   });
 };
