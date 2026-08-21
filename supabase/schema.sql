@@ -258,13 +258,18 @@ for each row execute function public.set_updated_at();
 create table if not exists appointments (
   id bigint generated always as identity primary key,
   organization_id bigint not null references organizations(id) on delete cascade,
-  contact_id bigint not null references contacts(id) on delete cascade,
+  contact_id bigint references contacts(id) on delete cascade,
   conversation_id bigint references conversations(id) on delete set null,
+  owner_user_id uuid references auth.users(id) on delete set null,
   external_calendar_event_id text,
   title text not null,
   starts_at timestamptz not null,
   ends_at timestamptz not null,
-  status text not null default 'pending',
+  status text not null default 'pending' check (status in ('pending', 'confirmed', 'cancelled', 'done')),
+  source text not null default 'manual' check (source in ('chat', 'manual', 'google')),
+  purpose text not null default 'consulta' check (purpose in ('consulta', 'seguimiento', 'demo', 'cierre', 'interno')),
+  meeting_url text,
+  attendees jsonb not null default '[]'::jsonb,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -346,6 +351,7 @@ alter table organization_invitations enable row level security;
 alter table messenger_oauth_states enable row level security;
 alter table google_oauth_states enable row level security;
 alter table calendar_connections enable row level security;
+alter table appointments enable row level security;
 alter table channel_accounts enable row level security;
 alter table contacts enable row level security;
 alter table contact_channels enable row level security;
@@ -551,6 +557,54 @@ for all
 to authenticated
 using (public.has_org_role(organization_id, array['owner', 'admin']))
 with check (public.has_org_role(organization_id, array['owner', 'admin']));
+
+alter table appointments add column if not exists owner_user_id uuid references auth.users(id) on delete set null;
+alter table appointments add column if not exists source text;
+alter table appointments add column if not exists purpose text;
+alter table appointments add column if not exists meeting_url text;
+alter table appointments add column if not exists attendees jsonb;
+
+update appointments
+set
+  source = coalesce(source, 'manual'),
+  purpose = coalesce(purpose, 'consulta'),
+  attendees = coalesce(attendees, '[]'::jsonb);
+
+alter table appointments
+  alter column source set default 'manual';
+
+alter table appointments
+  alter column purpose set default 'consulta';
+
+alter table appointments
+  alter column attendees set default '[]'::jsonb;
+
+alter table appointments
+  alter column contact_id drop not null;
+
+create index if not exists appointments_org_starts_idx
+  on appointments (organization_id, starts_at);
+
+create unique index if not exists appointments_org_google_event_uidx
+  on appointments (organization_id, external_calendar_event_id)
+  where external_calendar_event_id is not null;
+
+grant select, insert, update on table appointments to authenticated;
+
+drop policy if exists "Members can read appointments" on appointments;
+create policy "Members can read appointments"
+on appointments
+for select
+to authenticated
+using (public.is_org_member(organization_id));
+
+drop policy if exists "Agents can manage appointments" on appointments;
+create policy "Agents can manage appointments"
+on appointments
+for all
+to authenticated
+using (public.has_org_role(organization_id, array['owner', 'admin', 'agent']))
+with check (public.has_org_role(organization_id, array['owner', 'admin', 'agent']));
 
 -- Funnel schema upgrades for existing databases
 alter table funnel_stages drop constraint if exists funnel_stages_funnel_id_order_index_key;

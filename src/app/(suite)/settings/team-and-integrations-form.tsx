@@ -1,14 +1,17 @@
 "use client";
 
+import type { ComponentType, ReactNode } from "react";
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarDays, Loader2, MessageCircle, Unplug, UserPlus } from "lucide-react";
+import { CalendarDays, Camera, Loader2, MessagesSquare, Unplug, UserPlus } from "lucide-react";
 import { inviteAdvisorAction } from "@/lib/organizations/actions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
@@ -20,6 +23,7 @@ type InviteValues = z.infer<typeof inviteSchema>;
 
 type TeamAndIntegrationsFormProps = {
   organizationName: string;
+  canManageOrganization: boolean;
   instagramConnection: {
     instagram_user_id: string;
     instagram_username: string | null;
@@ -95,11 +99,64 @@ const formatDate = (value: string) =>
     dateStyle: "medium",
   }).format(new Date(value));
 
+const StatusMessage = ({ message, isError }: { message: string | null; isError: boolean }) => {
+  if (!message) return null;
+
+  return (
+    <p className={`text-sm ${isError ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+      {message}
+    </p>
+  );
+};
+
+const IntegrationCard = ({
+  id,
+  icon: Icon,
+  title,
+  description,
+  connected,
+  statusMessage,
+  statusIsError,
+  children,
+}: {
+  id: string;
+  icon: ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  connected: boolean;
+  statusMessage: string | null;
+  statusIsError: boolean;
+  children: ReactNode;
+}) => (
+  <Card
+    id={id}
+    className={`border-primary/15 bg-card/80 ${connected ? "ring-1 ring-emerald-400/30" : ""}`}
+  >
+    <CardHeader className="gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Icon className="size-5" aria-hidden />
+        </span>
+        <Badge variant={connected ? "default" : "outline"}>{connected ? "Conectado" : "Sin conectar"}</Badge>
+      </div>
+      <div>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription className="mt-1 leading-6">{description}</CardDescription>
+      </div>
+    </CardHeader>
+    <CardContent className="space-y-3">
+      <StatusMessage message={statusMessage} isError={statusIsError} />
+      {children}
+    </CardContent>
+  </Card>
+);
+
 export const TeamAndIntegrationsForm = ({
   instagramConnection,
   messengerConnections,
   googleCalendarConnection,
   organizationName,
+  canManageOrganization,
 }: TeamAndIntegrationsFormProps) => {
   const searchParams = useSearchParams();
   const igStatus = searchParams.get("ig");
@@ -119,198 +176,215 @@ export const TeamAndIntegrationsForm = ({
 
   const inviteError = inviteMessage && !inviteMessage.toLowerCase().includes("registrada");
   const instagramStatusMessage = igStatus ? INSTAGRAM_STATUS_LABELS[igStatus] : null;
-  const instagramStatusIsError = Boolean(
-    igStatus &&
-      !["connected", "disconnected"].includes(igStatus),
-  );
+  const instagramStatusIsError = Boolean(igStatus && !["connected", "disconnected"].includes(igStatus));
   const messengerStatusMessage = messengerStatus ? MESSENGER_STATUS_LABELS[messengerStatus] : null;
   const messengerStatusIsError = Boolean(
-    messengerStatus &&
-      !["connected", "disconnected"].includes(messengerStatus),
+    messengerStatus && !["connected", "disconnected"].includes(messengerStatus),
   );
   const googleStatusMessage = googleStatus ? GOOGLE_STATUS_LABELS[googleStatus] : null;
-  const googleStatusIsError = Boolean(
-    googleStatus && !["connected", "disconnected"].includes(googleStatus),
-  );
+  const googleStatusIsError = Boolean(googleStatus && !["connected", "disconnected"].includes(googleStatus));
   const hasMessengerConnections = messengerConnections.length > 0;
 
   return (
-    <div className="space-y-6">
-      <section className="space-y-4 rounded-xl border border-primary/15 bg-background/70 p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <MessageCircle className="size-4 text-primary" />
-          Integración de Instagram
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Conecta una cuenta profesional de Instagram para que <strong>{organizationName}</strong>{" "}
-          reciba mensajes entrantes en el CRM.
-        </p>
-
-        {instagramStatusMessage ? (
-          <p className={`text-sm ${instagramStatusIsError ? "text-destructive" : "text-emerald-600"}`}>
-            {instagramStatusMessage}
+    <div className="space-y-8">
+      <section className="space-y-3" aria-labelledby="integrations-heading">
+        <div>
+          <h2 id="integrations-heading" className="text-base font-semibold">
+            Cuentas conectadas
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Vincula los canales de {organizationName} para recibir chats y agendar citas.
           </p>
-        ) : null}
-
-        {instagramConnection ? (
-          <div className="space-y-3 rounded-lg border border-emerald-400/30 bg-emerald-500/5 p-3">
-            <p className="text-sm font-medium">
-              Conectada:{" "}
-              <span className="text-emerald-700 dark:text-emerald-400">
-                {instagramConnection.instagram_username
-                  ? `@${instagramConnection.instagram_username}`
-                  : instagramConnection.instagram_user_id}
-              </span>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Token válido hasta: {formatDate(instagramConnection.token_expires_at)}
-            </p>
-            <form action="/api/auth/instagram/disconnect" method="post">
-              <Button type="submit" variant="outline">
-                <Unplug />
-                Desconectar
-              </Button>
-            </form>
-          </div>
-        ) : (
-          <Button asChild>
-            <Link href="/api/auth/instagram/start">Conectar con Instagram</Link>
-          </Button>
-        )}
-      </section>
-
-      <section className="space-y-4 rounded-xl border border-primary/15 bg-background/70 p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <MessageCircle className="size-4 text-primary" />
-          Integración de Messenger
         </div>
-        <p className="text-sm text-muted-foreground">
-          Conecta una o más páginas de Facebook para que <strong>{organizationName}</strong>{" "}
-          reciba mensajes de Messenger en el CRM.
-        </p>
 
-        {messengerStatusMessage ? (
-          <p className={`text-sm ${messengerStatusIsError ? "text-destructive" : "text-emerald-600"}`}>
-            {messengerStatusMessage}
-          </p>
-        ) : null}
-
-        {hasMessengerConnections ? (
-          <div className="space-y-3 rounded-lg border border-emerald-400/30 bg-emerald-500/5 p-3">
-            <div className="space-y-2">
-              {messengerConnections.map((connection) => (
-                <div
-                  key={connection.external_account_id}
-                  className="rounded-lg border border-emerald-400/20 bg-background/60 p-3"
-                >
+        <div className="grid gap-4 lg:grid-cols-3">
+          <IntegrationCard
+            id="instagram"
+            icon={Camera}
+            title="Instagram"
+            description="Recibe y responde mensajes directos en el inbox."
+            connected={Boolean(instagramConnection)}
+            statusMessage={instagramStatusMessage}
+            statusIsError={instagramStatusIsError}
+          >
+            {instagramConnection ? (
+              <div className="space-y-3 rounded-xl border border-emerald-400/30 bg-emerald-500/5 p-3">
+                <div>
                   <p className="text-sm font-medium">
-                    Página conectada:{" "}
-                    <span className="text-emerald-700 dark:text-emerald-400">
-                      {connection.display_name || connection.external_account_id}
-                    </span>
+                    {instagramConnection.instagram_username
+                      ? `@${instagramConnection.instagram_username}`
+                      : instagramConnection.instagram_user_id}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Page ID: {connection.external_account_id} · Actualizada:{" "}
-                    {formatDate(connection.updated_at)}
+                    Token válido hasta {formatDate(instagramConnection.token_expires_at)}
                   </p>
                 </div>
-              ))}
-            </div>
-            <form action="/api/auth/messenger/disconnect" method="post">
-              <Button type="submit" variant="outline">
-                <Unplug />
-                Desconectar Messenger
+                {canManageOrganization ? (
+                  <form action="/api/auth/instagram/disconnect" method="post">
+                    <Button type="submit" variant="outline" className="w-full">
+                      <Unplug />
+                      Desconectar
+                    </Button>
+                  </form>
+                ) : null}
+              </div>
+            ) : canManageOrganization ? (
+              <Button asChild className="w-full">
+                <Link href="/api/auth/instagram/start">Conectar Instagram</Link>
               </Button>
-            </form>
-          </div>
-        ) : (
-          <Button asChild>
-            <Link href="/api/auth/messenger/start">Conectar Messenger</Link>
-          </Button>
-        )}
+            ) : (
+              <p className="text-sm text-muted-foreground">Pide a un admin que conecte esta cuenta.</p>
+            )}
+          </IntegrationCard>
+
+          <IntegrationCard
+            id="messenger"
+            icon={MessagesSquare}
+            title="Messenger"
+            description="Conecta páginas de Facebook para chats de Messenger."
+            connected={hasMessengerConnections}
+            statusMessage={messengerStatusMessage}
+            statusIsError={messengerStatusIsError}
+          >
+            {hasMessengerConnections ? (
+              <div className="space-y-3 rounded-xl border border-emerald-400/30 bg-emerald-500/5 p-3">
+                <div className="space-y-2">
+                  {messengerConnections.map((connection) => (
+                    <div key={connection.external_account_id}>
+                      <p className="text-sm font-medium">
+                        {connection.display_name || connection.external_account_id}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Page ID {connection.external_account_id} · {formatDate(connection.updated_at)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                {canManageOrganization ? (
+                  <form action="/api/auth/messenger/disconnect" method="post">
+                    <Button type="submit" variant="outline" className="w-full">
+                      <Unplug />
+                      Desconectar
+                    </Button>
+                  </form>
+                ) : null}
+              </div>
+            ) : canManageOrganization ? (
+              <Button asChild className="w-full">
+                <Link href="/api/auth/messenger/start">Conectar Messenger</Link>
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">Pide a un admin que conecte esta cuenta.</p>
+            )}
+          </IntegrationCard>
+
+          <IntegrationCard
+            id="google-calendar"
+            icon={CalendarDays}
+            title="Google Calendar"
+            description="Crea citas del CRM en el calendario de la organización."
+            connected={Boolean(googleCalendarConnection)}
+            statusMessage={googleStatusMessage}
+            statusIsError={googleStatusIsError}
+          >
+            {googleCalendarConnection ? (
+              <div className="space-y-3 rounded-xl border border-emerald-400/30 bg-emerald-500/5 p-3">
+                <div>
+                  <p className="text-sm font-medium">{googleCalendarConnection.email || "Google Calendar"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {googleCalendarConnection.google_calendar_id} · vinculado{" "}
+                    {formatDate(googleCalendarConnection.connected_at)}
+                  </p>
+                </div>
+                {canManageOrganization ? (
+                  <form action="/api/auth/google/disconnect" method="post">
+                    <Button type="submit" variant="outline" className="w-full">
+                      <Unplug />
+                      Desconectar
+                    </Button>
+                  </form>
+                ) : null}
+              </div>
+            ) : canManageOrganization ? (
+              <Button asChild className="w-full">
+                <Link href="/api/auth/google/start">Conectar Google Calendar</Link>
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">Pide a un admin que conecte el calendario.</p>
+            )}
+          </IntegrationCard>
+        </div>
       </section>
 
-      <section className="space-y-4 rounded-xl border border-primary/15 bg-background/70 p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <CalendarDays className="size-4 text-primary" />
-          Integración de Google Calendar
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Conecta el calendario de <strong>{organizationName}</strong> para crear citas desde el CRM
-          e invitar a los contactos.
-        </p>
-
-        {googleStatusMessage ? (
-          <p className={`text-sm ${googleStatusIsError ? "text-destructive" : "text-emerald-600"}`}>
-            {googleStatusMessage}
-          </p>
-        ) : null}
-
-        {googleCalendarConnection ? (
-          <div className="space-y-3 rounded-lg border border-emerald-400/30 bg-emerald-500/5 p-3">
-            <p className="text-sm font-medium">
-              Conectado:{" "}
-              <span className="text-emerald-700 dark:text-emerald-400">
-                {googleCalendarConnection.email || "Google Calendar"}
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" aria-labelledby="team-heading">
+        <Card className="border-primary/15 bg-card/80">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <UserPlus className="size-4" aria-hidden />
               </span>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Calendario: {googleCalendarConnection.google_calendar_id} · Vinculado:{" "}
-              {formatDate(googleCalendarConnection.connected_at)}
-            </p>
-            {googleCalendarConnection.token_expires_at ? (
-              <p className="text-xs text-muted-foreground">
-                Token válido hasta: {formatDate(googleCalendarConnection.token_expires_at)}
+              <div>
+                <CardTitle id="team-heading">Equipo</CardTitle>
+                <CardDescription>Invita asesores para atender conversaciones y oportunidades.</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {canManageOrganization ? (
+              <form className="space-y-4" onSubmit={handleInvite} noValidate>
+                <FieldGroup>
+                  <Field data-invalid={Boolean(inviteForm.formState.errors.email) || undefined}>
+                    <FieldLabel htmlFor="advisor-email">Correo del asesor</FieldLabel>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        id="advisor-email"
+                        type="email"
+                        placeholder="asesor@empresa.com"
+                        aria-invalid={Boolean(inviteForm.formState.errors.email)}
+                        className="sm:flex-1"
+                        {...inviteForm.register("email")}
+                      />
+                      <Button disabled={inviteForm.formState.isSubmitting} type="submit">
+                        {inviteForm.formState.isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus />}
+                        Invitar
+                      </Button>
+                    </div>
+                    <FieldError>{inviteForm.formState.errors.email?.message}</FieldError>
+                  </Field>
+                </FieldGroup>
+                {inviteMessage ? (
+                  <p className={`text-sm ${inviteError ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+                    {inviteMessage}
+                  </p>
+                ) : null}
+              </form>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Solo owner o admin pueden invitar asesores y gestionar integraciones.
               </p>
-            ) : null}
-            <form action="/api/auth/google/disconnect" method="post">
-              <Button type="submit" variant="outline">
-                <Unplug />
-                Desconectar
-              </Button>
-            </form>
-          </div>
-        ) : (
-          <Button asChild>
-            <Link href="/api/auth/google/start">Conectar Google Calendar</Link>
-          </Button>
-        )}
-      </section>
+            )}
+          </CardContent>
+        </Card>
 
-      <form className="space-y-4" onSubmit={handleInvite} noValidate>
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <UserPlus className="size-4 text-primary" />
-          Invitar asesor
-        </div>
-        <FieldGroup>
-          <Field data-invalid={Boolean(inviteForm.formState.errors.email) || undefined}>
-            <FieldLabel htmlFor="advisor-email">Correo del asesor</FieldLabel>
-            <Input
-              id="advisor-email"
-              type="email"
-              placeholder="asesor@empresa.com"
-              aria-invalid={Boolean(inviteForm.formState.errors.email)}
-              {...inviteForm.register("email")}
-            />
-            <FieldError>{inviteForm.formState.errors.email?.message}</FieldError>
-          </Field>
-        </FieldGroup>
-        {inviteMessage ? (
-          <p className={`text-sm ${inviteError ? "text-destructive" : "text-emerald-600"}`}>
-            {inviteMessage}
-          </p>
-        ) : null}
-        <Button disabled={inviteForm.formState.isSubmitting} type="submit" variant="outline">
-          {inviteForm.formState.isSubmitting ? (
-            <>
-              <Loader2 className="animate-spin" />
-              Guardando...
-            </>
-          ) : (
-            "Invitar asesor"
-          )}
-        </Button>
-      </form>
+        <Card className="border-primary/15 bg-card/80">
+          <CardHeader>
+            <CardTitle>Webhooks de Meta</CardTitle>
+            <CardDescription>
+              Úsalos en Meta Developers para recibir mensajes de Instagram, Messenger y WhatsApp.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="rounded-xl border border-primary/15 bg-muted/40 p-3">
+              <p className="text-xs font-medium text-muted-foreground">Messenger e Instagram</p>
+              <code className="mt-1 block break-all text-xs">/api/webhooks/meta/social</code>
+            </div>
+            <div className="rounded-xl border border-primary/15 bg-muted/40 p-3">
+              <p className="text-xs font-medium text-muted-foreground">WhatsApp Cloud API</p>
+              <code className="mt-1 block break-all text-xs">/api/webhooks/meta/whatsapp</code>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 };

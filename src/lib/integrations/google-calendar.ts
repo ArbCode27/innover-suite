@@ -35,6 +35,7 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 const GOOGLE_CALENDAR_LIST_URL = "https://www.googleapis.com/calendar/v3/users/me/calendarList";
+const GOOGLE_CALENDAR_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars";
 
 const GOOGLE_SCOPES = [
   "openid",
@@ -171,3 +172,180 @@ export const getGoogleTokenExpiryDate = (expiresInSeconds: number) => {
 
 export const isInvalidGoogleGrant = (errorBody: string) =>
   errorBody.includes("invalid_grant") || errorBody.includes("invalid_token");
+
+export type GoogleCalendarAttendee = {
+  email?: string;
+  displayName?: string;
+  responseStatus?: string;
+  organizer?: boolean;
+};
+
+export type GoogleCalendarEvent = {
+  id?: string;
+  status?: string;
+  summary?: string;
+  description?: string;
+  hangoutLink?: string;
+  htmlLink?: string;
+  start?: { dateTime?: string; date?: string; timeZone?: string };
+  end?: { dateTime?: string; date?: string; timeZone?: string };
+  attendees?: GoogleCalendarAttendee[];
+  conferenceData?: {
+    entryPoints?: Array<{ entryPointType?: string; uri?: string }>;
+  };
+};
+
+type GoogleEventsListResponse = {
+  items?: GoogleCalendarEvent[];
+  nextPageToken?: string;
+};
+
+export const resolveGoogleMeetingUrl = (event: GoogleCalendarEvent) => {
+  const conferenceUrl = event.conferenceData?.entryPoints?.find(
+    (entry) => entry.entryPointType === "video" && entry.uri,
+  )?.uri;
+  return event.hangoutLink || conferenceUrl || null;
+};
+
+const googleEventsListCache = new Map<
+  string,
+  { expiresAt: number; value: { ok: true; data: GoogleCalendarEvent[] } }
+>();
+
+export const invalidateGoogleCalendarEventsCache = () => {
+  googleEventsListCache.clear();
+};
+
+export const listGoogleCalendarEvents = async (params: {
+  accessToken: string;
+  calendarId: string;
+  timeMin: string;
+  timeMax: string;
+}) => {
+  const events: GoogleCalendarEvent[] = [];
+  let pageToken: string | undefined;
+  const cacheKey = `${params.calendarId}:${params.timeMin}:${params.timeMax}`;
+  const cached = googleEventsListCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
+  do {
+    const url = new URL(
+      `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(params.calendarId)}/events`,
+    );
+    url.searchParams.set("timeMin", params.timeMin);
+    url.searchParams.set("timeMax", params.timeMax);
+    url.searchParams.set("singleEvents", "true");
+    url.searchParams.set("orderBy", "startTime");
+    url.searchParams.set("maxResults", "250");
+    if (pageToken) {
+      url.searchParams.set("pageToken", pageToken);
+    }
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${params.accessToken}` },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return asError(response);
+    }
+
+    const json = (await response.json()) as GoogleEventsListResponse;
+    events.push(...(json.items ?? []));
+    pageToken = json.nextPageToken;
+  } while (pageToken);
+
+  const result = { ok: true as const, data: events };
+  googleEventsListCache.set(cacheKey, { expiresAt: Date.now() + 20_000, value: result });
+  return result;
+};
+
+export const createGoogleCalendarEvent = async (params: {
+  accessToken: string;
+  calendarId: string;
+  title: string;
+  description?: string;
+  startsAt: string;
+  endsAt: string;
+  timeZone: string;
+  attendeeEmail?: string;
+  createMeet: boolean;
+}) => {
+  const url = new URL(
+    `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(params.calendarId)}/events`,
+  );
+  if (params.createMeet) {
+    url.searchParams.set("conferenceDataVersion", "1");
+  }
+
+  const body: Record<string, unknown> = {
+    summary: params.title,
+    description: params.description || undefined,
+    start: { dateTime: params.startsAt, timeZone: params.timeZone },
+    end: { dateTime: params.endsAt, timeZone: params.timeZone },
+  };
+
+  if (params.attendeeEmail) {
+    body.attendees = [{ email: params.attendeeEmail }];
+  }
+
+  if (params.createMeet) {
+    body.conferenceData = {
+      createRequest: {
+        requestId: crypto.randomUUID(),
+        conferenceSolutionKey: { type: "hangoutsMeet" },
+      },
+    };
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    return asError(response);
+  }
+
+  const json = (await response.json()) as GoogleCalendarEvent;
+  return { ok: true as const, data: json };
+};
+
+export const patchGoogleCalendarEvent = async (params: {
+  accessToken: string;
+  calendarId: string;
+  eventId: string;
+  startsAt: string;
+  endsAt: string;
+  timeZone: string;
+}) => {
+  const url = new URL(
+    `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(params.calendarId)}/events/${encodeURIComponent(params.eventId)}`,
+  );
+
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      start: { dateTime: params.startsAt, timeZone: params.timeZone },
+      end: { dateTime: params.endsAt, timeZone: params.timeZone },
+    }),
+  });
+
+  if (!response.ok) {
+    return asError(response);
+  }
+
+  const json = (await response.json()) as GoogleCalendarEvent;
+  return { ok: true as const, data: json };
+};
+
