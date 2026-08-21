@@ -34,7 +34,7 @@ export default async function FunnelsPage() {
   return (
     <ModuleShell
       title="Embudo de ventas"
-      description="Convierte contactos reales de Instagram, Messenger y WhatsApp en oportunidades y muévelas por el pipeline."
+      description="Arrastra cada contacto entre etapas para avanzar el pipeline."
       eyebrow={board.name}
     >
       <FunnelBoard initialBoard={board} contacts={contacts} />

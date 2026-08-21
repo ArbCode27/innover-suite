@@ -3,16 +3,21 @@
 import { useMemo, useState, useTransition } from "react";
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   closestCorners,
+  pointerWithin,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { DollarSign, KanbanSquare, Loader2, Plus, Target, Users } from "lucide-react";
+import { DollarSign, GripVertical, KanbanSquare, Loader2, Plus, Target, Users } from "lucide-react";
 import { toast } from "sonner";
 import { CHANNEL_LABELS } from "@/lib/contacts/display";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -21,7 +26,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
   SheetContent,
@@ -56,12 +60,14 @@ const resolveInitials = (name: string) => {
 
 const stageDndId = (stageId: number) => `stage-${stageId}`;
 const cardDndId = (cardId: number) => `card-${cardId}`;
+
 const parseStageId = (value: string | number) => {
   const raw = String(value);
   if (!raw.startsWith("stage-")) return null;
   const parsed = Number(raw.slice("stage-".length));
   return Number.isInteger(parsed) ? parsed : null;
 };
+
 const parseCardId = (value: string | number) => {
   const raw = String(value);
   if (!raw.startsWith("card-")) return null;
@@ -80,6 +86,44 @@ const computeMetrics = (stages: FunnelStageView[]): FunnelMetrics => {
   };
 };
 
+const resolveOverStageId = (overId: string | number | undefined, stages: FunnelStageView[]) => {
+  if (overId === undefined) return null;
+  const stageId = parseStageId(overId);
+  if (stageId) return stageId;
+  const cardId = parseCardId(overId);
+  if (!cardId) return null;
+  return stages.find((stage) => stage.cards.some((card) => card.id === cardId))?.id ?? null;
+};
+
+const collisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  if (pointerCollisions.length) {
+    return pointerCollisions;
+  }
+  return closestCorners(args);
+};
+
+const FunnelCardBody = ({ card, isOverlay = false }: { card: FunnelCardView; isOverlay?: boolean }) => (
+  <div className="flex items-start gap-2.5">
+    {isOverlay ? <GripVertical className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden /> : null}
+    <Avatar size="sm">
+      <AvatarFallback>{resolveInitials(card.contactName)}</AvatarFallback>
+    </Avatar>
+    <div className="min-w-0 flex-1">
+      <p className="truncate text-sm font-medium">{card.contactName}</p>
+      <p className="mt-0.5 truncate text-xs text-muted-foreground">{card.title}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {card.channel ? (
+          <Badge variant="outline">{CHANNEL_LABELS[card.channel]}</Badge>
+        ) : (
+          <Badge variant="outline">Manual</Badge>
+        )}
+        {card.valueAmount ? <Badge variant="outline">{formatCurrency(card.valueAmount)}</Badge> : null}
+      </div>
+    </div>
+  </div>
+);
+
 const SortableFunnelCard = ({ card }: { card: FunnelCardView }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: cardDndId(card.id),
@@ -89,30 +133,17 @@ const SortableFunnelCard = ({ card }: { card: FunnelCardView }) => {
   return (
     <article
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`rounded-xl border border-primary/15 bg-background p-3 shadow-sm ${
-        isDragging ? "z-10 opacity-80" : ""
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      className={`cursor-grab rounded-xl border border-primary/15 bg-background p-3 shadow-sm active:cursor-grabbing ${
+        isDragging ? "opacity-30" : ""
       }`}
       {...attributes}
       {...listeners}
     >
-      <div className="flex items-start gap-2.5">
-        <Avatar size="sm">
-          <AvatarFallback>{resolveInitials(card.contactName)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{card.contactName}</p>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{card.title}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {card.channel ? (
-              <Badge variant="outline">{CHANNEL_LABELS[card.channel]}</Badge>
-            ) : (
-              <Badge variant="outline">Manual</Badge>
-            )}
-            {card.valueAmount ? <Badge variant="outline">{formatCurrency(card.valueAmount)}</Badge> : null}
-          </div>
-        </div>
-      </div>
+      <FunnelCardBody card={card} />
     </article>
   );
 };
@@ -120,38 +151,59 @@ const SortableFunnelCard = ({ card }: { card: FunnelCardView }) => {
 const StageColumn = ({
   stage,
   colorClass,
+  isDropTarget,
 }: {
   stage: FunnelStageView;
   colorClass: string;
+  isDropTarget: boolean;
 }) => {
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef } = useDroppable({
     id: stageDndId(stage.id),
     data: { type: "stage", stageId: stage.id },
   });
 
   return (
-    <Card className={`flex min-h-[420px] min-w-[260px] flex-col border-primary/15 bg-card/70 ${isOver ? "ring-2 ring-primary/30" : ""}`}>
-      <CardHeader className="p-4">
+    <Card
+      ref={setNodeRef}
+      className={`flex min-h-0 flex-col overflow-hidden transition-all duration-150 ${
+        isDropTarget
+          ? "border-primary bg-primary/12 shadow-lg shadow-primary/20 ring-2 ring-primary"
+          : "border-primary/15 bg-card/70"
+      }`}
+    >
+      <CardHeader className="shrink-0 p-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className={`size-2.5 rounded-full ${colorClass}`} />
-            <CardTitle className="text-base">{stage.name}</CardTitle>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className={`size-2.5 shrink-0 rounded-full ${colorClass}`} />
+            <CardTitle className="truncate text-sm">{stage.name}</CardTitle>
           </div>
-          <Badge variant="outline">{stage.cards.length}</Badge>
+          <Badge variant={isDropTarget ? "default" : "outline"}>
+            {isDropTarget ? "Soltar aquí" : stage.cards.length}
+          </Badge>
         </div>
-        <CardDescription>
-          {stage.cards.length ? `${stage.cards.length} oportunidades` : "Sin tarjetas en esta etapa"}
+        <CardDescription className="text-xs">
+          {isDropTarget
+            ? "Suelta para mover a esta etapa"
+            : stage.cards.length
+              ? `${stage.cards.length} ${stage.cards.length === 1 ? "oportunidad" : "oportunidades"}`
+              : "Sin tarjetas"}
         </CardDescription>
       </CardHeader>
-      <CardContent className="min-h-0 flex-1 p-4 pt-0">
+      <CardContent className="min-h-0 flex-1 overflow-y-auto p-3 pt-0">
         <SortableContext items={stage.cards.map((card) => cardDndId(card.id))} strategy={verticalListSortingStrategy}>
-          <div ref={setNodeRef} className="flex min-h-56 flex-col gap-2.5">
+          <div className="flex min-h-full flex-col gap-2">
             {stage.cards.length ? (
               stage.cards.map((card) => <SortableFunnelCard key={card.id} card={card} />)
             ) : (
-              <div className="flex min-h-56 flex-col items-center justify-center rounded-2xl border border-dashed border-primary/20 bg-primary/8 p-5 text-center">
-                <KanbanSquare className="mb-3 size-7 text-primary" />
-                <p className="text-sm font-medium">Suelta oportunidades aquí</p>
+              <div
+                className={`flex min-h-32 flex-1 flex-col items-center justify-center rounded-xl border border-dashed p-4 text-center transition-colors ${
+                  isDropTarget
+                    ? "border-primary bg-primary/20 text-primary"
+                    : "border-primary/20 bg-primary/8 text-muted-foreground"
+                }`}
+              >
+                <KanbanSquare className="mb-2 size-6" />
+                <p className="text-xs font-medium">{isDropTarget ? "Suelta aquí" : "Arrastra una oportunidad"}</p>
               </div>
             )}
           </div>
@@ -169,6 +221,8 @@ export const FunnelBoard = ({ initialBoard, contacts }: FunnelBoardProps) => {
   const [title, setTitle] = useState(contacts[0]?.fullName ?? "");
   const [valueAmount, setValueAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [activeCard, setActiveCard] = useState<FunnelCardView | null>(null);
+  const [overStageId, setOverStageId] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -213,7 +267,9 @@ export const FunnelBoard = ({ initialBoard, contacts }: FunnelBoardProps) => {
       });
 
       if (result.error || !result.data?.card) {
-        setFormError(result.error ?? "No se pudo crear la oportunidad.");
+        const message = result.error ?? "No se pudo crear la oportunidad.";
+        setFormError(message);
+        toast.error(message);
         return;
       }
 
@@ -230,25 +286,40 @@ export const FunnelBoard = ({ initialBoard, contacts }: FunnelBoardProps) => {
     });
   };
 
+  const handleDragStart = (event: DragStartEvent) => {
+    const cardId = parseCardId(event.active.id);
+    if (!cardId) return;
+    const card = board.stages.flatMap((stage) => stage.cards).find((item) => item.id === cardId) ?? null;
+    setActiveCard(card);
+    setOverStageId(card?.stageId ?? null);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const nextStageId = resolveOverStageId(event.over?.id, board.stages);
+    setOverStageId(nextStageId);
+  };
+
+  const handleDragCancel = () => {
+    setActiveCard(null);
+    setOverStageId(null);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const activeCardId = parseCardId(event.active.id);
-    if (!activeCardId) return;
-
     const overId = event.over?.id;
-    if (!overId) return;
+    setActiveCard(null);
+    setOverStageId(null);
+    if (!activeCardId || !overId) return;
 
     const sourceStage = board.stages.find((stage) => stage.cards.some((card) => card.id === activeCardId));
     const sourceCard = sourceStage?.cards.find((card) => card.id === activeCardId);
     if (!sourceStage || !sourceCard) return;
 
     const overCardId = parseCardId(overId);
-    const overStageId = overCardId
-      ? board.stages.find((stage) => stage.cards.some((card) => card.id === overCardId))?.id ?? null
-      : parseStageId(overId);
+    const destinationStageId = resolveOverStageId(overId, board.stages);
+    if (!destinationStageId) return;
 
-    if (!overStageId) return;
-
-    const destinationStage = board.stages.find((stage) => stage.id === overStageId);
+    const destinationStage = board.stages.find((stage) => stage.id === destinationStageId);
     if (!destinationStage) return;
 
     const destinationCards = destinationStage.cards.filter((card) => card.id !== activeCardId);
@@ -257,6 +328,27 @@ export const FunnelBoard = ({ initialBoard, contacts }: FunnelBoardProps) => {
       const overIndex = destinationCards.findIndex((card) => card.id === overCardId);
       destinationIndex = overIndex >= 0 ? overIndex : destinationCards.length;
     }
+
+    const persistMove = (targetStageId: number, successMessage: string, previousBoard: FunnelBoardView) => {
+      startTransition(async () => {
+        try {
+          const result = await moveFunnelCardAction({
+            cardId: activeCardId,
+            stageId: targetStageId,
+            position: destinationIndex,
+          });
+          if (result.error) {
+            toast.error(result.error);
+            setBoard(previousBoard);
+            return;
+          }
+          toast.success(successMessage);
+        } catch {
+          toast.error("No se pudo actualizar la oportunidad.");
+          setBoard(previousBoard);
+        }
+      });
+    };
 
     if (sourceStage.id === destinationStage.id) {
       const oldIndex = sourceStage.cards.findIndex((card) => card.id === activeCardId);
@@ -270,17 +362,7 @@ export const FunnelBoard = ({ initialBoard, contacts }: FunnelBoardProps) => {
         ...current,
         stages: current.stages.map((stage) => (stage.id === sourceStage.id ? { ...stage, cards: reordered } : stage)),
       }));
-      startTransition(async () => {
-        const result = await moveFunnelCardAction({
-          cardId: activeCardId,
-          stageId: sourceStage.id,
-          position: destinationIndex,
-        });
-        if (result.error) {
-          toast.error(result.error);
-          setBoard(previousBoard);
-        }
-      });
+      persistMove(sourceStage.id, "Oportunidad actualizada correctamente", previousBoard);
       return;
     }
 
@@ -301,56 +383,59 @@ export const FunnelBoard = ({ initialBoard, contacts }: FunnelBoardProps) => {
       }),
     }));
 
-    startTransition(async () => {
-      const result = await moveFunnelCardAction({
-        cardId: activeCardId,
-        stageId: destinationStage.id,
-        position: destinationIndex,
-      });
-      if (result.error) {
-        toast.error(result.error);
-        setBoard(previousBoard);
-      }
-    });
+    persistMove(destinationStage.id, `Oportunidad movida a ${destinationStage.name}`, previousBoard);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button type="button" onClick={() => setIsSheetOpen(true)} disabled={!contacts.length}>
-          <Plus />
-          Nueva oportunidad
-        </Button>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-4">
+    <div className="flex min-h-0 flex-col gap-4">
+      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         {metricItems.map((metric) => (
-          <Card key={metric.label} className="border-primary/15 bg-card/70">
-            <CardHeader className="flex flex-row items-center justify-between gap-3 p-4">
-              <div>
-                <CardDescription>{metric.label}</CardDescription>
-                <CardTitle className="mt-2 text-3xl">{metric.value}</CardTitle>
+          <Card key={metric.label} className="border-primary/15 bg-card/70 py-0">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 p-3">
+              <div className="min-w-0">
+                <CardDescription className="text-[11px]">{metric.label}</CardDescription>
+                <CardTitle className="mt-1 truncate text-lg">{metric.value}</CardTitle>
               </div>
-              <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <metric.icon className="size-5" />
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <metric.icon className="size-4" />
               </span>
             </CardHeader>
           </Card>
         ))}
       </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-        <ScrollArea className="w-full">
-          <div className="flex min-w-max gap-4 pb-2">
-            {board.stages.map((stage, index) => (
-              <StageColumn
-                key={stage.id}
-                stage={stage}
-                colorClass={STAGE_DOT_COLORS[index % STAGE_DOT_COLORS.length]!}
-              />
-            ))}
-          </div>
-        </ScrollArea>
+      <div className="flex items-center justify-end">
+        <Button type="button" onClick={() => setIsSheetOpen(true)} disabled={!contacts.length}>
+          <Plus />
+          Nueva oportunidad
+        </Button>
+      </div>
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={collisionDetection}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <div className="grid min-h-[calc(100vh-17rem)] grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {board.stages.map((stage, index) => (
+            <StageColumn
+              key={stage.id}
+              stage={stage}
+              colorClass={STAGE_DOT_COLORS[index % STAGE_DOT_COLORS.length]!}
+              isDropTarget={activeCard !== null && overStageId === stage.id}
+            />
+          ))}
+        </div>
+        <DragOverlay dropAnimation={null} zIndex={80}>
+          {activeCard ? (
+            <article className="w-[260px] rotate-1 cursor-grabbing rounded-xl border border-primary bg-background p-3 shadow-2xl shadow-primary/30 ring-2 ring-primary">
+              <FunnelCardBody card={activeCard} isOverlay />
+            </article>
+          ) : null}
+        </DragOverlay>
       </DndContext>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
