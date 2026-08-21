@@ -437,6 +437,20 @@ with check (
   and direction = 'outbound'
 );
 
+drop policy if exists "Agents can update outbound messages" on messages;
+create policy "Agents can update outbound messages"
+on messages
+for update
+to authenticated
+using (
+  public.has_org_role(organization_id, array['owner', 'admin', 'agent'])
+  and direction = 'outbound'
+)
+with check (
+  public.has_org_role(organization_id, array['owner', 'admin', 'agent'])
+  and direction = 'outbound'
+);
+
 drop policy if exists "Owners and admins can read webhook events" on webhook_events;
 create policy "Owners and admins can read webhook events"
 on webhook_events

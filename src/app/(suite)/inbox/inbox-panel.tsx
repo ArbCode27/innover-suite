@@ -11,7 +11,9 @@ import {
   type KeyboardEvent,
 } from "react";
 import {
+  AlertCircle,
   CheckCircle2,
+  Clock,
   FileText,
   Headphones,
   ImageIcon,
@@ -42,6 +44,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { sendConversationMessageAction, takeConversationAction } from "./actions";
 import type { AttachmentKind, InboxConversation, InboxFilter, InboxMessage } from "./types";
+import { parseDeliveryStatus } from "./types";
 
 type InboxPanelProps = {
   organizationName: string;
@@ -147,6 +150,7 @@ const normalizeMessage = (row: {
     createdAt: row.created_at,
     attachmentKind,
     attachmentName: typeof attachmentNameValue === "string" ? attachmentNameValue : null,
+    deliveryStatus: parseDeliveryStatus(metadata),
   };
 };
 
@@ -349,7 +353,7 @@ export const InboxPanel = ({
         attachmentSize: attachmentPayload?.file.size,
       });
 
-      if (result.error || !result.data?.message) {
+      if (!result.data?.message) {
         setComposerError(result.error ?? "No se pudo enviar el mensaje.");
         return;
       }
@@ -384,7 +388,7 @@ export const InboxPanel = ({
 
       setComposerText("");
       setComposerAttachment(null);
-      setComposerError(null);
+      setComposerError(result.error ?? null);
     });
   };
 
@@ -567,7 +571,18 @@ export const InboxPanel = ({
 
                           <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
                             <span>{formatTime(message.createdAt)}</span>
-                            {isOutbound ? <CheckCircle2 className="size-3" /> : null}
+                            {isOutbound && message.deliveryStatus === "failed" ? (
+                              <AlertCircle
+                                className="size-3 text-destructive"
+                                aria-label="No se entregó al canal"
+                              />
+                            ) : null}
+                            {isOutbound && message.deliveryStatus === "pending" ? (
+                              <Clock className="size-3" aria-label="Enviando" />
+                            ) : null}
+                            {isOutbound && message.deliveryStatus !== "failed" && message.deliveryStatus !== "pending" ? (
+                              <CheckCircle2 className="size-3" aria-label="Enviado" />
+                            ) : null}
                           </div>
                         </article>
                       </div>

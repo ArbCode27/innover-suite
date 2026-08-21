@@ -5,6 +5,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type ConnectionRow = {
   id: number;
+  instagram_user_id: string;
   access_token: string;
 };
 
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
   const threshold = new Date(Date.now() + TEN_DAYS_IN_MS).toISOString();
   const { data: connections, error } = await admin
     .from("instagram_connections")
-    .select("id, access_token")
+    .select("id, instagram_user_id, access_token")
     .is("revoked_at", null)
     .lt("token_expires_at", threshold);
 
@@ -58,11 +59,12 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
+    const tokenExpiresAt = getExpiryDate(refreshedToken.data.expires_in);
     const { error: updateError } = await admin
       .from("instagram_connections")
       .update({
         access_token: refreshedToken.data.access_token,
-        token_expires_at: getExpiryDate(refreshedToken.data.expires_in),
+        token_expires_at: tokenExpiresAt,
       })
       .eq("id", connection.id);
 
@@ -74,6 +76,18 @@ export async function GET(request: NextRequest) {
       });
       continue;
     }
+
+    await admin
+      .from("channel_accounts")
+      .update({
+        access_token: refreshedToken.data.access_token,
+        metadata: {
+          provider: "instagram",
+          token_expires_at: tokenExpiresAt,
+        },
+      })
+      .eq("channel", "instagram")
+      .eq("external_account_id", connection.instagram_user_id);
 
     refreshed += 1;
   }

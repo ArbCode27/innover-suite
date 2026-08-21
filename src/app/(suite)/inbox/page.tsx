@@ -3,6 +3,7 @@ import { getCurrentMembership } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { InboxPanel } from "./inbox-panel";
 import type { InboxConversation, InboxMessage } from "./types";
+import { parseDeliveryStatus } from "./types";
 
 type ConversationRow = {
   id: number;
@@ -148,6 +149,7 @@ export default async function InboxPage() {
             ? attachmentKindRaw
             : null,
         attachmentName: typeof attachmentNameRaw === "string" ? attachmentNameRaw : null,
+        deliveryStatus: parseDeliveryStatus(metadata),
       };
     });
   }

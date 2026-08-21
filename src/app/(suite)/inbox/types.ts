@@ -1,6 +1,7 @@
 export type InboxFilter = "all" | "unread" | "ai" | "human";
 
 export type AttachmentKind = "image" | "video" | "audio" | "document";
+export type DeliveryStatus = "pending" | "sent" | "failed";
 
 export type InboxConversation = {
   id: number;
@@ -26,4 +27,13 @@ export type InboxMessage = {
   createdAt: string;
   attachmentKind: AttachmentKind | null;
   attachmentName: string | null;
+  deliveryStatus: DeliveryStatus | null;
+};
+
+export const parseDeliveryStatus = (metadata: Record<string, unknown>): DeliveryStatus | null => {
+  const value = metadata["delivery_status"];
+  if (value === "pending" || value === "sent" || value === "failed") {
+    return value;
+  }
+  return null;
 };

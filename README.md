@@ -83,6 +83,7 @@ Variables necesarias:
 
 Aplica `supabase/schema.sql` antes de recibir tráfico real. Los eventos se deduplican por `external_message_id`.
 Los eventos que no tengan cuenta conectada en `channel_accounts` se ignoran para evitar mezclar organizaciones.
+Las respuestas del agente desde `/inbox` se envían a Graph API (Instagram, Messenger o WhatsApp) y el CRM guarda el estado de entrega (`pending`, `sent` o `failed`).
 
 ## Base de datos
 

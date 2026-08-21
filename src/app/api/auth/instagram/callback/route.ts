@@ -91,7 +91,13 @@ export async function GET(request: NextRequest) {
       channel: "instagram",
       external_account_id: instagramUserId,
       display_name: instagramUsername || "Instagram",
+      access_token: longToken.data.access_token,
       connected_by_user_id: stateContext.userId,
+      metadata: {
+        provider: "instagram",
+        token_expires_at: tokenExpiresAt,
+        connectedAt: new Date().toISOString(),
+      },
     },
     { onConflict: "channel,external_account_id" },
   );
