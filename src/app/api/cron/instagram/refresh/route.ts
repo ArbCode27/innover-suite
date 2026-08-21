@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/config/env";
+import { syncInstagramTokenToOrganizationAccounts } from "@/lib/integrations/instagram-credentials";
 import { getExpiryDate, refreshLongLivedToken } from "@/lib/integrations/instagram";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type ConnectionRow = {
   id: number;
+  organization_id: number;
   instagram_user_id: string;
   access_token: string;
 };
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest) {
   const threshold = new Date(Date.now() + TEN_DAYS_IN_MS).toISOString();
   const { data: connections, error } = await admin
     .from("instagram_connections")
-    .select("id, instagram_user_id, access_token")
+    .select("id, organization_id, instagram_user_id, access_token")
     .is("revoked_at", null)
     .lt("token_expires_at", threshold);
 
@@ -77,17 +79,11 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    await admin
-      .from("channel_accounts")
-      .update({
-        access_token: refreshedToken.data.access_token,
-        metadata: {
-          provider: "instagram",
-          token_expires_at: tokenExpiresAt,
-        },
-      })
-      .eq("channel", "instagram")
-      .eq("external_account_id", connection.instagram_user_id);
+    await syncInstagramTokenToOrganizationAccounts(admin, connection.organization_id, {
+      accessToken: refreshedToken.data.access_token,
+      oauthInstagramUserId: connection.instagram_user_id,
+      tokenExpiresAt,
+    });
 
     refreshed += 1;
   }

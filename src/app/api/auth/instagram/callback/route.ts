@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/config/env";
+import { syncInstagramTokenToOrganizationAccounts } from "@/lib/integrations/instagram-credentials";
 import {
   exchangeAuthorizationCode,
   exchangeLongLivedToken,
@@ -106,6 +107,12 @@ export async function GET(request: NextRequest) {
     console.error("[IG_OAUTH] upsert channel_accounts failed", channelAccountError);
     return NextResponse.redirect(getSettingsRedirectUrl("persist_failed"));
   }
+
+  await syncInstagramTokenToOrganizationAccounts(admin, stateContext.organizationId, {
+    accessToken: longToken.data.access_token,
+    oauthInstagramUserId: instagramUserId,
+    tokenExpiresAt,
+  });
 
   return NextResponse.redirect(getSettingsRedirectUrl("connected"));
 }

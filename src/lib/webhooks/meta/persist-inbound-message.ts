@@ -4,6 +4,7 @@ import {
   isPlaceholderContactName,
   parseContactUsername,
 } from "@/lib/contacts/display";
+import { resolveInstagramCredentials } from "@/lib/integrations/instagram-credentials";
 import { fetchSocialUserProfile, resolveProfileDisplayName } from "@/lib/integrations/meta-profile";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logMetaWebhook, maskIdentifier } from "@/lib/webhooks/meta/logger";
@@ -36,27 +37,6 @@ const isUniqueViolation = (error: { code?: string } | null) =>
 const asMetadata = (value: unknown) =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 
-const resolveInstagramAccessToken = async (
-  supabase: AdminClient,
-  organizationId: number,
-  instagramUserId: string,
-  channelAccessToken: string | null,
-) => {
-  if (channelAccessToken) {
-    return channelAccessToken;
-  }
-
-  const { data: connection } = await supabase
-    .from("instagram_connections")
-    .select("access_token")
-    .eq("organization_id", organizationId)
-    .eq("instagram_user_id", instagramUserId)
-    .is("revoked_at", null)
-    .maybeSingle();
-
-  return (connection?.access_token as string | undefined) ?? null;
-};
-
 const resolveOrganizationContext = async (
   supabase: AdminClient,
   event: InboundMessageEvent,
@@ -77,21 +57,20 @@ const resolveOrganizationContext = async (
   }
 
   const organizationId = account.organization_id as number;
-  const channelAccessToken = (account.access_token as string | null) ?? null;
-  const accessToken =
+  const instagramCredentials =
     event.channel === "instagram"
-      ? await resolveInstagramAccessToken(
-          supabase,
+      ? await resolveInstagramCredentials({
           organizationId,
-          event.accountId,
-          channelAccessToken,
-        )
-      : channelAccessToken;
+          channelAccountId: account.id as number,
+          supabase,
+        })
+      : null;
 
   return {
     organizationId,
     channelAccountId: account.id as number,
-    accessToken,
+    accessToken:
+      instagramCredentials?.accessToken || (account.access_token as string | null) || null,
   };
 };
 
@@ -316,6 +295,12 @@ const enrichContactIdentity = async (
         if (profile) {
           profileName = resolveProfileDisplayName(profile) || profileName;
           profileUsername = profile.username || currentUsername;
+        } else {
+          logMetaWebhook("warn", "persist.profile_empty", {
+            channel: event.channel,
+            contactId,
+            externalUserIdMasked: maskIdentifier(event.externalUserId),
+          });
         }
       } catch (error) {
         logMetaWebhook("warn", "persist.profile_lookup_failed", {

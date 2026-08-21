@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { resolveInstagramCredentials } from "@/lib/integrations/instagram-credentials";
 import { sendMetaOutboundMessage } from "@/lib/integrations/meta-send";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -117,6 +118,23 @@ const resolveChannelAccessToken = async (
   const admin = getSupabaseAdminClient();
   const emptyCredentials = { accountId: null as string | null, accessToken: null as string | null };
 
+  if (conversation.channel === "instagram") {
+    const instagramCredentials = await resolveInstagramCredentials({
+      organizationId,
+      channelAccountId: conversation.channel_account_id,
+      supabase: admin,
+    });
+
+    if (!instagramCredentials) {
+      return emptyCredentials;
+    }
+
+    return {
+      accountId: instagramCredentials.oauthInstagramUserId || "instagram",
+      accessToken: instagramCredentials.accessToken,
+    };
+  }
+
   const accountQuery = admin
     .from("channel_accounts")
     .select("external_account_id, access_token")
@@ -127,40 +145,13 @@ const resolveChannelAccessToken = async (
     ? await accountQuery.eq("id", conversation.channel_account_id).maybeSingle()
     : await accountQuery.limit(1).maybeSingle();
 
-  if (!account) {
+  if (!account?.access_token) {
     return emptyCredentials;
-  }
-
-  if (account.access_token) {
-    return {
-      accountId: (account.external_account_id as string | null) ?? null,
-      accessToken: account.access_token as string,
-    };
-  }
-
-  if (conversation.channel === "instagram") {
-    const connectionQuery = admin
-      .from("instagram_connections")
-      .select("access_token, instagram_user_id")
-      .eq("organization_id", organizationId)
-      .is("revoked_at", null);
-
-    const { data: connection } = account.external_account_id
-      ? await connectionQuery.eq("instagram_user_id", account.external_account_id).maybeSingle()
-      : await connectionQuery.limit(1).maybeSingle();
-
-    return {
-      accountId:
-        (connection?.instagram_user_id as string | undefined) ||
-        (account.external_account_id as string | null) ||
-        null,
-      accessToken: (connection?.access_token as string | undefined) ?? null,
-    };
   }
 
   return {
     accountId: (account.external_account_id as string | null) ?? null,
-    accessToken: null,
+    accessToken: account.access_token as string,
   };
 };
 
