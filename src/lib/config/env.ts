@@ -24,4 +24,5 @@ export const env = {
   cronSecret: process.env.CRON_SECRET?.trim() || "",
   googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim() || "",
+  googleRedirectUri: process.env.GOOGLE_REDIRECT_URI?.trim() || "",
 };

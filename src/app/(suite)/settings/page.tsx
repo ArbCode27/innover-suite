@@ -23,7 +23,7 @@ const settingsGroups = [
   {
     title: "Google Calendar",
     description: "Sincronización de citas, disponibilidad y confirmaciones desde chat.",
-    status: "Próximo",
+    status: "Pendiente",
     icon: CalendarDays,
   },
   {
@@ -56,6 +56,17 @@ export default async function SettingsPage() {
         .eq("channel", "messenger")
         .order("updated_at", { ascending: false })
     : { data: null, error: null };
+  const googleCalendarConnection = membership
+    ? await supabase
+        .from("calendar_connections")
+        .select("email, google_calendar_id, token_expires_at, connected_at")
+        .eq("organization_id", membership.organizationId)
+        .eq("provider", "google")
+        .is("revoked_at", null)
+        .maybeSingle()
+    : { data: null, error: null };
+
+  const googleCalendarStatus = googleCalendarConnection.data ? "Activo" : "Pendiente";
 
   return (
     <ModuleShell
@@ -77,7 +88,9 @@ export default async function SettingsPage() {
                 <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <group.icon className="size-5" />
                 </span>
-                <Badge variant="outline">{group.status}</Badge>
+                <Badge variant="outline">
+                  {group.title === "Google Calendar" ? googleCalendarStatus : group.status}
+                </Badge>
               </CardHeader>
               <CardContent>
                 <CardTitle>{group.title}</CardTitle>
@@ -114,11 +127,21 @@ export default async function SettingsPage() {
                 <TeamAndIntegrationsForm
                   instagramConnection={instagramConnection.data}
                   messengerConnections={messengerConnections.data ?? []}
+                  googleCalendarConnection={
+                    googleCalendarConnection.data
+                      ? {
+                          email: googleCalendarConnection.data.email,
+                          google_calendar_id: googleCalendarConnection.data.google_calendar_id || "primary",
+                          token_expires_at: googleCalendarConnection.data.token_expires_at,
+                          connected_at: googleCalendarConnection.data.connected_at,
+                        }
+                      : null
+                  }
                   organizationName={membership?.organizationName || "Organización"}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Solo owner/admin pueden invitar asesores y vincular cuentas de Instagram.
+                  Solo owner/admin pueden invitar asesores y vincular Instagram, Messenger o Google Calendar.
                 </p>
               )}
             </div>

@@ -62,6 +62,10 @@ npm run dev
 - `GET /api/auth/messenger/callback` (callback OAuth de Messenger)
 - `POST /api/auth/messenger/disconnect` (desconectar páginas vinculadas)
 - `GET /api/cron/instagram/refresh` (renovar tokens próximos a expirar)
+- `GET /api/auth/google/start` (inicia OAuth de Google Calendar por organización)
+- `GET /api/auth/google/callback` (callback OAuth de Google)
+- `POST /api/auth/google/disconnect` (desconectar Google Calendar)
+- `GET /api/cron/google/refresh` (renovar access tokens de Calendar)
 - `POST /api/ai/reply`
 - `POST /api/calendar/events`
 
@@ -80,8 +84,10 @@ Variables necesarias:
 - `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` y `INSTAGRAM_REDIRECT_URI` para OAuth
 - `FACEBOOK_APP_ID` y `FACEBOOK_REDIRECT_URI` para OAuth de Messenger; usa `META_APP_SECRET` como clave de la app
 - `CRON_SECRET` para proteger el endpoint de refresco de tokens
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `GOOGLE_REDIRECT_URI` para OAuth de Google Calendar
 
-Aplica `supabase/schema.sql` antes de recibir tráfico real. Los eventos se deduplican por `external_message_id`.
+Aplica `supabase/schema.sql` antes de recibir tráfico real. Si el proyecto ya existe, aplica también `supabase/calendar-upgrade.sql` para habilitar la vinculación de Google Calendar.
+Los eventos se deduplican por `external_message_id`.
 Los eventos que no tengan cuenta conectada en `channel_accounts` se ignoran para evitar mezclar organizaciones.
 Las respuestas del agente desde `/inbox` se envían a Graph API (Instagram, Messenger o WhatsApp) y el CRM guarda el estado de entrega (`pending`, `sent` o `failed`).
 
@@ -97,6 +103,6 @@ Incluye tablas multi-tenant para organizaciones, miembros, invitaciones, cuentas
 
 1. Configurar proyecto Supabase y aplicar `supabase/schema.sql`.
 2. Configurar `META_WEBHOOK_VERIFY_TOKEN`, `META_APP_SECRET` y `SUPABASE_SERVICE_ROLE_KEY`.
-3. Integrar OAuth de Google Calendar.
+3. Crear citas reales en Google Calendar desde el CRM.
 4. Crear motor de tools del agente IA (calendar, funnels, handoff).
 5. Añadir drag & drop real en embudos + auditoria de movimientos.
