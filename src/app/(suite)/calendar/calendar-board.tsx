@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import {
   DndContext,
@@ -51,14 +51,12 @@ import {
 } from "@/components/ui/sheet";
 import { APPOINTMENT_PURPOSE_LABELS, APPOINTMENT_PURPOSES } from "@/lib/calendar/constants";
 import {
-  clampGridMinutes,
   dateAndMinutesToIso,
   formatDayHeading,
   formatRangeLabel,
   formatTime,
   getZonedTimeParts,
   shiftAnchor,
-  snapMinutes,
   toDateKey,
 } from "@/lib/calendar/range";
 
@@ -71,9 +69,6 @@ type CalendarBoardProps = {
 
 const HOUR_START = 8;
 const HOUR_END = 20;
-const HOUR_HEIGHT = 96;
-const MIN_EVENT_HEIGHT = 88;
-const HOURS = Array.from({ length: HOUR_END - HOUR_START }, (_, index) => HOUR_START + index);
 
 const VIEW_OPTIONS: Array<{ id: CalendarViewMode; label: string }> = [
   { id: "day", label: "Día" },
@@ -109,16 +104,7 @@ const nextSlot = () => {
   };
 };
 
-const eventLayout = (event: CalendarEventView) => {
-  const start = getZonedTimeParts(event.startsAt);
-  const end = getZonedTimeParts(event.endsAt);
-  const startMinutes = start.hour * 60 + start.minute;
-  const endMinutes = Math.max(end.hour * 60 + end.minute, startMinutes + 15);
-  const gridStart = HOUR_START * 60;
-  const top = ((startMinutes - gridStart) / 60) * HOUR_HEIGHT;
-  const height = Math.max(((endMinutes - startMinutes) / 60) * HOUR_HEIGHT, MIN_EVENT_HEIGHT);
-  return { top: Math.max(top, 0), height, dateKey: start.dateKey };
-};
+const eventDateKey = (event: CalendarEventView) => getZonedTimeParts(event.startsAt).dateKey;
 
 const parseDayId = (value: string | number) => {
   const raw = String(value);
@@ -128,12 +114,10 @@ const parseDayId = (value: string | number) => {
 const DayColumn = ({
   day,
   isToday,
-  nowLineTop,
   children,
 }: {
   day: string;
   isToday: boolean;
-  nowLineTop: number;
   children: ReactNode;
 }) => {
   const { setNodeRef, isOver } = useDroppable({
@@ -144,19 +128,10 @@ const DayColumn = ({
   return (
     <div
       ref={setNodeRef}
-      className={`relative border-l border-primary/15 transition-colors ${isOver ? "bg-primary/10" : ""}`}
-      style={{ height: HOURS.length * HOUR_HEIGHT }}
+      className={`min-h-72 space-y-2 border-l border-primary/15 p-2 transition-colors ${
+        isToday ? "bg-primary/5" : ""
+      } ${isOver ? "bg-primary/10" : ""}`}
     >
-      {HOURS.map((hour) => (
-        <div
-          key={`${day}-${hour}`}
-          className="absolute inset-x-0 border-t border-primary/10"
-          style={{ top: (hour - HOUR_START) * HOUR_HEIGHT, height: HOUR_HEIGHT }}
-        />
-      ))}
-      {isToday && nowLineTop >= 0 && nowLineTop <= HOURS.length * HOUR_HEIGHT ? (
-        <div className="absolute inset-x-0 z-10 h-px bg-primary" style={{ top: nowLineTop }} />
-      ) : null}
       {children}
     </div>
   );
@@ -167,7 +142,6 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
   const rangeKey = `${agenda.rangeStart}:${agenda.rangeEnd}`;
   const [syncedRange, setSyncedRange] = useState(rangeKey);
   const [localEvents, setLocalEvents] = useState<CalendarEventView[] | null>(null);
-  const resizeOriginals = useRef(new Map<string, CalendarEventView>());
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEventView | null>(null);
@@ -190,8 +164,6 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
 
   const displayEvents = localEvents ?? agenda.events;
   const todayKey = toDateKey(new Date());
-  const nowParts = getZonedTimeParts(new Date().toISOString());
-  const nowLineTop = ((nowParts.hour * 60 + nowParts.minute - HOUR_START * 60) / 60) * HOUR_HEIGHT;
   const activeEvent = displayEvents.find((event) => event.id === activeEventId) ?? null;
 
   const metrics = useMemo(() => {
@@ -203,8 +175,6 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
   }, [displayEvents, todayKey]);
 
   const nextEvent = displayEvents.find((event) => new Date(event.endsAt).getTime() > Date.now()) ?? null;
-  const timedEvents = displayEvents.filter((event) => !event.allDay);
-  const allDayEvents = displayEvents.filter((event) => event.allDay);
 
   const persistSchedule = (original: CalendarEventView, startsAt: string, endsAt: string) => {
     setLocalEvents((current) =>
@@ -228,24 +198,6 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
     });
   };
 
-  const handleResize = (event: CalendarEventView, nextEndsAt: string, commit: boolean) => {
-    if (!resizeOriginals.current.has(event.id)) {
-      resizeOriginals.current.set(event.id, event);
-    }
-    const original = resizeOriginals.current.get(event.id) ?? event;
-    setLocalEvents((current) =>
-      (current ?? agenda.events).map((item) => (item.id === event.id ? { ...item, endsAt: nextEndsAt } : item)),
-    );
-    if (!commit) {
-      return;
-    }
-    resizeOriginals.current.delete(event.id);
-    if (nextEndsAt === original.endsAt) {
-      return;
-    }
-    persistSchedule(original, original.startsAt, nextEndsAt);
-  };
-
   const handleDragStart = (event: DragStartEvent) => {
     setActiveEventId(String(event.active.id));
   };
@@ -258,23 +210,10 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
     }
 
     const nextDay = parseDayId(event.over.id) ?? getZonedTimeParts(current.startsAt).dateKey;
-    const layout = eventLayout(current);
     const startParts = getZonedTimeParts(current.startsAt);
     const endParts = getZonedTimeParts(current.endsAt);
-    const duration = Math.max(
-      endParts.hour * 60 + endParts.minute - (startParts.hour * 60 + startParts.minute),
-      15,
-    );
-    let nextStartMinutes = clampGridMinutes(
-      snapMinutes(HOUR_START * 60 + ((layout.top + event.delta.y) / HOUR_HEIGHT) * 60),
-    );
-    let nextEndMinutes = nextStartMinutes + duration;
-    if (nextEndMinutes > HOUR_END * 60) {
-      nextEndMinutes = HOUR_END * 60;
-      nextStartMinutes = Math.max(HOUR_START * 60, nextEndMinutes - duration);
-    }
-    const startsAt = dateAndMinutesToIso(nextDay, nextStartMinutes);
-    const endsAt = dateAndMinutesToIso(nextDay, nextEndMinutes);
+    const startsAt = dateAndMinutesToIso(nextDay, startParts.hour * 60 + startParts.minute);
+    const endsAt = dateAndMinutesToIso(nextDay, endParts.hour * 60 + endParts.minute);
 
     if (startsAt === current.startsAt && endsAt === current.endsAt) {
       return;
@@ -410,94 +349,48 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
           <div className="min-w-[720px]">
             <div
               className="grid border-b border-primary/15"
-              style={{ gridTemplateColumns: `72px repeat(${agenda.days.length}, minmax(0, 1fr))` }}
+              style={{ gridTemplateColumns: `repeat(${agenda.days.length}, minmax(0, 1fr))` }}
             >
-              <div className="p-3 text-xs text-muted-foreground">Hora</div>
               {agenda.days.map((day) => (
                 <div
                   key={day}
-                  className={`border-l border-primary/15 p-3 text-sm font-medium ${day === todayKey ? "text-primary" : ""}`}
+                  className={`border-l border-primary/15 p-3 text-sm font-medium first:border-l-0 ${
+                    day === todayKey ? "text-primary" : ""
+                  }`}
                 >
                   {formatDayHeading(day)}
                 </div>
               ))}
             </div>
 
-            {allDayEvents.length ? (
-              <div
-                className="grid border-b border-primary/15"
-                style={{ gridTemplateColumns: `72px repeat(${agenda.days.length}, minmax(0, 1fr))` }}
-              >
-                <div className="p-3 text-xs text-muted-foreground">Todo el día</div>
-                {agenda.days.map((day) => (
-                  <div key={`allday-${day}`} className="space-y-1 border-l border-primary/15 p-2">
-                    {allDayEvents
-                      .filter((event) => getZonedTimeParts(event.startsAt).dateKey === day)
-                      .map((event) => (
-                        <button
-                          key={event.id}
-                          type="button"
-                          className="w-full rounded-lg bg-primary/10 px-2 py-1 text-left text-xs font-medium"
-                          onClick={() => setSelectedEvent(event)}
-                        >
-                          {event.title}
-                        </button>
-                      ))}
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
             <div
               className="grid"
-              style={{ gridTemplateColumns: `72px repeat(${agenda.days.length}, minmax(0, 1fr))` }}
+              style={{ gridTemplateColumns: `repeat(${agenda.days.length}, minmax(0, 1fr))` }}
             >
-              <div className="relative" style={{ height: HOURS.length * HOUR_HEIGHT }}>
-                {HOURS.map((hour) => (
-                  <div
-                    key={hour}
-                    className="absolute right-2 text-xs text-muted-foreground"
-                    style={{ top: (hour - HOUR_START) * HOUR_HEIGHT - 8 }}
-                  >
-                    {padTime(hour)}:00
-                  </div>
-                ))}
-              </div>
-              {agenda.days.map((day) => (
-                <DayColumn key={`grid-${day}`} day={day} isToday={day === todayKey} nowLineTop={nowLineTop}>
-                  {timedEvents
-                    .filter((event) => eventLayout(event).dateKey === day)
-                    .map((event) => {
-                      const layout = eventLayout(event);
-                      return (
-                        <CalendarEventCard
-                          key={event.id}
-                          event={event}
-                          top={layout.top}
-                          height={layout.height}
-                          hourHeight={HOUR_HEIGHT}
-                          onOpen={setSelectedEvent}
-                          onResize={handleResize}
-                        />
-                      );
-                    })}
-                </DayColumn>
-              ))}
+              {agenda.days.map((day) => {
+                const dayEvents = displayEvents
+                  .filter((event) => eventDateKey(event) === day)
+                  .sort((left, right) => left.startsAt.localeCompare(right.startsAt));
+
+                return (
+                  <DayColumn key={`grid-${day}`} day={day} isToday={day === todayKey}>
+                    {dayEvents.length ? (
+                      dayEvents.map((event) => (
+                        <CalendarEventCard key={event.id} event={event} onOpen={setSelectedEvent} />
+                      ))
+                    ) : (
+                      <p className="px-1 py-6 text-center text-xs text-muted-foreground">Sin citas</p>
+                    )}
+                  </DayColumn>
+                );
+              })}
             </div>
           </div>
         </div>
         <DragOverlay dropAnimation={null} zIndex={80}>
           {activeEvent ? (
             <div className="w-[220px]">
-              <CalendarEventCard
-                event={activeEvent}
-                top={0}
-                height={eventLayout(activeEvent).height}
-                hourHeight={HOUR_HEIGHT}
-                isOverlay
-                onOpen={() => undefined}
-                onResize={() => undefined}
-              />
+              <CalendarEventCard event={activeEvent} isOverlay onOpen={() => undefined} />
             </div>
           ) : null}
         </DragOverlay>
