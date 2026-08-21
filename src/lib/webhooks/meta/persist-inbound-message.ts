@@ -1,16 +1,22 @@
 import type { ContactSource, MetaChannel } from "@/types/domain";
+import {
+  fallbackContactName,
+  isPlaceholderContactName,
+  parseContactUsername,
+} from "@/lib/contacts/display";
+import { fetchSocialUserProfile, resolveProfileDisplayName } from "@/lib/integrations/meta-profile";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logMetaWebhook, maskIdentifier } from "@/lib/webhooks/meta/logger";
 import type { InboundMessageEvent, PersistResult } from "@/lib/webhooks/meta/types";
 
 const POSTGRES_UNIQUE_VIOLATION = "23505";
-const PLACEHOLDER_CONTACT_PREFIX = "Contacto ";
 
 type AdminClient = ReturnType<typeof getSupabaseAdminClient>;
 type PersistStatus = "processed" | "duplicate" | "unmapped";
 type OrganizationContext = {
   organizationId: number;
   channelAccountId: number;
+  accessToken: string | null;
 };
 type PersistContext = {
   requestId: string;
@@ -27,8 +33,29 @@ const CONTACT_SOURCE_BY_CHANNEL: Record<MetaChannel, ContactSource> = {
 const isUniqueViolation = (error: { code?: string } | null) =>
   error?.code === POSTGRES_UNIQUE_VIOLATION;
 
-const fallbackContactName = (event: InboundMessageEvent) =>
-  event.displayName || `${PLACEHOLDER_CONTACT_PREFIX}${event.channel}`;
+const asMetadata = (value: unknown) =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+const resolveInstagramAccessToken = async (
+  supabase: AdminClient,
+  organizationId: number,
+  instagramUserId: string,
+  channelAccessToken: string | null,
+) => {
+  if (channelAccessToken) {
+    return channelAccessToken;
+  }
+
+  const { data: connection } = await supabase
+    .from("instagram_connections")
+    .select("access_token")
+    .eq("organization_id", organizationId)
+    .eq("instagram_user_id", instagramUserId)
+    .is("revoked_at", null)
+    .maybeSingle();
+
+  return (connection?.access_token as string | undefined) ?? null;
+};
 
 const resolveOrganizationContext = async (
   supabase: AdminClient,
@@ -36,7 +63,7 @@ const resolveOrganizationContext = async (
 ): Promise<OrganizationContext | null> => {
   const { data: account, error: accountError } = await supabase
     .from("channel_accounts")
-    .select("id, organization_id")
+    .select("id, organization_id, access_token")
     .eq("channel", event.channel)
     .eq("external_account_id", event.accountId)
     .maybeSingle();
@@ -49,9 +76,22 @@ const resolveOrganizationContext = async (
     return null;
   }
 
+  const organizationId = account.organization_id as number;
+  const channelAccessToken = (account.access_token as string | null) ?? null;
+  const accessToken =
+    event.channel === "instagram"
+      ? await resolveInstagramAccessToken(
+          supabase,
+          organizationId,
+          event.accountId,
+          channelAccessToken,
+        )
+      : channelAccessToken;
+
   return {
-    organizationId: account.organization_id as number,
+    organizationId,
     channelAccountId: account.id as number,
+    accessToken,
   };
 };
 
@@ -132,7 +172,7 @@ const resolveContactId = async (
     .from("contacts")
     .insert({
       organization_id: organizationId,
-      full_name: fallbackContactName(event),
+      full_name: fallbackContactName(event.channel, event.displayName),
       phone: event.phone,
       source: CONTACT_SOURCE_BY_CHANNEL[event.channel],
     })
@@ -230,6 +270,95 @@ const resolveConversationId = async (
   return raced.id as number;
 };
 
+const enrichContactIdentity = async (
+  supabase: AdminClient,
+  event: InboundMessageEvent,
+  organizationContext: OrganizationContext,
+  contactId: number,
+) => {
+  const { data: contact, error: contactError } = await supabase
+    .from("contacts")
+    .select("id, full_name, metadata")
+    .eq("id", contactId)
+    .eq("organization_id", organizationContext.organizationId)
+    .maybeSingle();
+
+  if (contactError || !contact?.id) {
+    return;
+  }
+
+  const currentName = (contact.full_name as string) || "";
+  const currentMetadata = asMetadata(contact.metadata);
+  const currentUsername = parseContactUsername(currentMetadata);
+  const hasPlaceholderName = isPlaceholderContactName(currentName);
+  const webhookName = event.displayName?.trim() || null;
+
+  let profileName: string | null = webhookName;
+  let profileUsername = currentUsername;
+
+  const needsSocialProfile =
+    event.channel !== "whatsapp" && (hasPlaceholderName || !currentUsername);
+
+  if (needsSocialProfile) {
+    if (!organizationContext.accessToken) {
+      logMetaWebhook("warn", "persist.profile_skipped_no_token", {
+        channel: event.channel,
+        contactId,
+        externalUserIdMasked: maskIdentifier(event.externalUserId),
+      });
+    } else {
+      try {
+        const profile = await fetchSocialUserProfile(
+          event.channel,
+          event.externalUserId,
+          organizationContext.accessToken,
+        );
+        if (profile) {
+          profileName = resolveProfileDisplayName(profile) || profileName;
+          profileUsername = profile.username || currentUsername;
+        }
+      } catch (error) {
+        logMetaWebhook("warn", "persist.profile_lookup_failed", {
+          channel: event.channel,
+          contactId,
+          externalUserIdMasked: maskIdentifier(event.externalUserId),
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+  }
+
+  const nextName = hasPlaceholderName && profileName ? profileName : currentName;
+  const nextMetadata = {
+    ...currentMetadata,
+    ...(profileUsername ? { username: profileUsername } : {}),
+    ...(profileName ? { profile_name: profileName } : {}),
+  };
+
+  const nameChanged = nextName !== currentName;
+  const usernameChanged = profileUsername !== currentUsername;
+  if (!nameChanged && !usernameChanged) {
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from("contacts")
+    .update({
+      full_name: nextName,
+      metadata: nextMetadata,
+    })
+    .eq("id", contactId)
+    .eq("organization_id", organizationContext.organizationId);
+
+  if (updateError) {
+    logMetaWebhook("warn", "persist.profile_update_failed", {
+      channel: event.channel,
+      contactId,
+      error: updateError.message,
+    });
+  }
+};
+
 const persistInboundMessage = async (
   supabase: AdminClient,
   event: InboundMessageEvent,
@@ -287,6 +416,17 @@ const persistInboundMessage = async (
 
   if (conversationError) {
     throw conversationError;
+  }
+
+  try {
+    await enrichContactIdentity(supabase, event, organizationContext, contactId);
+  } catch (error) {
+    logMetaWebhook("warn", "persist.profile_enrich_failed", {
+      channel: event.channel,
+      contactId,
+      externalUserIdMasked: maskIdentifier(event.externalUserId),
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
   }
 
   const { error: processedError } = await supabase

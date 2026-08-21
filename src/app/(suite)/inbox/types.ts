@@ -12,6 +12,7 @@ export type InboxConversation = {
   updatedAt: string;
   lastMessageAt: string | null;
   contactName: string;
+  contactUsername: string | null;
   contactPhone: string | null;
   lastMessagePreview: string;
   unreadCount: number;

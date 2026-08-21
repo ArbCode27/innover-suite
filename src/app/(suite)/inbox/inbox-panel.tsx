@@ -12,12 +12,15 @@ import {
 } from "react";
 import {
   AlertCircle,
+  Camera,
   CheckCircle2,
   Clock,
   FileText,
   Headphones,
   ImageIcon,
   Loader2,
+  MessageCircle,
+  MessagesSquare,
   Mic,
   MoreVertical,
   Paperclip,
@@ -41,6 +44,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CHANNEL_LABELS, formatSocialHandle } from "@/lib/contacts/display";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { sendConversationMessageAction, takeConversationAction } from "./actions";
 import type { AttachmentKind, InboxConversation, InboxFilter, InboxMessage } from "./types";
@@ -106,6 +110,7 @@ const resolveAttachmentIcon = (kind: AttachmentKind | null) => {
 
 const resolveInitials = (name: string) => {
   const words = name
+    .replace(/^@/, "")
     .trim()
     .split(" ")
     .filter(Boolean);
@@ -117,6 +122,32 @@ const resolveInitials = (name: string) => {
 const limitPreview = (text: string) => {
   if (text.length <= previewCharLimit) return text;
   return `${text.slice(0, previewCharLimit - 1).trimEnd()}…`;
+};
+
+const resolveChannelIcon = (channel: InboxConversation["channel"]) => {
+  if (channel === "instagram") return Camera;
+  if (channel === "messenger") return MessagesSquare;
+  return MessageCircle;
+};
+
+const ChannelBadge = ({ channel }: { channel: InboxConversation["channel"] }) => {
+  const Icon = resolveChannelIcon(channel);
+  return (
+    <Badge variant="outline">
+      <Icon aria-hidden />
+      {CHANNEL_LABELS[channel]}
+    </Badge>
+  );
+};
+
+const resolveConversationSubtitle = (conversation: InboxConversation) => {
+  const channelLabel = CHANNEL_LABELS[conversation.channel];
+  if (conversation.channel === "whatsapp") {
+    return [conversation.contactPhone, channelLabel].filter(Boolean).join(" · ");
+  }
+
+  const handle = formatSocialHandle(conversation.contactUsername);
+  return [handle, channelLabel].filter(Boolean).join(" · ");
 };
 
 const normalizeMessage = (row: {
@@ -191,7 +222,7 @@ export const InboxPanel = ({
       })
       .filter((conversation) => {
         if (!loweredTerm) return true;
-        const haystack = `${conversation.contactName} ${conversation.contactPhone ?? ""} ${conversation.lastMessagePreview}`.toLowerCase();
+        const haystack = `${conversation.contactName} ${conversation.contactUsername ?? ""} ${conversation.contactPhone ?? ""} ${CHANNEL_LABELS[conversation.channel]} ${conversation.lastMessagePreview}`.toLowerCase();
         return haystack.includes(loweredTerm);
       });
   }, [activeFilter, conversations, searchTerm]);
@@ -475,7 +506,7 @@ export const InboxPanel = ({
                             {limitPreview(conversation.lastMessagePreview || "Sin mensajes recientes")}
                           </p>
                           <div className="mt-1.5 flex items-center gap-1.5">
-                            <Badge variant="outline">{conversation.channel}</Badge>
+                            <ChannelBadge channel={conversation.channel} />
                             <Badge variant="outline">{resolveModeLabel(conversation.mode)}</Badge>
                             {conversation.unreadCount > 0 ? (
                               <Badge>{conversation.unreadCount}</Badge>
@@ -510,7 +541,7 @@ export const InboxPanel = ({
                 <div className="min-w-0">
                   <p className="truncate font-medium">{selectedConversation.contactName}</p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {selectedConversation.contactPhone || "Sin teléfono"} · {selectedConversation.channel}
+                    {resolveConversationSubtitle(selectedConversation)}
                   </p>
                 </div>
               </div>
