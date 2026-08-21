@@ -8,6 +8,7 @@ import { parseDeliveryStatus } from "./types";
 
 type ConversationRow = {
   id: number;
+  contact_id: number | null;
   channel: "messenger" | "instagram" | "whatsapp";
   status: "open" | "in_progress" | "resolved";
   mode: "ai" | "human";
@@ -53,7 +54,7 @@ export default async function InboxPage() {
   const { data: conversationsData, error } = await supabase
     .from("conversations")
     .select(
-      "id, channel, status, mode, assigned_user_id, updated_at, last_message_at, metadata, contacts(full_name, phone, metadata)",
+      "id, contact_id, channel, status, mode, assigned_user_id, updated_at, last_message_at, metadata, contacts(full_name, phone, metadata)",
     )
     .eq("organization_id", membership.organizationId)
     .order("updated_at", { ascending: false })
@@ -107,6 +108,7 @@ export default async function InboxPage() {
       assignedUserId: conversation.assigned_user_id,
       updatedAt: conversation.updated_at,
       lastMessageAt: conversation.last_message_at,
+      contactId: conversation.contact_id,
       contactName: conversation.contacts?.full_name || "Contacto sin nombre",
       contactUsername: parseContactUsername(conversation.contacts?.metadata),
       contactPhone: conversation.contacts?.phone || null,

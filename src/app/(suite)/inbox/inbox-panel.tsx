@@ -18,6 +18,7 @@ import {
   FileText,
   Headphones,
   ImageIcon,
+  KanbanSquare,
   Loader2,
   MessageCircle,
   MessagesSquare,
@@ -44,8 +45,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "sonner";
 import { CHANNEL_LABELS, formatSocialHandle } from "@/lib/contacts/display";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createFunnelCardFromConversationAction } from "../funnels/actions";
 import { sendConversationMessageAction, takeConversationAction } from "./actions";
 import type { AttachmentKind, InboxConversation, InboxFilter, InboxMessage } from "./types";
 import { parseDeliveryStatus } from "./types";
@@ -323,6 +326,26 @@ export const InboxPanel = ({
     });
   };
 
+  const handleSendToFunnel = () => {
+    if (!selectedConversation?.contactId) {
+      toast.error("Esta conversación no tiene un contacto asociado.");
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await createFunnelCardFromConversationAction({
+        conversationId: selectedConversation.id,
+      });
+
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+
+      toast.success("Contacto enviado al embudo");
+    });
+  };
+
   const uploadAttachment = async (conversationId: number, attachment: ComposerAttachment) => {
     const extension = attachment.file.name.includes(".") ? attachment.file.name.split(".").pop() : "";
     const suffix = extension ? `.${extension}` : "";
@@ -554,9 +577,21 @@ export const InboxPanel = ({
                     Tomar conversación
                   </Button>
                 ) : null}
-                <Button type="button" size="icon-sm" variant="ghost" aria-label="Opciones de conversación">
-                  <MoreVertical />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" size="icon-sm" variant="ghost" aria-label="Opciones de conversación">
+                      <MoreVertical />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Conversación</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleSendToFunnel} disabled={isPending}>
+                      <KanbanSquare />
+                      Enviar al embudo
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </CardHeader>

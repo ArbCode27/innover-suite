@@ -261,22 +261,30 @@ create table if not exists funnels (
   created_at timestamptz not null default now()
 );
 
+create unique index if not exists funnels_organization_uidx
+  on funnels (organization_id);
+
 create table if not exists funnel_stages (
   id bigint generated always as identity primary key,
   funnel_id bigint not null references funnels(id) on delete cascade,
   name text not null,
-  order_index integer not null,
-  unique(funnel_id, order_index)
+  order_index integer not null
 );
+
+create index if not exists funnel_stages_funnel_order_idx
+  on funnel_stages (funnel_id, order_index);
 
 create table if not exists funnel_cards (
   id bigint generated always as identity primary key,
+  organization_id bigint not null references organizations(id) on delete cascade,
+  funnel_id bigint not null references funnels(id) on delete cascade,
   stage_id bigint not null references funnel_stages(id) on delete cascade,
   contact_id bigint not null references contacts(id) on delete cascade,
   conversation_id bigint references conversations(id) on delete set null,
   title text not null,
   value_amount numeric(12,2),
-  owner_user_id uuid,
+  owner_user_id uuid references auth.users(id) on delete set null,
+  position integer not null default 0,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -321,6 +329,9 @@ alter table contact_channels enable row level security;
 alter table conversations enable row level security;
 alter table messages enable row level security;
 alter table webhook_events enable row level security;
+alter table funnels enable row level security;
+alter table funnel_stages enable row level security;
+alter table funnel_cards enable row level security;
 
 drop policy if exists "Members can read organizations" on organizations;
 create policy "Members can read organizations"
@@ -457,3 +468,108 @@ on webhook_events
 for select
 to authenticated
 using (public.has_org_role(organization_id, array['owner', 'admin']));
+
+-- Funnel schema upgrades for existing databases
+alter table funnel_stages drop constraint if exists funnel_stages_funnel_id_order_index_key;
+
+alter table funnel_cards add column if not exists organization_id bigint references organizations(id) on delete cascade;
+alter table funnel_cards add column if not exists funnel_id bigint references funnels(id) on delete cascade;
+alter table funnel_cards add column if not exists position integer not null default 0;
+
+update funnel_cards as cards
+set
+  funnel_id = stages.funnel_id,
+  organization_id = funnels.organization_id
+from funnel_stages as stages
+join funnels on funnels.id = stages.funnel_id
+where cards.stage_id = stages.id
+  and (cards.funnel_id is null or cards.organization_id is null);
+
+create unique index if not exists funnels_organization_uidx
+  on funnels (organization_id);
+
+create index if not exists funnel_stages_funnel_order_idx
+  on funnel_stages (funnel_id, order_index);
+
+create unique index if not exists funnel_cards_funnel_contact_uidx
+  on funnel_cards (funnel_id, contact_id)
+  where funnel_id is not null;
+
+create index if not exists funnel_cards_stage_position_idx
+  on funnel_cards (stage_id, position, id);
+
+drop policy if exists "Members can read funnels" on funnels;
+create policy "Members can read funnels"
+on funnels
+for select
+to authenticated
+using (public.is_org_member(organization_id));
+
+drop policy if exists "Agents can manage funnels" on funnels;
+create policy "Agents can manage funnels"
+on funnels
+for all
+to authenticated
+using (public.has_org_role(organization_id, array['owner', 'admin', 'agent']))
+with check (public.has_org_role(organization_id, array['owner', 'admin', 'agent']));
+
+drop policy if exists "Members can read funnel stages" on funnel_stages;
+create policy "Members can read funnel stages"
+on funnel_stages
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from funnels
+    where funnels.id = funnel_stages.funnel_id
+      and public.is_org_member(funnels.organization_id)
+  )
+);
+
+drop policy if exists "Agents can manage funnel stages" on funnel_stages;
+create policy "Agents can manage funnel stages"
+on funnel_stages
+for all
+to authenticated
+using (
+  exists (
+    select 1
+    from funnels
+    where funnels.id = funnel_stages.funnel_id
+      and public.has_org_role(funnels.organization_id, array['owner', 'admin', 'agent'])
+  )
+)
+with check (
+  exists (
+    select 1
+    from funnels
+    where funnels.id = funnel_stages.funnel_id
+      and public.has_org_role(funnels.organization_id, array['owner', 'admin', 'agent'])
+  )
+);
+
+drop policy if exists "Members can read funnel cards" on funnel_cards;
+create policy "Members can read funnel cards"
+on funnel_cards
+for select
+to authenticated
+using (public.is_org_member(organization_id));
+
+drop policy if exists "Agents can manage funnel cards" on funnel_cards;
+create policy "Agents can manage funnel cards"
+on funnel_cards
+for all
+to authenticated
+using (public.has_org_role(organization_id, array['owner', 'admin', 'agent']))
+with check (
+  public.has_org_role(organization_id, array['owner', 'admin', 'agent'])
+  and exists (
+    select 1
+    from funnel_stages
+    join funnels on funnels.id = funnel_stages.funnel_id
+    where funnel_stages.id = funnel_cards.stage_id
+      and funnels.id = funnel_cards.funnel_id
+      and funnels.organization_id = funnel_cards.organization_id
+  )
+);

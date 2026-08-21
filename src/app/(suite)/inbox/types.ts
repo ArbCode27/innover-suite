@@ -11,6 +11,7 @@ export type InboxConversation = {
   assignedUserId: string | null;
   updatedAt: string;
   lastMessageAt: string | null;
+  contactId: number | null;
   contactName: string;
   contactUsername: string | null;
   contactPhone: string | null;
