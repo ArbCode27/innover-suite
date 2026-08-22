@@ -11,8 +11,6 @@ import {
   Package,
   Settings,
   Sparkles,
-  Star,
-  BarChart3,
 } from "lucide-react";
 import { signOut } from "@/lib/auth/actions";
 import { DEFAULT_MODULES } from "@/lib/modules/constants";
@@ -22,7 +20,6 @@ import {
   canManageCatalog,
   canManageOrders,
   canUseInbox,
-  canViewReports,
   getCurrentMembership,
   ROLE_LABELS,
   type OrganizationRole,
@@ -73,13 +70,6 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
     { href: "/funnels", label: "Embudos", icon: KanbanSquare, show: Boolean(modules.funnels && canUseInbox(membership)) },
     { href: "/calendar", label: "Calendario", icon: CalendarDays, show: Boolean(modules.calendar && canUseInbox(membership)) },
     { href: "/contacts", label: "Contactos", icon: Contact, show: canUseInbox(membership) },
-    { href: "/reports", label: "Reportes", icon: BarChart3, show: canViewReports(membership) },
-    {
-      href: "/quality",
-      label: "Calidad IA",
-      icon: Star,
-      show: Boolean(membership && ["owner", "admin", "agent"].includes(membership.role)),
-    },
     { href: "/settings", label: "Ajustes", icon: Settings, show: true },
   ].filter((item) => item.show);
 

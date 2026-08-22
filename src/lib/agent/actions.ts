@@ -132,39 +132,3 @@ export const toggleKnowledgeArticleAction = async (articleId: number, active: bo
   revalidatePath("/settings");
   return { success: active ? "Artículo activado." : "Artículo desactivado." };
 };
-
-const reviewSchema = z.object({
-  turnId: z.number().int().positive(),
-  score: z.number().int().min(1).max(5),
-  notes: z.string().trim().max(500).optional(),
-});
-
-export const reviewAgentTurnAction = async (rawValues: unknown): Promise<ActionResult> => {
-  const parsed = reviewSchema.safeParse(rawValues);
-  if (!parsed.success) {
-    return { error: "La calificación no es válida." };
-  }
-
-  const membership = await getCurrentMembership();
-  if (!membership || !hasOrganizationRole(membership, ["owner", "admin", "agent"])) {
-    return { error: "No tienes permisos para calificar turnos." };
-  }
-
-  const supabase = await createSupabaseServerClient();
-  const { error } = await supabase
-    .from("agent_turns")
-    .update({
-      review_score: parsed.data.score,
-      review_notes: parsed.data.notes || null,
-      reviewed_at: new Date().toISOString(),
-    })
-    .eq("id", parsed.data.turnId)
-    .eq("organization_id", membership.organizationId);
-
-  if (error) {
-    return { error: error.message || "No se pudo guardar la revisión." };
-  }
-
-  revalidatePath("/quality");
-  return { success: "Revisión guardada." };
-};
