@@ -56,7 +56,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { CHANNEL_BADGE_CLASSNAMES, CHANNEL_LABELS, formatSocialHandle } from "@/lib/contacts/display";
+import { CHANNEL_BADGE_CLASSNAMES, CHANNEL_LABELS } from "@/lib/contacts/display";
 import { attachmentPreviewLabel } from "@/lib/media/parse";
 import { MESSAGE_ATTACHMENTS_BUCKET } from "@/lib/media/types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -173,7 +173,7 @@ const resolveConversationSubtitle = (conversation: InboxConversation) => {
     return [conversation.contactPhone, channelLabel].filter(Boolean).join(" · ");
   }
 
-  const handle = formatSocialHandle(conversation.contactUsername);
+  const handle = conversation.contactUsername?.trim().replace(/^@/, "") || null;
   return [handle, channelLabel].filter(Boolean).join(" · ");
 };
 
