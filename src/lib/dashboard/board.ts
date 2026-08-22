@@ -280,7 +280,7 @@ export const loadDashboardBoard = async (
   }
 
   const chats: DashboardChat[] = chatsRaw
-    .filter((row) => isMetaChannel(row.channel))
+    .filter((row): row is typeof row & { channel: MetaChannel } => isMetaChannel(row.channel))
     .map((row) => {
       const contact = Array.isArray(row.contacts) ? row.contacts[0] : row.contacts;
       const latest = latestByChat.get(row.id);
