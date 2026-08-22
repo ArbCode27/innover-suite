@@ -24,6 +24,7 @@ import {
   ROLE_LABELS,
   type OrganizationRole,
 } from "@/lib/organizations/membership";
+import { MobileNav, type MobileNavIcon } from "@/components/suite/mobile-nav";
 import { ThemeToggle } from "@/components/suite/theme-toggle";
 import { NotificationBell } from "@/components/suite/notification-bell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -35,6 +36,7 @@ type NavItem = {
   href: string;
   label: string;
   icon: typeof Inbox;
+  iconKey: MobileNavIcon;
   show: boolean;
 };
 
@@ -53,24 +55,38 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
     : [];
 
   const items: NavItem[] = [
-    { href: "/home", label: "Inicio", icon: Home, show: true },
-    { href: "/inbox", label: "Chats", icon: Inbox, show: canUseInbox(membership) },
+    { href: "/home", label: "Inicio", icon: Home, iconKey: "home", show: true },
+    { href: "/inbox", label: "Chats", icon: Inbox, iconKey: "inbox", show: canUseInbox(membership) },
     {
       href: "/orders",
       label: modules.kitchen ? "Comandas" : "Pedidos",
       icon: ClipboardList,
+      iconKey: "orders",
       show: Boolean(modules.orders && canManageOrders(membership)),
     },
     {
       href: "/inventory",
       label: "Inventario",
       icon: Package,
+      iconKey: "inventory",
       show: Boolean(modules.catalog && canManageCatalog(membership)),
     },
-    { href: "/funnels", label: "Embudos", icon: KanbanSquare, show: Boolean(modules.funnels && canUseInbox(membership)) },
-    { href: "/calendar", label: "Calendario", icon: CalendarDays, show: Boolean(modules.calendar && canUseInbox(membership)) },
-    { href: "/contacts", label: "Contactos", icon: Contact, show: canUseInbox(membership) },
-    { href: "/settings", label: "Ajustes", icon: Settings, show: true },
+    {
+      href: "/funnels",
+      label: "Embudos",
+      icon: KanbanSquare,
+      iconKey: "funnels",
+      show: Boolean(modules.funnels && canUseInbox(membership)),
+    },
+    {
+      href: "/calendar",
+      label: "Calendario",
+      icon: CalendarDays,
+      iconKey: "calendar",
+      show: Boolean(modules.calendar && canUseInbox(membership)),
+    },
+    { href: "/contacts", label: "Contactos", icon: Contact, iconKey: "contacts", show: canUseInbox(membership) },
+    { href: "/settings", label: "Ajustes", icon: Settings, iconKey: "settings", show: true },
   ].filter((item) => item.show);
 
   return (
@@ -140,7 +156,16 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
             </form>
           </div>
         </aside>
-        <main className="min-w-0 md:pl-[94px]">{children}</main>
+        <main className="min-w-0 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0 md:pl-[94px]">
+          {children}
+        </main>
+        <MobileNav
+          items={items.map((item) => ({
+            href: item.href,
+            label: item.label,
+            icon: item.iconKey,
+          }))}
+        />
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import {
   AlertCircle,
+  ArrowLeft,
   Bot,
   Camera,
   CheckCircle2,
@@ -127,12 +128,6 @@ const GeminiIcon = () => {
     </svg>
   );
 };
-const resolveStatusLabel = (status: InboxConversation["status"]) => {
-  if (status === "in_progress") return "En curso";
-  if (status === "resolved") return "Resuelta";
-  return "Abierta";
-};
-
 const resolveAttachmentLabel = (kind: FileAttachmentKind | null) =>
   attachmentPreviewLabel(kind ?? "document");
 
@@ -194,6 +189,7 @@ export const InboxPanel = ({
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(
     initialConversationId ?? initialConversations[0]?.id ?? null,
   );
+  const [isMobileThreadOpen, setIsMobileThreadOpen] = useState(Boolean(initialConversationId));
   const [messagesByConversation, setMessagesByConversation] = useState<Record<number, InboxMessage[]>>(
     initialMessagesByConversation,
   );
@@ -346,10 +342,46 @@ export const InboxPanel = ({
 
   const handleSelectConversation = (conversationId: number) => {
     setSelectedConversationId(conversationId);
+    setIsMobileThreadOpen(true);
     if (!messagesByConversation[conversationId]) {
       void loadMessages(conversationId);
     }
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("conversation") !== String(conversationId)) {
+      url.searchParams.set("conversation", String(conversationId));
+      window.history.pushState({ inboxThread: conversationId }, "", url);
+    }
   };
+
+  const handleBackToInbox = () => {
+    if (typeof window !== "undefined" && window.history.state?.inboxThread) {
+      window.history.back();
+      return;
+    }
+    setIsMobileThreadOpen(false);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("conversation")) {
+      url.searchParams.delete("conversation");
+      window.history.replaceState({ inboxThread: null }, "", url);
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const conversationId = Number(new URLSearchParams(window.location.search).get("conversation"));
+      if (Number.isInteger(conversationId) && conversationId > 0) {
+        setSelectedConversationId(conversationId);
+        setIsMobileThreadOpen(true);
+        return;
+      }
+      setIsMobileThreadOpen(false);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const handleSelectAttachmentKind = (kind: FileAttachmentKind) => {
     setPendingAttachmentKind(kind);
@@ -677,8 +709,13 @@ export const InboxPanel = ({
   const hasComposerMeta = Boolean(composerAttachment || composerError || isRecording);
 
   return (
-    <div className="grid h-[calc(100vh-1.5rem)] max-h-[100vh] gap-3 overflow-hidden md:h-[calc(100vh-2.5rem)] lg:grid-cols-[330px_1fr]">
-      <Card className="flex h-full min-h-0 flex-col border-primary/15 bg-card/70">
+    <div className="grid h-[calc(100dvh-5.75rem)] max-h-[100dvh] gap-3 overflow-hidden md:h-[calc(100vh-2.5rem)] lg:grid-cols-[330px_1fr]">
+      <Card
+        className={cn(
+          "flex h-full min-h-0 flex-col border-primary/15 bg-card/70",
+          isMobileThreadOpen && "max-lg:hidden",
+        )}
+      >
         <CardHeader className="space-y-3 p-3">
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -785,10 +822,26 @@ export const InboxPanel = ({
       </Card>
 
       {selectedConversation ? (
-        <Card className="flex h-full min-h-0 flex-col border-primary/15 bg-card/70">
+        <Card
+          className={cn(
+            "flex h-full min-h-0 flex-col border-primary/15 bg-card/70",
+            "max-lg:fixed max-lg:inset-0 max-lg:z-40 max-lg:h-dvh max-lg:rounded-none max-lg:border-0",
+            !isMobileThreadOpen && "max-lg:hidden",
+          )}
+        >
           <CardHeader className="border-b border-primary/10 p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  className="lg:hidden"
+                  aria-label="Volver al inbox"
+                  onClick={handleBackToInbox}
+                >
+                  <ArrowLeft />
+                </Button>
                 <Avatar>
                   <AvatarFallback>{resolveInitials(selectedConversation.contactName)}</AvatarFallback>
                 </Avatar>
@@ -800,7 +853,6 @@ export const InboxPanel = ({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline">{resolveStatusLabel(selectedConversation.status)}</Badge>
                 <div
                   className={cn(
                     "flex items-center gap-2 rounded-lg border px-2 py-1",
@@ -1092,10 +1144,12 @@ export const InboxPanel = ({
           </CardContent>
         </Card>
       ) : (
-        <EmptyMetaState
-          title="Selecciona una conversación para comenzar"
-          description="Cuando selecciones un chat podrás ver el historial y responder como agente humano."
-        />
+        <div className="max-lg:hidden">
+          <EmptyMetaState
+            title="Selecciona una conversación para comenzar"
+            description="Cuando selecciones un chat podrás ver el historial y responder como agente humano."
+          />
+        </div>
       )}
     </div>
   );
