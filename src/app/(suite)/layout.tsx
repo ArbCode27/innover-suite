@@ -24,7 +24,7 @@ import {
   ROLE_LABELS,
   type OrganizationRole,
 } from "@/lib/organizations/membership";
-import { MobileNav, type MobileNavIcon } from "@/components/suite/mobile-nav";
+import { MobileChromeProvider, MobileNav, type MobileNavIcon } from "@/components/suite/mobile-nav";
 import { ThemeToggle } from "@/components/suite/theme-toggle";
 import { NotificationBell } from "@/components/suite/notification-bell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -90,6 +90,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
   ].filter((item) => item.show);
 
   return (
+    <MobileChromeProvider>
     <div className="min-h-screen bg-background text-foreground">
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_15%_15%,rgba(56,189,248,0.18),transparent_26rem),radial-gradient(circle_at_85%_25%,rgba(59,130,246,0.16),transparent_24rem)]" />
       <div className="relative mx-auto min-h-screen w-full max-w-[1800px] p-3 md:p-5">
@@ -168,6 +169,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
         />
       </div>
     </div>
+    </MobileChromeProvider>
   );
 };
 

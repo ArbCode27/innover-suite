@@ -1,5 +1,6 @@
 "use client";
 
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -37,6 +38,25 @@ type MobileNavProps = {
   items: MobileNavItem[];
 };
 
+type MobileChromeContextValue = {
+  hideMobileNav: boolean;
+  setHideMobileNav: (hidden: boolean) => void;
+};
+
+const MobileChromeContext = createContext<MobileChromeContextValue>({
+  hideMobileNav: false,
+  setHideMobileNav: () => undefined,
+});
+
+export const MobileChromeProvider = ({ children }: { children: ReactNode }) => {
+  const [hideMobileNav, setHideMobileNav] = useState(false);
+  const value = useMemo(() => ({ hideMobileNav, setHideMobileNav }), [hideMobileNav]);
+
+  return <MobileChromeContext.Provider value={value}>{children}</MobileChromeContext.Provider>;
+};
+
+export const useMobileChrome = () => useContext(MobileChromeContext);
+
 const isActivePath = (pathname: string, href: string) => {
   if (href === "/home") return pathname === "/home";
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -44,6 +64,9 @@ const isActivePath = (pathname: string, href: string) => {
 
 export const MobileNav = ({ items }: MobileNavProps) => {
   const pathname = usePathname();
+  const { hideMobileNav } = useMobileChrome();
+
+  if (hideMobileNav) return null;
 
   return (
     <nav

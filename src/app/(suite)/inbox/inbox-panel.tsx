@@ -38,6 +38,7 @@ import {
   Video,
 } from "lucide-react";
 import { EmptyMetaState } from "@/components/suite/empty-meta-state";
+import { useMobileChrome } from "@/components/suite/mobile-nav";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -190,6 +191,7 @@ export const InboxPanel = ({
     initialConversationId ?? initialConversations[0]?.id ?? null,
   );
   const [isMobileThreadOpen, setIsMobileThreadOpen] = useState(Boolean(initialConversationId));
+  const { setHideMobileNav } = useMobileChrome();
   const [messagesByConversation, setMessagesByConversation] = useState<Record<number, InboxMessage[]>>(
     initialMessagesByConversation,
   );
@@ -382,6 +384,11 @@ export const InboxPanel = ({
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    setHideMobileNav(isMobileThreadOpen);
+    return () => setHideMobileNav(false);
+  }, [isMobileThreadOpen, setHideMobileNav]);
 
   const handleSelectAttachmentKind = (kind: FileAttachmentKind) => {
     setPendingAttachmentKind(kind);
