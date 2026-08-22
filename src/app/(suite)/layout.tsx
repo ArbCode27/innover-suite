@@ -113,11 +113,11 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
                 <NotificationBell organizationId={membership.organizationId} initialNotifications={notifications} />
               </div>
             ) : null}
-            <div className="flex items-center gap-3 rounded-2xl bg-muted/50 p-3">
+            <div className="flex items-center justify-center gap-3 group-hover/sidebar:justify-start group-hover/sidebar:rounded-2xl group-hover/sidebar:bg-muted/50 group-hover/sidebar:p-3">
               <Avatar>
                 <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
-              <div className="min-w-0 max-w-0 overflow-hidden opacity-0 transition-all duration-200 group-hover/sidebar:max-w-40 group-hover/sidebar:opacity-100">
+              <div className="hidden min-w-0 group-hover/sidebar:block">
                 <p className="text-sm font-medium whitespace-nowrap">
                   {membership ? ROLE_LABELS[membership.role as OrganizationRole] : "Asesor CRM"}
                 </p>
