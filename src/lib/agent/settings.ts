@@ -28,7 +28,7 @@ const mapSettings = (row: SettingsRow): AgentSettings => ({
 
 export const getDefaultAgentSettings = (organizationId: number): AgentSettings => ({
   organizationId,
-  enabled: false,
+  enabled: true,
   systemPrompt: DEFAULT_AGENT_PROMPT,
   model: AGENT_MODEL,
   toolsCalendar: true,
