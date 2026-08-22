@@ -54,7 +54,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
     ? await loadNotifications(supabase, membership.organizationId, user?.id ?? null)
     : [];
 
-  const items: NavItem[] = [
+  const navItems: NavItem[] = [
     { href: "/home", label: "Inicio", icon: Home, iconKey: "home", show: true },
     { href: "/inbox", label: "Chats", icon: Inbox, iconKey: "inbox", show: canUseInbox(membership) },
     {
@@ -87,7 +87,8 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
     },
     { href: "/contacts", label: "Contactos", icon: Contact, iconKey: "contacts", show: canUseInbox(membership) },
     { href: "/settings", label: "Ajustes", icon: Settings, iconKey: "settings", show: true },
-  ].filter((item) => item.show);
+  ];
+  const items = navItems.filter((item) => item.show);
 
   return (
     <MobileChromeProvider>
