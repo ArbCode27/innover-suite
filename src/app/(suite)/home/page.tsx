@@ -4,6 +4,7 @@ import { HomeDashboard } from "./home-dashboard";
 import { ModuleShell } from "@/components/suite/module-shell";
 import { Button } from "@/components/ui/button";
 import { loadDashboardBoard } from "@/lib/dashboard/board";
+import { loadOrganizationModules } from "@/lib/modules/settings";
 import {
   canUseInbox,
   canViewReports,
@@ -16,7 +17,8 @@ export default async function HomePage() {
   if (!membership) redirect("/onboarding/organization");
 
   const supabase = await createSupabaseServerClient();
-  const board = await loadDashboardBoard(supabase, membership.organizationId);
+  const modules = await loadOrganizationModules(supabase, membership.organizationId);
+  const board = await loadDashboardBoard(supabase, membership.organizationId, modules);
   const { data: org } = await supabase
     .from("organizations")
     .select("onboarding_completed_at, plan")
@@ -28,7 +30,7 @@ export default async function HomePage() {
   return (
     <ModuleShell
       title={`Dashboard de ${membership.organizationName}`}
-      description="Métricas del negocio y chats recientes con pedidos, ingresos e impagos por conversación."
+      description="KPIs en vivo según las funciones activas de tu CRM: SLA, equipo, IA, embudo, finanzas y operación."
       eyebrow={org?.plan ? `Plan ${org.plan}` : "Inicio"}
       actions={
         canUseInbox(membership) ? (

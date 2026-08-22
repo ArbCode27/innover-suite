@@ -80,19 +80,19 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
         <aside className="group/sidebar fixed top-3 left-3 z-50 hidden h-[calc(100vh-1.5rem)] w-[78px] overflow-y-auto rounded-3xl border border-primary/20 bg-card/80 p-3 shadow-2xl shadow-blue-950/25 backdrop-blur transition-all duration-300 hover:w-72 md:flex md:flex-col md:top-5 md:left-5 md:h-[calc(100vh-2.5rem)]">
           <Link
             href="/home"
-            className="flex items-center justify-center gap-0 rounded-2xl border border-primary/35 bg-primary/15 p-3 transition-all duration-200 group-hover/sidebar:justify-start group-hover/sidebar:gap-3"
+            className="hidden items-center gap-3 rounded-2xl border border-primary/35 bg-primary/15 p-3 group-hover/sidebar:flex"
           >
             <span className="flex size-10 min-w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
               <Sparkles className="size-5" />
             </span>
-            <span className="max-w-0 overflow-hidden opacity-0 transition-all duration-200 group-hover/sidebar:max-w-40 group-hover/sidebar:opacity-100">
+            <span>
               <span className="block text-xs font-semibold uppercase tracking-[0.25em] text-primary whitespace-nowrap">
                 Innover
               </span>
               <span className="block text-sm font-semibold whitespace-nowrap">Suite CRM</span>
             </span>
           </Link>
-          <nav className="mt-6 space-y-2">
+          <nav className="space-y-2 group-hover/sidebar:mt-6">
             {items.map((item) => (
               <Link
                 key={item.href}

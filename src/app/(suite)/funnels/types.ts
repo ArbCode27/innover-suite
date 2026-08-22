@@ -3,10 +3,11 @@ import type { MetaChannel } from "@/types/domain";
 export const DEFAULT_FUNNEL_NAME = "Embudo principal";
 
 export const DEFAULT_FUNNEL_STAGES = [
-  "Nuevo lead",
+  "Lead",
+  "Contactado",
   "Calificado",
-  "Propuesta",
-  "Cerrado",
+  "Cotización enviada",
+  "Cierre",
 ] as const;
 
 export type FunnelContactOption = {
