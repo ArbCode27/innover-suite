@@ -1,6 +1,10 @@
+import { parseMessageAttachment } from "@/lib/media/parse";
+import type { MessageAttachmentKind, MessageAttachmentStatus, MessageLocation } from "@/lib/media/types";
+
 export type InboxFilter = "all" | "unread" | "ai" | "human";
 
-export type AttachmentKind = "image" | "video" | "audio" | "document";
+export type AttachmentKind = MessageAttachmentKind;
+export type FileAttachmentKind = "image" | "video" | "audio" | "document";
 export type DeliveryStatus = "pending" | "sent" | "failed";
 
 export type InboxConversation = {
@@ -29,6 +33,9 @@ export type InboxMessage = {
   createdAt: string;
   attachmentKind: AttachmentKind | null;
   attachmentName: string | null;
+  attachmentStatus: MessageAttachmentStatus | null;
+  location: MessageLocation | null;
+  isVoice: boolean;
   deliveryStatus: DeliveryStatus | null;
 };
 
@@ -38,4 +45,37 @@ export const parseDeliveryStatus = (metadata: Record<string, unknown>): Delivery
     return value;
   }
   return null;
+};
+
+export const asMessageMetadata = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+export const normalizeInboxMessage = (row: {
+  id: number;
+  conversation_id: number;
+  direction: "inbound" | "outbound";
+  sender_type: "contact" | "agent" | "ai" | "system";
+  content: string | null;
+  media_url: string | null;
+  metadata: unknown;
+  created_at: string;
+}): InboxMessage => {
+  const metadata = asMessageMetadata(row.metadata);
+  const attachment = parseMessageAttachment(metadata);
+
+  return {
+    id: row.id,
+    conversationId: row.conversation_id,
+    direction: row.direction,
+    senderType: row.sender_type,
+    content: row.content,
+    mediaUrl: row.media_url,
+    createdAt: row.created_at,
+    attachmentKind: attachment?.kind ?? null,
+    attachmentName: attachment?.fileName ?? null,
+    attachmentStatus: attachment?.status ?? null,
+    location: attachment?.location ?? null,
+    isVoice: attachment?.isVoice ?? false,
+    deliveryStatus: parseDeliveryStatus(metadata),
+  };
 };

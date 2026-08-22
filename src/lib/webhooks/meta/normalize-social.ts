@@ -1,5 +1,6 @@
 import type { MetaChannel } from "@/types/domain";
-import { asArray, asRecord, asString, toIsoTimestamp } from "@/lib/webhooks/meta/json";
+import { createMessageAttachment, type MessageAttachment, type MessageAttachmentKind } from "@/lib/media/types";
+import { asArray, asNumber, asRecord, asString, toIsoTimestamp } from "@/lib/webhooks/meta/json";
 import type { InboundMessageEvent } from "@/lib/webhooks/meta/types";
 
 const SOCIAL_CHANNEL_BY_OBJECT: Record<string, MetaChannel> = {
@@ -7,15 +8,57 @@ const SOCIAL_CHANNEL_BY_OBJECT: Record<string, MetaChannel> = {
   instagram: "instagram",
 };
 
-const extractAttachmentUrl = (message: Record<string, unknown>) => {
+const SOCIAL_ATTACHMENT_KIND: Record<string, MessageAttachmentKind> = {
+  image: "image",
+  video: "video",
+  audio: "audio",
+  file: "document",
+  location: "location",
+  ig_reel: "video",
+  ig_story: "image",
+  sticker: "sticker",
+};
+
+const extractSocialAttachment = (message: Record<string, unknown> | null): MessageAttachment | null => {
+  if (!message) return null;
+
   const attachments = asArray(message.attachments);
   for (const attachment of attachments) {
     const record = asRecord(attachment);
-    const payload = asRecord(record?.payload);
+    if (!record) continue;
+
+    const type = asString(record.type)?.toLowerCase() ?? "";
+    const payload = asRecord(record.payload);
+    const kind = SOCIAL_ATTACHMENT_KIND[type];
     const url = asString(payload?.url);
-    if (url) {
-      return url;
+    const coordinates = asRecord(payload?.coordinates);
+    const lat = asNumber(coordinates?.lat) ?? asNumber(payload?.lat);
+    const lng = asNumber(coordinates?.long) ?? asNumber(coordinates?.lng) ?? asNumber(payload?.long);
+
+    if (kind === "location" && lat !== null && lng !== null) {
+      return createMessageAttachment({
+        kind: "location",
+        status: "ready",
+        location: {
+          lat,
+          lng,
+          name: asString(payload?.title) ?? asString(payload?.name),
+          address: asString(payload?.address),
+        },
+      });
     }
+
+    if (!kind && !url) {
+      continue;
+    }
+
+    return createMessageAttachment({
+      kind: kind ?? "document",
+      status: "pending",
+      sourceUrl: url,
+      mimeType: asString(payload?.mime_type),
+      fileName: asString(payload?.name) ?? asString(payload?.filename),
+    });
   }
 
   return null;
@@ -26,7 +69,7 @@ const extractRecipientId = (item: Record<string, unknown>) => {
   return asString(recipient?.id);
 };
 
-const extractSocialText = (item: Record<string, unknown>) => {
+const extractSocialText = (item: Record<string, unknown>, attachment: MessageAttachment | null) => {
   const message = asRecord(item.message);
   const postback = asRecord(item.postback);
   const referral = asRecord(item.referral);
@@ -36,6 +79,7 @@ const extractSocialText = (item: Record<string, unknown>) => {
     asString(postback?.title) ||
     asString(postback?.payload) ||
     asString(referral?.ref) ||
+    attachment?.caption ||
     null
   );
 };
@@ -51,6 +95,7 @@ const toSocialEvent = (
   const externalUserId = asString(sender?.id);
   const externalMessageId = asString(message?.mid) || asString(postback?.mid);
   const isEcho = message?.is_echo === true;
+  const attachment = extractSocialAttachment(message);
 
   if (!externalUserId || !externalMessageId || isEcho || (!message && !postback)) {
     return null;
@@ -63,8 +108,9 @@ const toSocialEvent = (
     externalUserId,
     displayName: null,
     phone: null,
-    text: extractSocialText(item),
-    mediaUrl: message ? extractAttachmentUrl(message) : null,
+    text: extractSocialText(item, attachment),
+    mediaUrl: attachment?.sourceUrl ?? null,
+    attachment,
     timestamp: toIsoTimestamp(item.timestamp),
     rawPayload: item,
   };

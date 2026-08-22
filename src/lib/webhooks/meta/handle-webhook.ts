@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { asArray, asRecord, asString } from "@/lib/webhooks/meta/json";
 import { logMetaWebhook, maskIdentifier } from "@/lib/webhooks/meta/logger";
 import { normalizeSocialEvents } from "@/lib/webhooks/meta/normalize-social";
@@ -8,6 +8,8 @@ import { persistInboundMessages } from "@/lib/webhooks/meta/persist-inbound-mess
 import type { MetaWebhookKind } from "@/lib/webhooks/meta/types";
 import { getSignatureDiagnostics } from "@/lib/webhooks/meta/verify-signature";
 import { env } from "@/lib/config/env";
+import { ingestInboundMediaJobs } from "@/lib/media/ingest";
+import { runConversationAgentJobs } from "@/lib/agent/run";
 
 const SOCIAL_OBJECTS = new Set(["page", "instagram"]);
 const WHATSAPP_OBJECT = "whatsapp_business_account";
@@ -223,14 +225,38 @@ export const handleMetaEvent = async (request: NextRequest, kind: MetaWebhookKin
       requestId,
       channelGroup: resolvedKind,
       objectType,
-      ...result,
+      processed: result.processed,
+      duplicates: result.duplicates,
+      ignored: result.ignored,
+      mediaJobs: result.mediaJobs.length,
+      agentJobs: result.agentJobs.length,
       durationMs: Date.now() - startedAt,
     });
+
+    if (result.mediaJobs.length || result.agentJobs.length) {
+      after(() =>
+        (async () => {
+          if (result.mediaJobs.length) {
+            await ingestInboundMediaJobs(result.mediaJobs);
+          }
+          if (result.agentJobs.length) {
+            await runConversationAgentJobs(result.agentJobs);
+          }
+        })().catch((error) => {
+          logMetaWebhook("error", "agent.jobs_failed", {
+            requestId,
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+        }),
+      );
+    }
 
     return NextResponse.json({
       ok: true,
       channelGroup: resolvedKind,
-      ...result,
+      processed: result.processed,
+      duplicates: result.duplicates,
+      ignored: result.ignored,
     });
   } catch (error) {
     logMetaWebhook("error", "request.failed", {

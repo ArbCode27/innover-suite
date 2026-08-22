@@ -6,6 +6,7 @@ import {
 } from "@/lib/contacts/display";
 import { resolveInstagramCredentials } from "@/lib/integrations/instagram-credentials";
 import { fetchSocialUserProfile, resolveProfileDisplayName } from "@/lib/integrations/meta-profile";
+import { mergeAttachmentMetadata } from "@/lib/media/parse";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logMetaWebhook, maskIdentifier } from "@/lib/webhooks/meta/logger";
 import type { InboundMessageEvent, PersistResult } from "@/lib/webhooks/meta/types";
@@ -14,6 +15,14 @@ const POSTGRES_UNIQUE_VIOLATION = "23505";
 
 type AdminClient = ReturnType<typeof getSupabaseAdminClient>;
 type PersistStatus = "processed" | "duplicate" | "unmapped";
+type PersistOutcome = {
+  status: PersistStatus;
+  job?: {
+    organizationId: number;
+    conversationId: number;
+    inboundMessageId: number;
+  };
+};
 type OrganizationContext = {
   organizationId: number;
   channelAccountId: number;
@@ -347,15 +356,15 @@ const enrichContactIdentity = async (
 const persistInboundMessage = async (
   supabase: AdminClient,
   event: InboundMessageEvent,
-): Promise<PersistStatus> => {
+): Promise<PersistOutcome> => {
   const organizationContext = await resolveOrganizationContext(supabase, event);
   if (!organizationContext) {
-    return "unmapped";
+    return { status: "unmapped" };
   }
 
   const claimed = await claimWebhookEvent(supabase, event, organizationContext.organizationId);
   if (claimed.alreadyProcessed) {
-    return "duplicate";
+    return { status: "duplicate" };
   }
 
   const contactId = await resolveContactId(supabase, event, organizationContext.organizationId);
@@ -367,28 +376,39 @@ const persistInboundMessage = async (
     contactId,
   );
 
-  const { error: messageError } = await supabase.from("messages").insert({
-    organization_id: organizationContext.organizationId,
-    conversation_id: conversationId,
-    direction: "inbound",
-    sender_type: "contact",
-    content: event.text,
-    media_url: event.mediaUrl,
-    external_message_id: event.externalMessageId,
-    metadata: {
-      channel: event.channel,
-      accountId: event.accountId,
-      externalUserId: event.externalUserId,
-    },
-    created_at: event.timestamp,
-  });
+  const now = new Date().toISOString();
+  const messageMetadata: Record<string, unknown> = {
+    channel: event.channel,
+    accountId: event.accountId,
+    externalUserId: event.externalUserId,
+  };
+  if (event.attachment) {
+    Object.assign(messageMetadata, mergeAttachmentMetadata({}, event.attachment));
+  }
+
+  const { data: insertedMessage, error: messageError } = await supabase
+    .from("messages")
+    .insert({
+      organization_id: organizationContext.organizationId,
+      conversation_id: conversationId,
+      direction: "inbound",
+      sender_type: "contact",
+      content: event.text,
+      media_url: null,
+      external_message_id: event.externalMessageId,
+      metadata: messageMetadata,
+      created_at: event.timestamp,
+    })
+    .select("id")
+    .single();
 
   if (messageError && !isUniqueViolation(messageError)) {
     throw messageError;
   }
 
   const conversationUpdate: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
+    updated_at: now,
+    last_message_at: event.timestamp || now,
   };
   if (event.phone) {
     conversationUpdate.customer_phone = event.phone;
@@ -423,7 +443,18 @@ const persistInboundMessage = async (
     throw processedError;
   }
 
-  return messageError ? "duplicate" : "processed";
+  if (messageError || !insertedMessage?.id) {
+    return { status: "duplicate" };
+  }
+
+  return {
+    status: "processed",
+    job: {
+      organizationId: organizationContext.organizationId,
+      conversationId,
+      inboundMessageId: insertedMessage.id as number,
+    },
+  };
 };
 
 export const persistInboundMessages = async (
@@ -431,7 +462,7 @@ export const persistInboundMessages = async (
   context?: PersistContext,
 ): Promise<PersistResult> => {
   if (events.length === 0) {
-    return { processed: 0, duplicates: 0, ignored: 0 };
+    return { processed: 0, duplicates: 0, ignored: 0, mediaJobs: [], agentJobs: [] };
   }
 
   const supabase = getSupabaseAdminClient();
@@ -439,11 +470,13 @@ export const persistInboundMessages = async (
   let processed = 0;
   let duplicates = 0;
   let ignored = 0;
+  const mediaJobs: PersistResult["mediaJobs"] = [];
+  const agentJobs: PersistResult["agentJobs"] = [];
 
   for (const event of events) {
     try {
-      const status = await persistInboundMessage(supabase, event);
-      if (status === "unmapped") {
+      const outcome = await persistInboundMessage(supabase, event);
+      if (outcome.status === "unmapped") {
         ignored += 1;
         logMetaWebhook("warn", "persist.unmapped_channel_account", {
           requestId: context?.requestId,
@@ -453,10 +486,22 @@ export const persistInboundMessages = async (
           accountIdMasked: maskIdentifier(event.accountId),
           externalMessageIdMasked: maskIdentifier(event.externalMessageId),
         });
-      } else if (status === "duplicate") {
+      } else if (outcome.status === "duplicate") {
         duplicates += 1;
       } else {
         processed += 1;
+        if (outcome.job) {
+          const needsIngest =
+            Boolean(event.attachment) &&
+            event.attachment?.kind !== "location" &&
+            event.attachment?.status !== "ready";
+          if (needsIngest) {
+            mediaJobs.push(outcome.job);
+          }
+          if (event.text?.trim() || event.attachment) {
+            agentJobs.push(outcome.job);
+          }
+        }
       }
     } catch (error) {
       failures.push(error);
@@ -496,5 +541,5 @@ export const persistInboundMessages = async (
     ignored,
   });
 
-  return { processed, duplicates, ignored };
+  return { processed, duplicates, ignored, mediaJobs, agentJobs };
 };

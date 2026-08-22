@@ -19,7 +19,7 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import { DollarSign, GripVertical, KanbanSquare, Loader2, Plus, Target, Users } from "lucide-react";
 import { toast } from "sonner";
-import { CHANNEL_LABELS } from "@/lib/contacts/display";
+import { CHANNEL_BADGE_CLASSNAMES, CHANNEL_LABELS } from "@/lib/contacts/display";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -114,7 +114,9 @@ const FunnelCardBody = ({ card, isOverlay = false }: { card: FunnelCardView; isO
       <p className="mt-0.5 truncate text-xs text-muted-foreground">{card.title}</p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {card.channel ? (
-          <Badge variant="outline">{CHANNEL_LABELS[card.channel]}</Badge>
+          <Badge variant="outline" className={CHANNEL_BADGE_CLASSNAMES[card.channel]}>
+            {CHANNEL_LABELS[card.channel]}
+          </Badge>
         ) : (
           <Badge variant="outline">Manual</Badge>
         )}

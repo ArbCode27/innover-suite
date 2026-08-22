@@ -1,41 +1,86 @@
-import { asArray, asRecord, asString, toIsoTimestamp } from "@/lib/webhooks/meta/json";
+import { createMessageAttachment, type MessageAttachment, type MessageAttachmentKind } from "@/lib/media/types";
+import { asArray, asNumber, asRecord, asString, toIsoTimestamp } from "@/lib/webhooks/meta/json";
 import type { InboundMessageEvent } from "@/lib/webhooks/meta/types";
 
 const SKIPPED_MESSAGE_TYPES = new Set(["reaction", "system", "unsupported"]);
 
-const extractMediaUrl = (message: Record<string, unknown>) => {
-  const mediaKeys = ["image", "video", "audio", "document", "sticker"] as const;
-
-  for (const key of mediaKeys) {
-    const media = asRecord(message[key]);
-    const url = asString(media?.url) || asString(media?.link);
-    if (url) {
-      return url;
-    }
-  }
-
-  return null;
+const MEDIA_KIND_BY_TYPE: Record<string, MessageAttachmentKind> = {
+  image: "image",
+  video: "video",
+  audio: "audio",
+  document: "document",
+  sticker: "sticker",
+  location: "location",
 };
 
-const extractWhatsappText = (message: Record<string, unknown>) => {
+const extractWhatsappAttachment = (message: Record<string, unknown>): MessageAttachment | null => {
+  const type = asString(message.type);
+  if (!type) return null;
+
+  if (type === "location") {
+    const location = asRecord(message.location);
+    const lat = asNumber(location?.latitude);
+    const lng = asNumber(location?.longitude);
+    if (lat === null || lng === null) return null;
+
+    return createMessageAttachment({
+      kind: "location",
+      status: "ready",
+      location: {
+        lat,
+        lng,
+        name: asString(location?.name),
+        address: asString(location?.address),
+      },
+    });
+  }
+
+  const kind = MEDIA_KIND_BY_TYPE[type];
+  if (!kind || kind === "location") return null;
+
+  const media = asRecord(message[type]);
+  if (!media) return null;
+
+  const caption = asString(media.caption);
+  const fileName = asString(media.filename) ?? asString(media.name);
+  const mimeType = asString(media.mime_type);
+  const providerMediaId = asString(media.id);
+  const sourceUrl = asString(media.url) ?? asString(media.link);
+  const isVoice = media.voice === true;
+
+  if (!providerMediaId && !sourceUrl) {
+    return null;
+  }
+
+  return createMessageAttachment({
+    kind,
+    status: "pending",
+    caption,
+    fileName,
+    mimeType,
+    providerMediaId,
+    sourceUrl,
+    isVoice: kind === "audio" ? isVoice : false,
+  });
+};
+
+const extractWhatsappText = (message: Record<string, unknown>, attachment: MessageAttachment | null) => {
   const text = asRecord(message.text);
   const button = asRecord(message.button);
   const interactive = asRecord(message.interactive);
   const buttonReply = asRecord(interactive?.button_reply);
   const listReply = asRecord(interactive?.list_reply);
-  const image = asRecord(message.image);
-  const video = asRecord(message.video);
-  const document = asRecord(message.document);
 
   return (
     asString(text?.body) ||
     asString(button?.text) ||
     asString(buttonReply?.title) ||
     asString(listReply?.title) ||
-    asString(image?.caption) ||
-    asString(video?.caption) ||
-    asString(document?.caption) ||
-    asString(document?.filename) ||
+    attachment?.caption ||
+    (attachment?.kind === "location"
+      ? attachment.location?.name || attachment.location?.address || null
+      : null) ||
+    attachment?.fileName ||
     null
   );
 };
@@ -53,6 +98,8 @@ const toWhatsappEvent = (
     return null;
   }
 
+  const attachment = extractWhatsappAttachment(message);
+
   return {
     channel: "whatsapp",
     accountId,
@@ -60,8 +107,9 @@ const toWhatsappEvent = (
     externalUserId,
     displayName: namesByWaId.get(externalUserId) ?? null,
     phone: externalUserId,
-    text: extractWhatsappText(message),
-    mediaUrl: extractMediaUrl(message),
+    text: extractWhatsappText(message, attachment),
+    mediaUrl: attachment?.sourceUrl ?? null,
+    attachment,
     timestamp: toIsoTimestamp(message.timestamp),
     rawPayload: message,
   };

@@ -1,3 +1,5 @@
+import { mapsUrlFromLocation } from "@/lib/media/parse";
+import type { MessageLocation } from "@/lib/media/types";
 import type { MetaChannel } from "@/types/domain";
 
 const INSTAGRAM_GRAPH_VERSION = "v26.0";
@@ -13,6 +15,7 @@ export type MetaOutboundPayload = {
   text?: string;
   mediaUrl?: string;
   attachmentKind?: AttachmentKind;
+  location?: MessageLocation;
 };
 
 export type MetaOutboundResult =
@@ -39,6 +42,8 @@ const ATTACHMENT_TYPE_BY_KIND: Record<AttachmentKind, string> = {
   audio: "audio",
   document: "file",
 };
+
+const CAPTION_MEDIA_TYPES = new Set(["image", "video", "document"]);
 
 const parseGraphError = async (response: Response) => {
   const rawBody = await response.text();
@@ -83,6 +88,15 @@ const postGraphMessage = async (
   };
 };
 
+const locationFallbackText = (payload: MetaOutboundPayload) => {
+  if (!payload.location) return payload.text ?? "";
+  const mapsUrl = mapsUrlFromLocation(payload.location);
+  const lines = [payload.location.name, payload.location.address, mapsUrl, payload.text].filter(
+    (value): value is string => Boolean(value?.trim()),
+  );
+  return lines.join("\n");
+};
+
 const buildInstagramMessageBody = (payload: MetaOutboundPayload, useAttachment: boolean) => {
   if (useAttachment && payload.mediaUrl) {
     return {
@@ -98,7 +112,7 @@ const buildInstagramMessageBody = (payload: MetaOutboundPayload, useAttachment: 
 
   return {
     recipient: { id: payload.recipientId },
-    message: { text: payload.text ?? "" },
+    message: { text: locationFallbackText(payload) },
   };
 };
 
@@ -116,11 +130,15 @@ const sendInstagramMessage = async (payload: MetaOutboundPayload): Promise<MetaO
     }
   }
 
-  if (payload.text) {
-    return postGraphMessage(url, payload.accessToken, buildInstagramMessageBody(payload, false));
+  const text = locationFallbackText(payload);
+  if (text) {
+    return postGraphMessage(url, payload.accessToken, {
+      recipient: { id: payload.recipientId },
+      message: { text },
+    });
   }
 
-  return { ok: false, status: 400, errorMessage: "El mensaje no tiene texto ni archivo." };
+  return { ok: false, status: 400, errorMessage: "El mensaje no tiene texto, archivo ni ubicación." };
 };
 
 const sendMessengerMessage = async (payload: MetaOutboundPayload): Promise<MetaOutboundResult> => {
@@ -142,35 +160,57 @@ const sendMessengerMessage = async (payload: MetaOutboundPayload): Promise<MetaO
     }
   }
 
-  if (payload.text) {
+  const text = locationFallbackText(payload);
+  if (text) {
     return postGraphMessage(url, payload.accessToken, {
       recipient: { id: payload.recipientId },
       messaging_type: "RESPONSE",
-      message: { text: payload.text },
+      message: { text },
     });
   }
 
-  return { ok: false, status: 400, errorMessage: "El mensaje no tiene texto ni archivo." };
+  return { ok: false, status: 400, errorMessage: "El mensaje no tiene texto, archivo ni ubicación." };
 };
 
 const sendWhatsappMessage = async (payload: MetaOutboundPayload): Promise<MetaOutboundResult> => {
   const url = `https://graph.facebook.com/${FACEBOOK_GRAPH_VERSION}/${payload.accountId}/messages`;
 
+  if (payload.location && !payload.mediaUrl) {
+    return postGraphMessage(url, payload.accessToken, {
+      messaging_product: "whatsapp",
+      to: payload.recipientId,
+      type: "location",
+      location: {
+        latitude: payload.location.lat,
+        longitude: payload.location.lng,
+        ...(payload.location.name ? { name: payload.location.name } : {}),
+        ...(payload.location.address ? { address: payload.location.address } : {}),
+      },
+    });
+  }
+
   if (payload.mediaUrl) {
-    const type = payload.attachmentKind === "image"
-      ? "image"
-      : payload.attachmentKind === "video"
-        ? "video"
-        : payload.attachmentKind === "audio"
-          ? "audio"
-          : "document";
+    const type =
+      payload.attachmentKind === "image"
+        ? "image"
+        : payload.attachmentKind === "video"
+          ? "video"
+          : payload.attachmentKind === "audio"
+            ? "audio"
+            : "document";
+    const mediaBody: Record<string, unknown> = { link: payload.mediaUrl };
+    const canCaption = CAPTION_MEDIA_TYPES.has(type) && Boolean(payload.text);
+    if (canCaption) {
+      mediaBody.caption = payload.text;
+    }
+
     const attachmentResult = await postGraphMessage(url, payload.accessToken, {
       messaging_product: "whatsapp",
       to: payload.recipientId,
       type,
-      [type]: { link: payload.mediaUrl },
+      [type]: mediaBody,
     });
-    if (!attachmentResult.ok || !payload.text) {
+    if (!attachmentResult.ok || !payload.text || canCaption) {
       return attachmentResult;
     }
   }
@@ -180,11 +220,11 @@ const sendWhatsappMessage = async (payload: MetaOutboundPayload): Promise<MetaOu
       messaging_product: "whatsapp",
       to: payload.recipientId,
       type: "text",
-      text: { body: payload.text, preview_url: false },
+      text: { body: payload.text, preview_url: Boolean(payload.location) },
     });
   }
 
-  return { ok: false, status: 400, errorMessage: "El mensaje no tiene texto ni archivo." };
+  return { ok: false, status: 400, errorMessage: "El mensaje no tiene texto, archivo ni ubicación." };
 };
 
 export const sendMetaOutboundMessage = async (

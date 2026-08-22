@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { parseContactUsername } from "@/lib/contacts/display";
+import { resolveMessagePreview } from "@/lib/media/parse";
 import { getCurrentMembership } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { InboxPanel } from "./inbox-panel";
-import type { InboxConversation, InboxMessage } from "./types";
-import { parseDeliveryStatus } from "./types";
+import { normalizeInboxMessage, type InboxConversation, type InboxMessage } from "./types";
 
 type ConversationRow = {
   id: number;
@@ -27,6 +27,7 @@ type LatestMessageRow = {
   conversation_id: number;
   content: string | null;
   media_url: string | null;
+  metadata: unknown;
 };
 
 type MessageRow = {
@@ -72,7 +73,7 @@ export default async function InboxPage() {
   if (conversationIds.length) {
     const { data: latestMessages } = await supabase
       .from("messages")
-      .select("conversation_id, content, media_url, created_at")
+      .select("conversation_id, content, media_url, metadata, created_at")
       .in("conversation_id", conversationIds)
       .order("created_at", { ascending: false })
       .limit(500);
@@ -95,10 +96,11 @@ export default async function InboxPage() {
     const unreadRaw = metadata["unread_count"];
     const unreadCount = typeof unreadRaw === "number" ? unreadRaw : 0;
 
-    const latestPreview =
-      latest?.content?.trim() ||
-      (latest?.media_url ? "Adjunto multimedia" : "") ||
-      "Sin mensajes recientes";
+    const latestPreview = resolveMessagePreview({
+      content: latest?.content ?? null,
+      mediaUrl: latest?.media_url ?? null,
+      metadata: latest?.metadata,
+    });
 
     return {
       id: conversation.id,
@@ -128,35 +130,9 @@ export default async function InboxPage() {
       .order("created_at", { ascending: true })
       .limit(250);
 
-    initialMessagesByConversation[firstConversationId] = (initialMessages ?? []).map((row) => {
-      const typedRow = row as MessageRow;
-      const metadata =
-        typedRow.metadata && typeof typedRow.metadata === "object"
-          ? (typedRow.metadata as Record<string, unknown>)
-          : {};
-
-      const attachmentKindRaw = metadata["attachment_kind"];
-      const attachmentNameRaw = metadata["attachment_name"];
-
-      return {
-        id: typedRow.id,
-        conversationId: typedRow.conversation_id,
-        direction: typedRow.direction,
-        senderType: typedRow.sender_type,
-        content: typedRow.content,
-        mediaUrl: typedRow.media_url,
-        createdAt: typedRow.created_at,
-        attachmentKind:
-          attachmentKindRaw === "image" ||
-          attachmentKindRaw === "video" ||
-          attachmentKindRaw === "audio" ||
-          attachmentKindRaw === "document"
-            ? attachmentKindRaw
-            : null,
-        attachmentName: typeof attachmentNameRaw === "string" ? attachmentNameRaw : null,
-        deliveryStatus: parseDeliveryStatus(metadata),
-      };
-    });
+    initialMessagesByConversation[firstConversationId] = (initialMessages ?? []).map((row) =>
+      normalizeInboxMessage(row as MessageRow),
+    );
   }
 
   return (

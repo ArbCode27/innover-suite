@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -12,14 +13,15 @@ import {
 } from "react";
 import {
   AlertCircle,
+  Bot,
   Camera,
   CheckCircle2,
   Clock,
   FileText,
-  Headphones,
   ImageIcon,
   KanbanSquare,
   Loader2,
+  MapPin,
   MessageCircle,
   MessagesSquare,
   Mic,
@@ -28,6 +30,7 @@ import {
   Search,
   SendHorizontal,
   Smile,
+  Square,
   Video,
 } from "lucide-react";
 import { EmptyMetaState } from "@/components/suite/empty-meta-state";
@@ -44,14 +47,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { CHANNEL_LABELS, formatSocialHandle } from "@/lib/contacts/display";
+import { CHANNEL_BADGE_CLASSNAMES, CHANNEL_LABELS, formatSocialHandle } from "@/lib/contacts/display";
+import { attachmentPreviewLabel } from "@/lib/media/parse";
+import { MESSAGE_ATTACHMENTS_BUCKET } from "@/lib/media/types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import { createFunnelCardFromConversationAction } from "../funnels/actions";
-import { sendConversationMessageAction, takeConversationAction } from "./actions";
-import type { AttachmentKind, InboxConversation, InboxFilter, InboxMessage } from "./types";
-import { parseDeliveryStatus } from "./types";
+import { sendConversationMessageAction, setConversationModeAction } from "./actions";
+import { MessageMedia } from "./message-media";
+import type { FileAttachmentKind, InboxConversation, InboxFilter, InboxMessage } from "./types";
+import { normalizeInboxMessage } from "./types";
 
 type InboxPanelProps = {
   organizationName: string;
@@ -61,8 +70,9 @@ type InboxPanelProps = {
 };
 
 type ComposerAttachment = {
-  kind: AttachmentKind;
+  kind: FileAttachmentKind;
   file: File;
+  isVoice?: boolean;
 };
 
 const inboxFilters: Array<{ key: InboxFilter; label: string }> = [
@@ -73,9 +83,9 @@ const inboxFilters: Array<{ key: InboxFilter; label: string }> = [
 ];
 
 const emojiOptions = ["😀", "😍", "😂", "🔥", "👍", "🙏", "🎉", "📌", "👀", "✅"];
-const attachmentBucket = "message-attachments";
+const attachmentBucket = MESSAGE_ATTACHMENTS_BUCKET;
 
-const attachmentAccept: Record<AttachmentKind, string> = {
+const attachmentAccept: Record<FileAttachmentKind, string> = {
   image: "image/*",
   video: "video/*",
   audio: "audio/*",
@@ -90,26 +100,34 @@ const formatTime = (value: string) =>
   }).format(new Date(value));
 
 const resolveModeLabel = (mode: InboxConversation["mode"]) => (mode === "ai" ? "IA" : "Humano");
+
+const GeminiIcon = () => {
+  const gradientId = `gemini-${useId().replace(/:/g, "")}`;
+
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="size-3.5">
+      <defs>
+        <linearGradient id={gradientId} x1="4%" y1="8%" x2="96%" y2="92%">
+          <stop offset="0%" stopColor="#4B90FF" />
+          <stop offset="50%" stopColor="#9B72F0" />
+          <stop offset="100%" stopColor="#FF8BCB" />
+        </linearGradient>
+      </defs>
+      <path
+        fill={`url(#${gradientId})`}
+        d="M12 2c0 5.523 4.477 10 10 10-5.523 0-10 4.477-10 10 0-5.523-4.477-10-10-10 5.523 0 10-4.477 10-10Z"
+      />
+    </svg>
+  );
+};
 const resolveStatusLabel = (status: InboxConversation["status"]) => {
   if (status === "in_progress") return "En curso";
   if (status === "resolved") return "Resuelta";
   return "Abierta";
 };
 
-const resolveAttachmentLabel = (kind: AttachmentKind | null) => {
-  if (!kind) return "Archivo";
-  if (kind === "image") return "Imagen";
-  if (kind === "video") return "Video";
-  if (kind === "audio") return "Audio";
-  return "Documento";
-};
-
-const resolveAttachmentIcon = (kind: AttachmentKind | null) => {
-  if (kind === "image") return ImageIcon;
-  if (kind === "video") return Video;
-  if (kind === "audio") return Mic;
-  return FileText;
-};
+const resolveAttachmentLabel = (kind: FileAttachmentKind | null) =>
+  attachmentPreviewLabel(kind ?? "document");
 
 const resolveInitials = (name: string) => {
   const words = name
@@ -136,7 +154,10 @@ const resolveChannelIcon = (channel: InboxConversation["channel"]) => {
 const ChannelBadge = ({ channel }: { channel: InboxConversation["channel"] }) => {
   const Icon = resolveChannelIcon(channel);
   return (
-    <Badge variant="outline">
+    <Badge
+      variant="outline"
+      className={cn("h-7 px-2.5 text-[13px] [&>svg]:size-3.5!", CHANNEL_BADGE_CLASSNAMES[channel])}
+    >
       <Icon aria-hidden />
       {CHANNEL_LABELS[channel]}
     </Badge>
@@ -151,41 +172,6 @@ const resolveConversationSubtitle = (conversation: InboxConversation) => {
 
   const handle = formatSocialHandle(conversation.contactUsername);
   return [handle, channelLabel].filter(Boolean).join(" · ");
-};
-
-const normalizeMessage = (row: {
-  id: number;
-  conversation_id: number;
-  direction: "inbound" | "outbound";
-  sender_type: "contact" | "agent" | "ai" | "system";
-  content: string | null;
-  media_url: string | null;
-  metadata: unknown;
-  created_at: string;
-}): InboxMessage => {
-  const metadata = row.metadata && typeof row.metadata === "object" ? (row.metadata as Record<string, unknown>) : {};
-
-  const attachmentKindValue = metadata["attachment_kind"];
-  const attachmentNameValue = metadata["attachment_name"];
-
-  const attachmentKind: AttachmentKind | null =
-    typeof attachmentKindValue === "string" &&
-    ["image", "video", "audio", "document"].includes(attachmentKindValue)
-      ? (attachmentKindValue as AttachmentKind)
-      : null;
-
-  return {
-    id: row.id,
-    conversationId: row.conversation_id,
-    direction: row.direction,
-    senderType: row.sender_type,
-    content: row.content,
-    mediaUrl: row.media_url,
-    createdAt: row.created_at,
-    attachmentKind,
-    attachmentName: typeof attachmentNameValue === "string" ? attachmentNameValue : null,
-    deliveryStatus: parseDeliveryStatus(metadata),
-  };
 };
 
 export const InboxPanel = ({
@@ -209,10 +195,14 @@ export const InboxPanel = ({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [pendingAttachmentKind, setPendingAttachmentKind] = useState<AttachmentKind>("document");
+  const [pendingAttachmentKind, setPendingAttachmentKind] = useState<FileAttachmentKind>("document");
+  const [isRecording, setIsRecording] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
 
   const filteredConversations = useMemo(() => {
     const loweredTerm = searchTerm.trim().toLowerCase();
@@ -265,7 +255,7 @@ export const InboxPanel = ({
 
     setMessagesByConversation((current) => ({
       ...current,
-      [conversationId]: (data ?? []).map(normalizeMessage),
+      [conversationId]: (data ?? []).map(normalizeInboxMessage),
     }));
     setIsLoadingMessages(false);
   }, []);
@@ -274,6 +264,76 @@ export const InboxPanel = ({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [activeConversationId, selectedMessages.length]);
 
+  useEffect(() => {
+    if (!activeConversationId) return;
+
+    const supabase = createSupabaseBrowserClient();
+    const channel = supabase
+      .channel(`inbox-messages-${activeConversationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${activeConversationId}`,
+        },
+        (payload) => {
+          const row = payload.new;
+          if (!row || typeof row !== "object" || !("id" in row)) return;
+
+          const message = normalizeInboxMessage(
+            row as {
+              id: number;
+              conversation_id: number;
+              direction: "inbound" | "outbound";
+              sender_type: "contact" | "agent" | "ai" | "system";
+              content: string | null;
+              media_url: string | null;
+              metadata: unknown;
+              created_at: string;
+            },
+          );
+
+          setMessagesByConversation((current) => {
+            const existing = current[activeConversationId] ?? [];
+            const index = existing.findIndex((item) => item.id === message.id);
+            const next =
+              index >= 0
+                ? existing.map((item) => (item.id === message.id ? message : item))
+                : [...existing, message];
+            return { ...current, [activeConversationId]: next };
+          });
+
+          const preview = message.content?.trim() || attachmentPreviewLabel(message.attachmentKind ?? "document", message.isVoice);
+          setConversations((current) =>
+            current.map((conversation) =>
+              conversation.id === activeConversationId
+                ? {
+                    ...conversation,
+                    lastMessageAt: message.createdAt,
+                    updatedAt: message.createdAt,
+                    lastMessagePreview: preview,
+                  }
+                : conversation,
+            ),
+          );
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    return () => {
+      mediaRecorderRef.current?.stop();
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
   const handleSelectConversation = (conversationId: number) => {
     setSelectedConversationId(conversationId);
     if (!messagesByConversation[conversationId]) {
@@ -281,7 +341,7 @@ export const InboxPanel = ({
     }
   };
 
-  const handleSelectAttachmentKind = (kind: AttachmentKind) => {
+  const handleSelectAttachmentKind = (kind: FileAttachmentKind) => {
     setPendingAttachmentKind(kind);
     fileInputRef.current?.click();
   };
@@ -299,13 +359,121 @@ export const InboxPanel = ({
     setComposerText((current) => `${current}${emoji}`);
   };
 
-  const handleTakeConversation = async () => {
-    if (!activeConversationId) return;
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")
+        ? "audio/ogg;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      recordedChunksRef.current = [];
+      recordingStreamRef.current = stream;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+        setIsRecording(false);
+
+        const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+        if (!blob.size) {
+          setComposerError("No se capturó audio. Inténtalo de nuevo.");
+          return;
+        }
+
+        const extension = mimeType.includes("ogg") ? "ogg" : "webm";
+        const file = new File([blob], `nota-de-voz.${extension}`, {
+          type: mimeType.split(";")[0],
+        });
+        setComposerAttachment({ kind: "audio", file, isVoice: true });
+        setComposerError(null);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      setComposerError(null);
+    } catch {
+      setComposerError("No se pudo acceder al micrófono.");
+    }
+  };
+
+  const handleShareLocation = () => {
+    if (!selectedConversation) return;
+    if (!navigator.geolocation) {
+      toast.error("Tu navegador no permite compartir ubicación.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        startTransition(async () => {
+          const result = await sendConversationMessageAction({
+            conversationId: selectedConversation.id,
+            location: {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              name: "Ubicación compartida",
+            },
+          });
+
+          if (!result.data?.message) {
+            toast.error(result.error ?? "No se pudo enviar la ubicación.");
+            return;
+          }
+
+          const sentMessage = result.data.message;
+          setMessagesByConversation((current) => ({
+            ...current,
+            [selectedConversation.id]: [...(current[selectedConversation.id] ?? []), sentMessage],
+          }));
+          setConversations((current) =>
+            current.map((conversation) =>
+              conversation.id === selectedConversation.id
+                ? {
+                    ...conversation,
+                    status: "in_progress",
+                    assignedUserId: currentUserId,
+                    lastMessageAt: sentMessage.createdAt,
+                    updatedAt: sentMessage.createdAt,
+                    lastMessagePreview: "Ubicación",
+                    unreadCount: 0,
+                  }
+                : conversation,
+            ),
+          );
+          toast.success("Ubicación enviada");
+        });
+      },
+      () => {
+        toast.error("No se pudo obtener tu ubicación.");
+      },
+      { enableHighAccuracy: true, timeout: 10_000 },
+    );
+  };
+
+  const handleSetConversationMode = (mode: InboxConversation["mode"]) => {
+    if (!activeConversationId || selectedConversation?.mode === mode) return;
 
     startTransition(async () => {
-      const result = await takeConversationAction({ conversationId: activeConversationId });
+      const result = await setConversationModeAction({
+        conversationId: activeConversationId,
+        mode,
+      });
       if (result.error) {
-        setComposerError(result.error);
+        toast.error(result.error);
         return;
       }
 
@@ -314,15 +482,18 @@ export const InboxPanel = ({
           conversation.id === activeConversationId
             ? {
                 ...conversation,
-                mode: "human",
-                status: "in_progress",
-                assignedUserId: currentUserId,
+                mode,
+                status: mode === "human" ? "in_progress" : conversation.status,
+                assignedUserId: mode === "human" ? currentUserId : null,
                 updatedAt: new Date().toISOString(),
               }
             : conversation,
         ),
       );
       setComposerError(null);
+      if (result.success) {
+        toast.success(result.success);
+      }
     });
   };
 
@@ -405,6 +576,7 @@ export const InboxPanel = ({
         attachmentKind: attachmentPayload?.kind,
         attachmentName: attachmentPayload?.file.name,
         attachmentSize: attachmentPayload?.file.size,
+        isVoice: attachmentPayload?.isVoice,
       });
 
       if (!result.data?.message) {
@@ -416,7 +588,7 @@ export const InboxPanel = ({
       const now = new Date().toISOString();
       const previewText =
         sentMessage.content?.trim() ||
-        `${resolveAttachmentLabel(sentMessage.attachmentKind)} adjunto`;
+        attachmentPreviewLabel(sentMessage.attachmentKind ?? "document", sentMessage.isVoice);
 
       setMessagesByConversation((current) => ({
         ...current,
@@ -428,7 +600,6 @@ export const InboxPanel = ({
           conversation.id === selectedConversation.id
             ? {
                 ...conversation,
-                mode: "human",
                 status: "in_progress",
                 assignedUserId: currentUserId,
                 lastMessageAt: now,
@@ -453,9 +624,8 @@ export const InboxPanel = ({
     }
   };
 
-  const canSend = Boolean(selectedConversation) && !isPending && !isUploadingAttachment;
-  const showAudioQuickAction = !composerText.trim() && !composerAttachment;
-  const hasComposerMeta = Boolean(composerAttachment || composerError);
+  const showAudioQuickAction = !composerText.trim() && !composerAttachment && !isRecording;
+  const hasComposerMeta = Boolean(composerAttachment || composerError || isRecording);
 
   return (
     <div className="grid h-[calc(100vh-1.5rem)] max-h-[100vh] gap-3 overflow-hidden md:h-[calc(100vh-2.5rem)] lg:grid-cols-[330px_1fr]">
@@ -503,15 +673,17 @@ export const InboxPanel = ({
               <div className="space-y-1 p-2">
                 {filteredConversations.map((conversation) => {
                   const isSelected = activeConversationId === conversation.id;
+                  const isAiActive = conversation.mode === "ai";
                   return (
                     <button
                       key={conversation.id}
                       type="button"
-                      className={`w-full rounded-lg border px-2.5 py-2 text-left transition ${
+                      className={cn(
+                        "w-full rounded-lg border px-2.5 py-2 text-left transition",
                         isSelected
                           ? "border-primary/30 bg-primary/10"
-                          : "border-primary/10 bg-background/70 hover:bg-accent/70"
-                      }`}
+                          : "border-primary/10 bg-background/70 hover:bg-accent/70",
+                      )}
                       onClick={() => handleSelectConversation(conversation.id)}
                     >
                       <div className="flex items-start gap-3">
@@ -530,9 +702,19 @@ export const InboxPanel = ({
                           </p>
                           <div className="mt-1.5 flex items-center gap-1.5">
                             <ChannelBadge channel={conversation.channel} />
-                            <Badge variant="outline">{resolveModeLabel(conversation.mode)}</Badge>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "h-7 px-2.5 text-[13px] [&>svg]:size-3.5!",
+                                isAiActive &&
+                                  "border-cyan-400 shadow-[0_0_0_1px_rgba(34,211,238,0.55),0_0_10px_rgba(34,211,238,0.4)] bg-cyan-400/15 text-cyan-700 dark:text-cyan-300",
+                              )}
+                            >
+                              {isAiActive ? <GeminiIcon /> : null}
+                              {resolveModeLabel(conversation.mode)}
+                            </Badge>
                             {conversation.unreadCount > 0 ? (
-                              <Badge>{conversation.unreadCount}</Badge>
+                              <Badge className="h-7 min-w-7 px-2.5 text-[13px]">{conversation.unreadCount}</Badge>
                             ) : null}
                           </div>
                         </div>
@@ -570,13 +752,32 @@ export const InboxPanel = ({
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="outline">{resolveStatusLabel(selectedConversation.status)}</Badge>
-                <Badge variant="outline">{resolveModeLabel(selectedConversation.mode)}</Badge>
-                {selectedConversation.mode === "ai" ? (
-                  <Button type="button" size="xs" variant="outline" onClick={handleTakeConversation} disabled={isPending}>
-                    <Headphones />
-                    Tomar conversación
-                  </Button>
-                ) : null}
+                <div
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg border px-2 py-1",
+                    selectedConversation.mode === "ai"
+                      ? "border-cyan-400 bg-cyan-400/10 shadow-[0_0_0_1px_rgba(34,211,238,0.55),0_0_10px_rgba(34,211,238,0.4)]"
+                      : "border-primary/15 bg-background/70",
+                  )}
+                >
+                  <Label htmlFor="conversation-ai-mode" className="text-xs text-muted-foreground">
+                    Agente IA
+                  </Label>
+                  <Switch
+                    id="conversation-ai-mode"
+                    size="sm"
+                    checked={selectedConversation.mode === "ai"}
+                    disabled={isPending}
+                    aria-label={
+                      selectedConversation.mode === "ai"
+                        ? "Desactivar agente IA y tomar la conversación"
+                        : "Activar agente IA"
+                    }
+                    onCheckedChange={(checked) => {
+                      handleSetConversationMode(checked ? "ai" : "human");
+                    }}
+                  />
+                </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button type="button" size="icon-sm" variant="ghost" aria-label="Opciones de conversación">
@@ -607,7 +808,14 @@ export const InboxPanel = ({
                 <div className="space-y-2.5 pb-1">
                   {selectedMessages.map((message) => {
                     const isOutbound = message.direction === "outbound";
-                    const AttachmentIcon = resolveAttachmentIcon(message.attachmentKind);
+
+                    if (message.senderType === "system") {
+                      return (
+                        <p key={message.id} className="px-4 py-1 text-center text-[11px] text-muted-foreground">
+                          {message.content}
+                        </p>
+                      );
+                    }
 
                     return (
                       <div
@@ -621,19 +829,17 @@ export const InboxPanel = ({
                               : "border-border bg-background"
                           }`}
                         >
-                          {message.content ? <p className="whitespace-pre-wrap">{message.content}</p> : null}
-
-                          {message.mediaUrl ? (
-                            <a
-                              href={message.mediaUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/8 px-2 py-1 text-xs"
-                            >
-                              <AttachmentIcon className="size-3.5" />
-                              {message.attachmentName || resolveAttachmentLabel(message.attachmentKind)}
-                            </a>
+                          {message.senderType === "ai" ? (
+                            <p className="mb-1 flex items-center gap-1 text-[11px] font-medium text-primary">
+                              <Bot className="size-3" aria-hidden />
+                              Agente IA
+                            </p>
                           ) : null}
+                          {message.content && message.attachmentKind !== "location" ? (
+                            <p className="whitespace-pre-wrap">{message.content}</p>
+                          ) : null}
+
+                          <MessageMedia message={message} />
 
                           <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
                             <span>{formatTime(message.createdAt)}</span>
@@ -668,6 +874,18 @@ export const InboxPanel = ({
                 hasComposerMeta ? "py-2" : "py-1.5"
               }`}
             >
+              {isRecording ? (
+                <div className="mb-2 flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="size-2 animate-pulse rounded-full bg-destructive" aria-hidden />
+                    Grabando nota de voz…
+                  </span>
+                  <Button type="button" variant="ghost" size="xs" onClick={() => void handleToggleRecording()}>
+                    Detener
+                  </Button>
+                </div>
+              ) : null}
+
               {composerAttachment ? (
                 <div className="mb-2 flex items-center justify-between rounded-lg border border-primary/20 bg-primary/8 px-2.5 py-1.5 text-xs">
                   <span className="truncate">
@@ -738,6 +956,10 @@ export const InboxPanel = ({
                       <FileText />
                       Documento
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={handleShareLocation} disabled={isPending}>
+                      <MapPin />
+                      Ubicación
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
 
@@ -754,12 +976,29 @@ export const InboxPanel = ({
                 <Button
                   type="button"
                   size="icon"
-                  aria-label={showAudioQuickAction ? "Grabar o adjuntar audio" : "Enviar mensaje"}
-                  onClick={showAudioQuickAction ? () => handleSelectAttachmentKind("audio") : handleSendMessage}
-                  disabled={!canSend}
+                  aria-label={
+                    isRecording
+                      ? "Detener grabación"
+                      : showAudioQuickAction
+                        ? "Grabar nota de voz"
+                        : "Enviar mensaje"
+                  }
+                  onClick={
+                    isRecording || showAudioQuickAction
+                      ? () => void handleToggleRecording()
+                      : handleSendMessage
+                  }
+                  disabled={
+                    !selectedConversation ||
+                    isPending ||
+                    isUploadingAttachment ||
+                    (!isRecording && !showAudioQuickAction && !composerText.trim() && !composerAttachment)
+                  }
                 >
                   {isPending || isUploadingAttachment ? (
                     <Loader2 className="animate-spin" />
+                  ) : isRecording ? (
+                    <Square className="size-3.5 fill-current" />
                   ) : showAudioQuickAction ? (
                     <Mic />
                   ) : (

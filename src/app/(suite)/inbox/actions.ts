@@ -4,12 +4,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { resolveInstagramCredentials } from "@/lib/integrations/instagram-credentials";
 import { sendMetaOutboundMessage } from "@/lib/integrations/meta-send";
+import { createMessageAttachment } from "@/lib/media/types";
+import { mergeAttachmentMetadata } from "@/lib/media/parse";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { MetaChannel } from "@/types/domain";
-import type { AttachmentKind, InboxMessage } from "./types";
-import { parseDeliveryStatus } from "./types";
+import type { FileAttachmentKind, InboxMessage } from "./types";
+import { normalizeInboxMessage } from "./types";
 
 const attachmentKinds = ["image", "video", "audio", "document"] as const;
 
@@ -20,10 +22,20 @@ const sendMessageSchema = z.object({
   attachmentKind: z.enum(attachmentKinds).optional(),
   attachmentName: z.string().trim().max(255).optional(),
   attachmentSize: z.number().int().nonnegative().optional(),
+  isVoice: z.boolean().optional(),
+  location: z
+    .object({
+      lat: z.number().min(-90).max(90),
+      lng: z.number().min(-180).max(180),
+      name: z.string().trim().max(120).optional(),
+      address: z.string().trim().max(255).optional(),
+    })
+    .optional(),
 });
 
-const conversationActionSchema = z.object({
+const setConversationModeSchema = z.object({
   conversationId: z.number().int().positive(),
+  mode: z.enum(["ai", "human"]),
 });
 
 type ActionResult<T = undefined> = {
@@ -52,26 +64,7 @@ const normalizeMessageResult = (row: {
   media_url: string | null;
   metadata: unknown;
   created_at: string;
-}): InboxMessage => {
-  const metadata = asMetadata(row.metadata);
-  const attachmentKindValue = metadata["attachment_kind"];
-
-  return {
-    id: row.id,
-    conversationId: row.conversation_id,
-    direction: row.direction,
-    senderType: row.sender_type,
-    content: row.content,
-    mediaUrl: row.media_url,
-    createdAt: row.created_at,
-    attachmentKind: (typeof attachmentKindValue === "string" &&
-    attachmentKinds.includes(attachmentKindValue as AttachmentKind)
-      ? attachmentKindValue
-      : null) as AttachmentKind | null,
-    attachmentName: typeof metadata["attachment_name"] === "string" ? metadata["attachment_name"] : null,
-    deliveryStatus: parseDeliveryStatus(metadata),
-  };
-};
+}): InboxMessage => normalizeInboxMessage(row);
 
 const resolveRecipientId = async (
   organizationId: number,
@@ -165,8 +158,9 @@ export const sendConversationMessageAction = async (
 
   const text = parsed.data.content?.trim() ?? "";
   const hasMedia = Boolean(parsed.data.mediaUrl);
-  if (!text && !hasMedia) {
-    return { error: "Escribe un mensaje o adjunta un archivo." };
+  const hasLocation = Boolean(parsed.data.location);
+  if (!text && !hasMedia && !hasLocation) {
+    return { error: "Escribe un mensaje, adjunta un archivo o comparte una ubicación." };
   }
 
   const membership = await getCurrentMembership();
@@ -208,19 +202,38 @@ export const sendConversationMessageAction = async (
   }
 
   const now = new Date().toISOString();
-  const pendingMetadata: Record<string, unknown> = {
+  let pendingMetadata: Record<string, unknown> = {
     delivery_status: "pending",
     recipient_id: recipientId,
     channel: typedConversation.channel,
   };
-  if (parsed.data.attachmentKind) {
-    pendingMetadata.attachment_kind = parsed.data.attachmentKind;
-  }
-  if (parsed.data.attachmentName) {
-    pendingMetadata.attachment_name = parsed.data.attachmentName;
-  }
-  if (parsed.data.attachmentSize !== undefined) {
-    pendingMetadata.attachment_size = parsed.data.attachmentSize;
+
+  if (parsed.data.location) {
+    pendingMetadata = mergeAttachmentMetadata(
+      pendingMetadata,
+      createMessageAttachment({
+        kind: "location",
+        status: "ready",
+        location: {
+          lat: parsed.data.location.lat,
+          lng: parsed.data.location.lng,
+          name: parsed.data.location.name ?? null,
+          address: parsed.data.location.address ?? null,
+        },
+      }),
+    );
+  } else if (parsed.data.attachmentKind) {
+    pendingMetadata = mergeAttachmentMetadata(
+      pendingMetadata,
+      createMessageAttachment({
+        kind: parsed.data.attachmentKind,
+        status: "ready",
+        fileName: parsed.data.attachmentName ?? null,
+        sizeBytes: parsed.data.attachmentSize ?? null,
+        sourceUrl: parsed.data.mediaUrl ?? null,
+        isVoice: parsed.data.isVoice ?? false,
+      }),
+    );
   }
 
   const { data: insertedMessage, error: insertError } = await supabase
@@ -250,7 +263,15 @@ export const sendConversationMessageAction = async (
     recipientId,
     text: text || undefined,
     mediaUrl: parsed.data.mediaUrl,
-    attachmentKind: parsed.data.attachmentKind,
+    attachmentKind: parsed.data.attachmentKind as FileAttachmentKind | undefined,
+    location: parsed.data.location
+      ? {
+          lat: parsed.data.location.lat,
+          lng: parsed.data.location.lng,
+          name: parsed.data.location.name ?? null,
+          address: parsed.data.location.address ?? null,
+        }
+      : undefined,
   });
 
   const deliveryMetadata = {
@@ -280,7 +301,6 @@ export const sendConversationMessageAction = async (
     .update({
       updated_at: now,
       last_message_at: now,
-      mode: "human",
       status: "in_progress",
       assigned_user_id: user.id,
       assigned_at: now,
@@ -317,17 +337,17 @@ export const sendConversationMessageAction = async (
   };
 };
 
-export const takeConversationAction = async (
+export const setConversationModeAction = async (
   rawValues: unknown,
 ): Promise<ActionResult> => {
-  const parsed = conversationActionSchema.safeParse(rawValues);
+  const parsed = setConversationModeSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: "La conversación indicada no es válida." };
+    return { error: "La conversación o el modo indicado no son válidos." };
   }
 
   const membership = await getCurrentMembership();
   if (!membership || !hasOrganizationRole(membership, ["owner", "admin", "agent"])) {
-    return { error: "No tienes permisos para tomar conversaciones." };
+    return { error: "No tienes permisos para cambiar el modo de la conversación." };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -340,22 +360,37 @@ export const takeConversationAction = async (
   }
 
   const now = new Date().toISOString();
+  const nextMode = parsed.data.mode;
   const { error } = await supabase
     .from("conversations")
-    .update({
-      mode: "human",
-      status: "in_progress",
-      assigned_user_id: user.id,
-      assigned_at: now,
-      updated_at: now,
-    })
+    .update(
+      nextMode === "human"
+        ? {
+            mode: "human",
+            status: "in_progress",
+            assigned_user_id: user.id,
+            assigned_at: now,
+            updated_at: now,
+          }
+        : {
+            mode: "ai",
+            assigned_user_id: null,
+            assigned_at: null,
+            updated_at: now,
+          },
+    )
     .eq("id", parsed.data.conversationId)
     .eq("organization_id", membership.organizationId);
 
   if (error) {
-    return { error: error.message || "No se pudo tomar la conversación." };
+    return { error: error.message || "No se pudo actualizar el modo de la conversación." };
   }
 
   revalidatePath("/inbox");
-  return { success: "Conversación asignada a tu bandeja." };
+  return {
+    success:
+      nextMode === "human"
+        ? "Conversación tomada. El agente IA está detenido."
+        : "Agente IA reactivado en esta conversación.",
+  };
 };

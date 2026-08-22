@@ -8,6 +8,15 @@ export const CHANNEL_LABELS: Record<MetaChannel, string> = {
   whatsapp: "WhatsApp",
 };
 
+export const CHANNEL_BADGE_CLASSNAMES: Record<MetaChannel, string> = {
+  instagram:
+    "border-[#E1306C]/35 bg-[linear-gradient(90deg,rgba(245,133,41,0.16),rgba(221,42,123,0.16),rgba(129,52,175,0.16))] text-[#C13584] dark:border-[#E1306C]/45 dark:text-[#F77737]",
+  messenger:
+    "border-[#0084FF]/35 bg-[#0084FF]/12 text-[#006AFF] dark:border-[#5B9EFF]/45 dark:bg-[#0084FF]/18 dark:text-[#5B9EFF]",
+  whatsapp:
+    "border-[#25D366]/40 bg-[#25D366]/12 text-[#128C7E] dark:border-[#25D366]/45 dark:bg-[#25D366]/18 dark:text-[#25D366]",
+};
+
 export const isPlaceholderContactName = (name: string) =>
   name.trim().toLowerCase().startsWith(PLACEHOLDER_CONTACT_PREFIX.toLowerCase());
 
