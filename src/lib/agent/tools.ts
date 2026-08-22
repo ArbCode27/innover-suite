@@ -48,6 +48,8 @@ export const createOrderArgsSchema = z.object({
     .max(40),
   fulfillment: z.enum(FULFILLMENT_TYPES).optional(),
   customerNote: z.string().trim().max(400).optional(),
+  deliveryAddress: z.string().trim().max(240).optional(),
+  deliveryZone: z.string().trim().max(80).optional(),
   confirmedByCustomer: z.boolean(),
 });
 
@@ -157,9 +159,11 @@ export const buildAgentToolDeclarations = (
             description: "pickup, delivery, dine_in o unspecified.",
           },
           customerNote: { type: "STRING", description: "Nota general del cliente." },
+          deliveryAddress: { type: "STRING", description: "Dirección de entrega si es delivery." },
+          deliveryZone: { type: "STRING", description: "Nombre de zona de delivery del contexto." },
           confirmedByCustomer: {
             type: "BOOLEAN",
-            description: "true solo si el cliente confirmó el pedido.",
+            description: "true si el cliente confirmó el pedido o escribió CONFIRMAR / SÍ / CONFIRMO.",
           },
         },
         required: ["items", "confirmedByCustomer"],

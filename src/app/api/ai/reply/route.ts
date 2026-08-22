@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { suggestReplyAction } from "@/lib/inbox/suggest";
 
 const inputSchema = z.object({
   conversationId: z.number().int().positive(),
-  message: z.string().trim().min(1),
+  message: z.string().trim().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -16,10 +17,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // TODO: call Gemini + tools (calendar, funnel, escalation)
+  const result = await suggestReplyAction({ conversationId: parsed.data.conversationId });
+  if (result.error) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
+  }
+
   return NextResponse.json({
     ok: true,
-    reply: "Endpoint base listo. Conectar motor de IA en siguiente fase.",
+    reply: result.reply,
     conversationId: parsed.data.conversationId,
   });
 }

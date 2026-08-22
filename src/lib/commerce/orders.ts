@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   isFulfillmentType,
   isOrderStatus,
+  isPaymentStatus,
   toNumber,
   type OrderItemRecord,
   type OrderRecord,
@@ -14,7 +15,15 @@ type OrderRow = {
   channel: string | null;
   customer_note: string | null;
   subtotal: number | string;
+  discount_amount?: number | string | null;
+  tax_amount?: number | string | null;
+  delivery_fee?: number | string | null;
   total: number | string;
+  delivery_address?: string | null;
+  delivery_zone?: string | null;
+  eta_minutes?: number | null;
+  payment_status?: string | null;
+  payment_method?: string | null;
   created_at: string;
   updated_at: string;
   contact_id: number | null;
@@ -44,7 +53,15 @@ export const mapOrderRow = (row: OrderRow): OrderRecord => ({
   channel: row.channel,
   customerNote: row.customer_note,
   subtotal: toNumber(row.subtotal),
+  discountAmount: toNumber(row.discount_amount),
+  taxAmount: toNumber(row.tax_amount),
+  deliveryFee: toNumber(row.delivery_fee),
   total: toNumber(row.total),
+  deliveryAddress: row.delivery_address ?? null,
+  deliveryZone: row.delivery_zone ?? null,
+  etaMinutes: row.eta_minutes ?? null,
+  paymentStatus: isPaymentStatus(row.payment_status) ? row.payment_status : "unpaid",
+  paymentMethod: row.payment_method ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   contactId: row.contact_id,
@@ -63,7 +80,7 @@ export const mapOrderRow = (row: OrderRow): OrderRecord => ({
 });
 
 export const ORDER_SELECT =
-  "id, status, fulfillment, channel, customer_note, subtotal, total, created_at, updated_at, contact_id, conversation_id, contacts(full_name), order_items(id, product_id, name_snapshot, quantity, unit_price, notes)";
+  "id, status, fulfillment, channel, customer_note, subtotal, discount_amount, tax_amount, delivery_fee, total, delivery_address, delivery_zone, eta_minutes, payment_status, payment_method, created_at, updated_at, contact_id, conversation_id, contacts(full_name), order_items(id, product_id, name_snapshot, quantity, unit_price, notes)";
 
 export const loadOrders = async (supabase: SupabaseClient, organizationId: number, limit = 80) => {
   const { data, error } = await supabase
@@ -74,8 +91,33 @@ export const loadOrders = async (supabase: SupabaseClient, organizationId: numbe
     .limit(limit);
 
   if (error) {
-    throw new Error(error.message || "No se pudieron cargar los pedidos.");
+    const fallback = await supabase
+      .from("orders")
+      .select(
+        "id, status, fulfillment, channel, customer_note, subtotal, total, created_at, updated_at, contact_id, conversation_id, contacts(full_name), order_items(id, product_id, name_snapshot, quantity, unit_price, notes)",
+      )
+      .eq("organization_id", organizationId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (fallback.error) {
+      throw new Error(fallback.error.message || "No se pudieron cargar los pedidos.");
+    }
+
+    return (fallback.data ?? []).map((row) => mapOrderRow(row as unknown as OrderRow));
   }
 
   return (data ?? []).map((row) => mapOrderRow(row as unknown as OrderRow));
+};
+
+export const loadOrderById = async (supabase: SupabaseClient, organizationId: number, orderId: number) => {
+  const { data, error } = await supabase
+    .from("orders")
+    .select(ORDER_SELECT)
+    .eq("organization_id", organizationId)
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return mapOrderRow(data as unknown as OrderRow);
 };

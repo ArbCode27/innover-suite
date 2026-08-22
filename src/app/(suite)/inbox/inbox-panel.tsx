@@ -11,6 +11,7 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
 } from "react";
+import Link from "next/link";
 import {
   AlertCircle,
   Bot,
@@ -30,7 +31,9 @@ import {
   Search,
   SendHorizontal,
   Smile,
+  Sparkles,
   Square,
+  UserPlus,
   Video,
 } from "lucide-react";
 import { EmptyMetaState } from "@/components/suite/empty-meta-state";
@@ -57,7 +60,8 @@ import { MESSAGE_ATTACHMENTS_BUCKET } from "@/lib/media/types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { createFunnelCardFromConversationAction } from "../funnels/actions";
-import { sendConversationMessageAction, setConversationModeAction } from "./actions";
+import { sendConversationMessageAction, setConversationModeAction, assignConversationAction } from "./actions";
+import { suggestReplyAction } from "@/lib/inbox/suggest";
 import { MessageMedia } from "./message-media";
 import type { FileAttachmentKind, InboxConversation, InboxFilter, InboxMessage } from "./types";
 import { normalizeInboxMessage } from "./types";
@@ -65,6 +69,7 @@ import { normalizeInboxMessage } from "./types";
 type InboxPanelProps = {
   organizationName: string;
   currentUserId: string | null;
+  initialConversationId: number | null;
   initialConversations: InboxConversation[];
   initialMessagesByConversation: Record<number, InboxMessage[]>;
 };
@@ -80,6 +85,8 @@ const inboxFilters: Array<{ key: InboxFilter; label: string }> = [
   { key: "unread", label: "No leídas" },
   { key: "ai", label: "Bot IA" },
   { key: "human", label: "Humano" },
+  { key: "mine", label: "Mías" },
+  { key: "unassigned", label: "Cola" },
 ];
 
 const emojiOptions = ["😀", "😍", "😂", "🔥", "👍", "🙏", "🎉", "📌", "👀", "✅"];
@@ -177,6 +184,7 @@ const resolveConversationSubtitle = (conversation: InboxConversation) => {
 export const InboxPanel = ({
   organizationName,
   currentUserId,
+  initialConversationId,
   initialConversations,
   initialMessagesByConversation,
 }: InboxPanelProps) => {
@@ -184,7 +192,7 @@ export const InboxPanel = ({
   const [activeFilter, setActiveFilter] = useState<InboxFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(
-    initialConversations[0]?.id ?? null,
+    initialConversationId ?? initialConversations[0]?.id ?? null,
   );
   const [messagesByConversation, setMessagesByConversation] = useState<Record<number, InboxMessage[]>>(
     initialMessagesByConversation,
@@ -211,6 +219,8 @@ export const InboxPanel = ({
         if (activeFilter === "all") return true;
         if (activeFilter === "ai") return conversation.mode === "ai";
         if (activeFilter === "human") return conversation.mode === "human";
+        if (activeFilter === "mine") return conversation.assignedUserId === currentUserId;
+        if (activeFilter === "unassigned") return conversation.mode === "human" && !conversation.assignedUserId;
         return conversation.unreadCount > 0;
       })
       .filter((conversation) => {
@@ -218,7 +228,7 @@ export const InboxPanel = ({
         const haystack = `${conversation.contactName} ${conversation.contactUsername ?? ""} ${conversation.contactPhone ?? ""} ${CHANNEL_LABELS[conversation.channel]} ${conversation.lastMessagePreview}`.toLowerCase();
         return haystack.includes(loweredTerm);
       });
-  }, [activeFilter, conversations, searchTerm]);
+  }, [activeFilter, conversations, currentUserId, searchTerm]);
 
   const activeConversationId = useMemo(() => {
     if (!filteredConversations.length) return null;
@@ -493,6 +503,45 @@ export const InboxPanel = ({
       setComposerError(null);
       if (result.success) {
         toast.success(result.success);
+      }
+    });
+  };
+
+  const handleAssignConversation = (assignToMe: boolean) => {
+    if (!activeConversationId) return;
+    startTransition(async () => {
+      const result = await assignConversationAction({ conversationId: activeConversationId, assignToMe });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.id === activeConversationId
+            ? {
+                ...conversation,
+                assignedUserId: assignToMe ? currentUserId : null,
+                mode: assignToMe ? "human" : conversation.mode,
+                status: assignToMe ? "in_progress" : conversation.status,
+              }
+            : conversation,
+        ),
+      );
+      if (result.success) toast.success(result.success);
+    });
+  };
+
+  const handleSuggestReply = () => {
+    if (!activeConversationId) return;
+    startTransition(async () => {
+      const result = await suggestReplyAction({ conversationId: activeConversationId });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      if (result.reply) {
+        setComposerText(result.reply);
+        toast.success(result.success ?? "Sugerencia lista.");
       }
     });
   };
@@ -791,6 +840,21 @@ export const InboxPanel = ({
                       <KanbanSquare />
                       Enviar al embudo
                     </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleAssignConversation(selectedConversation.assignedUserId !== currentUserId)}
+                      disabled={isPending}
+                    >
+                      <UserPlus />
+                      {selectedConversation.assignedUserId === currentUserId ? "Liberar chat" : "Asignarme este chat"}
+                    </DropdownMenuItem>
+                    {selectedConversation.contactId ? (
+                      <DropdownMenuItem asChild>
+                        <Link href={`/contacts/${selectedConversation.contactId}`}>
+                          <MessageCircle />
+                          Ver ficha
+                        </Link>
+                      </DropdownMenuItem>
+                    ) : null}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -963,6 +1027,16 @@ export const InboxPanel = ({
                   </DropdownMenuContent>
                 </DropdownMenu>
 
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Sugerir respuesta con IA"
+                  disabled={!selectedConversation || selectedConversation.mode === "ai" || isPending}
+                  onClick={handleSuggestReply}
+                >
+                  <Sparkles />
+                </Button>
                 <Input
                   aria-label="Escribe una respuesta"
                   placeholder="Escribe un mensaje..."

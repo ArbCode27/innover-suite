@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { parseContactUsername } from "@/lib/contacts/display";
 import { resolveMessagePreview } from "@/lib/media/parse";
-import { getCurrentMembership } from "@/lib/organizations/membership";
+import { canUseInbox, getCurrentMembership } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { InboxPanel } from "./inbox-panel";
 import { normalizeInboxMessage, type InboxConversation, type InboxMessage } from "./types";
@@ -41,11 +41,21 @@ type MessageRow = {
   created_at: string;
 };
 
-export default async function InboxPage() {
+export default async function InboxPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ conversation?: string }>;
+}) {
   const membership = await getCurrentMembership();
   if (!membership) {
     redirect("/onboarding/organization");
   }
+  if (!canUseInbox(membership)) {
+    redirect("/home");
+  }
+
+  const params = await searchParams;
+  const requestedConversationId = Number(params.conversation);
 
   const supabase = await createSupabaseServerClient();
   const {
@@ -119,7 +129,9 @@ export default async function InboxPage() {
     };
   });
 
-  const firstConversationId = conversations[0]?.id ?? null;
+  const requestedId =
+    Number.isInteger(requestedConversationId) && requestedConversationId > 0 ? requestedConversationId : null;
+  const firstConversationId = requestedId ?? conversations[0]?.id ?? null;
   const initialMessagesByConversation: Record<number, InboxMessage[]> = {};
 
   if (firstConversationId) {
@@ -140,6 +152,7 @@ export default async function InboxPage() {
       <InboxPanel
         organizationName={membership.organizationName}
         currentUserId={user?.id ?? null}
+        initialConversationId={firstConversationId}
         initialConversations={conversations}
         initialMessagesByConversation={initialMessagesByConversation}
       />

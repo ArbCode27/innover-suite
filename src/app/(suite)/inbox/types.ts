@@ -1,7 +1,7 @@
 import { parseMessageAttachment } from "@/lib/media/parse";
 import type { MessageAttachmentKind, MessageAttachmentStatus, MessageLocation } from "@/lib/media/types";
 
-export type InboxFilter = "all" | "unread" | "ai" | "human";
+export type InboxFilter = "all" | "unread" | "ai" | "human" | "mine" | "unassigned";
 
 export type AttachmentKind = MessageAttachmentKind;
 export type FileAttachmentKind = "image" | "video" | "audio" | "document";

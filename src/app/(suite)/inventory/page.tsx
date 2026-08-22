@@ -1,25 +1,28 @@
 import { Package } from "lucide-react";
 import { InventoryBoard } from "./inventory-board";
+import { InventoryOps } from "./inventory-ops";
 import { ModuleShell } from "@/components/suite/module-shell";
-import { loadCatalog, loadInventoryMovements, loadPromotions } from "@/lib/commerce/catalog";
-import type { InventoryMovementRecord, ProductRecord, PromotionRecord } from "@/lib/commerce/types";
+import { loadCatalog, loadDeliveryZones, loadInventoryMovements, loadPromotions } from "@/lib/commerce/catalog";
+import type { DeliveryZoneRecord, InventoryMovementRecord, ProductRecord, PromotionRecord } from "@/lib/commerce/types";
 import { requireSuiteModule } from "@/lib/modules/guard";
-import { hasOrganizationRole } from "@/lib/organizations/membership";
+import { canManageCatalog } from "@/lib/organizations/membership";
 
 export default async function InventoryPage() {
   const { membership, supabase } = await requireSuiteModule("catalog");
-  const canManage = hasOrganizationRole(membership, ["owner", "admin", "agent"]);
+  const canManage = canManageCatalog(membership);
 
   let products: ProductRecord[] = [];
   let promotions: PromotionRecord[] = [];
   let movements: InventoryMovementRecord[] = [];
+  let zones: DeliveryZoneRecord[] = [];
   let loadError: string | null = null;
 
   try {
-    [products, promotions, movements] = await Promise.all([
+    [products, promotions, movements, zones] = await Promise.all([
       loadCatalog(supabase, membership.organizationId),
       loadPromotions(supabase, membership.organizationId),
       loadInventoryMovements(supabase, membership.organizationId),
+      loadDeliveryZones(supabase, membership.organizationId),
     ]);
   } catch (error) {
     loadError = error instanceof Error ? error.message : "No se pudo cargar el inventario.";
@@ -42,7 +45,10 @@ export default async function InventoryPage() {
           {loadError} Si es la primera vez, corre el SQL de supabase/commerce-upgrade.sql.
         </p>
       ) : (
-        <InventoryBoard products={products} promotions={promotions} movements={movements} canManage={canManage} />
+        <>
+          <InventoryOps products={products} zones={zones} canManage={canManage} />
+          <InventoryBoard products={products} promotions={promotions} movements={movements} canManage={canManage} />
+        </>
       )}
     </ModuleShell>
   );

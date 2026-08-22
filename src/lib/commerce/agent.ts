@@ -12,6 +12,7 @@ type AgentCatalogItem = {
   category: string | null;
   available: number | null;
   soldOut: boolean;
+  parentId: number | null;
 };
 
 type CreateOrderItemInput = {
@@ -25,6 +26,10 @@ type RpcResult = {
   error?: string;
   orderId?: number;
   total?: number;
+  subtotal?: number;
+  discount?: number;
+  tax?: number;
+  deliveryFee?: number;
   items?: Array<{ name?: string; quantity?: number; unitPrice?: number }>;
   available?: number;
 };
@@ -38,7 +43,7 @@ export const loadAgentCommerceSnapshot = async (organizationId: number) => {
 
   const { data: productRows } = await admin
     .from("products")
-    .select("id, name, kind, price, currency, category, active, track_stock, inventory_items!inventory_item_id(on_hand, track_stock)")
+    .select("id, name, kind, price, currency, category, active, track_stock, parent_id, inventory_items!inventory_item_id(on_hand, track_stock)")
     .eq("organization_id", organizationId)
     .eq("active", true)
     .order("name", { ascending: true })
@@ -59,6 +64,7 @@ export const loadAgentCommerceSnapshot = async (organizationId: number) => {
       category: (row.category as string | null) ?? null,
       available: tracks ? onHand : null,
       soldOut,
+      parentId: (row.parent_id as number | null) ?? null,
     };
   });
 
@@ -78,12 +84,36 @@ export const loadAgentCommerceSnapshot = async (organizationId: number) => {
     return `${row.name as string}${extra}${description}`;
   });
 
-  return { products, promotions };
+  const { data: zoneRows } = await admin
+    .from("delivery_zones")
+    .select("name, fee, eta_minutes")
+    .eq("organization_id", organizationId)
+    .eq("active", true)
+    .order("name", { ascending: true })
+    .limit(40);
+
+  const zones = (zoneRows ?? []).map((row) => {
+    const fee = toNumber(row.fee);
+    const eta = row.eta_minutes == null ? "" : ` · ETA ${row.eta_minutes} min`;
+    return `${row.name as string} — envío ${formatMoney(fee)}${eta}`;
+  });
+
+  const { data: org } = await admin
+    .from("organizations")
+    .select("tax_rate")
+    .eq("id", organizationId)
+    .maybeSingle();
+
+  const taxRate = org?.tax_rate == null ? 0.18 : toNumber(org.tax_rate);
+
+  return { products, promotions, zones, taxRate };
 };
 
 export const formatCommerceContext = (snapshot: {
   products: AgentCatalogItem[];
   promotions: string[];
+  zones?: string[];
+  taxRate?: number;
 }) => {
   const available = snapshot.products.filter((item) => !item.soldOut);
   const soldOut = snapshot.products.filter((item) => item.soldOut);
@@ -93,7 +123,8 @@ export const formatCommerceContext = (snapshot: {
         const stock =
           item.kind === "service" || item.available == null ? "sin stock" : `stock ${item.available}`;
         const category = item.category ? ` · ${item.category}` : "";
-        return `- [id:${item.id}] ${item.name}${category} — ${formatMoney(item.price, item.currency)} (${stock})`;
+        const variant = item.parentId ? ` · variante de ${item.parentId}` : "";
+        return `- [id:${item.id}] ${item.name}${category}${variant} — ${formatMoney(item.price, item.currency)} (${stock})`;
       })
       .join("\n") || "- (catálogo vacío)";
 
@@ -105,12 +136,20 @@ export const formatCommerceContext = (snapshot: {
     ? snapshot.promotions.map((item) => `- ${item}`).join("\n")
     : "- ninguna vigente";
 
-  return `Catálogo y precios (usa solo estos productId; el servidor aplica el precio, no lo inventes):
+  const zoneLines = snapshot.zones?.length
+    ? snapshot.zones.map((item) => `- ${item}`).join("\n")
+    : "- (sin zonas; si es delivery pregunta la dirección)";
+
+  const taxPercent = Math.round((snapshot.taxRate ?? 0.18) * 100);
+
+  return `Catálogo y precios (usa solo estos productId; el servidor aplica precio, promo e ITBIS ${taxPercent}%, no los inventes):
 ${productLines}
 Agotados (no los vendas):
 ${soldOutLines}
-Promociones vigentes:
-${promoLines}`;
+Promociones vigentes (el servidor aplica el % mayor):
+${promoLines}
+Zonas de delivery:
+${zoneLines}`;
 };
 
 export const createCommerceOrderForAgent = async (params: {
@@ -121,9 +160,23 @@ export const createCommerceOrderForAgent = async (params: {
   channel: string;
   fulfillment: FulfillmentType;
   customerNote?: string;
+  deliveryAddress?: string;
+  deliveryZone?: string;
   items: CreateOrderItemInput[];
 }) => {
   const admin = getSupabaseAdminClient();
+  let deliveryFee = 0;
+  if (params.fulfillment === "delivery" && params.deliveryZone) {
+    const { data: zone } = await admin
+      .from("delivery_zones")
+      .select("fee, eta_minutes")
+      .eq("organization_id", params.organizationId)
+      .eq("active", true)
+      .ilike("name", params.deliveryZone.trim())
+      .maybeSingle();
+    deliveryFee = toNumber(zone?.fee);
+  }
+
   const { data, error } = await admin.rpc("create_commerce_order", {
     p_organization_id: params.organizationId,
     p_contact_id: params.contactId,
@@ -137,6 +190,9 @@ export const createCommerceOrderForAgent = async (params: {
       quantity: item.quantity,
       notes: item.notes ?? "",
     })),
+    p_delivery_address: params.deliveryAddress ?? "",
+    p_delivery_fee: deliveryFee,
+    p_delivery_zone: params.deliveryZone ?? "",
   });
 
   if (error) {
@@ -157,6 +213,10 @@ export const createCommerceOrderForAgent = async (params: {
     ok: true as const,
     orderId: result.orderId,
     total: toNumber(result.total),
+    subtotal: toNumber(result.subtotal),
+    discount: toNumber(result.discount),
+    tax: toNumber(result.tax),
+    deliveryFee: toNumber(result.deliveryFee),
     summary: lines,
   };
 };

@@ -2,19 +2,37 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
+import { getCurrentMembership, canManageCatalog, canManageOrders, canMarkPayment } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { isOrderStatus, PRODUCT_KINDS } from "@/lib/commerce/types";
+import { parseCatalogCsv } from "@/lib/commerce/catalog";
+import { isOrderStatus, isPaymentStatus, PAYMENT_STATUSES, PRODUCT_KINDS } from "@/lib/commerce/types";
+import { recordAuditEvent } from "@/lib/organizations/audit";
 
 type ActionResult = {
   success?: string;
   error?: string;
 };
 
-const requireAgentMembership = async () => {
+const requireCatalogMembership = async () => {
   const membership = await getCurrentMembership();
-  if (!membership || !hasOrganizationRole(membership, ["owner", "admin", "agent"])) {
-    return { error: "No tienes permisos para gestionar catálogo o pedidos." } as const;
+  if (!membership || !canManageCatalog(membership)) {
+    return { error: "No tienes permisos para gestionar el catálogo." } as const;
+  }
+  return { membership } as const;
+};
+
+const requireOrdersMembership = async () => {
+  const membership = await getCurrentMembership();
+  if (!membership || !canManageOrders(membership)) {
+    return { error: "No tienes permisos para gestionar pedidos." } as const;
+  }
+  return { membership } as const;
+};
+
+const requirePaymentMembership = async () => {
+  const membership = await getCurrentMembership();
+  if (!membership || !canMarkPayment(membership)) {
+    return { error: "No tienes permisos para marcar pagos." } as const;
   }
   return { membership } as const;
 };
@@ -65,7 +83,7 @@ export const createProductAction = async (rawValues: unknown): Promise<ActionRes
     return { error: parsed.error.issues[0]?.message ?? "Revisa los datos del producto." };
   }
 
-  const access = await requireAgentMembership();
+  const access = await requireCatalogMembership();
   if ("error" in access) return { error: access.error };
 
   const supabase = await createSupabaseServerClient();
@@ -123,7 +141,7 @@ export const updateProductAction = async (rawValues: unknown): Promise<ActionRes
     return { error: "Los datos del producto no son válidos." };
   }
 
-  const access = await requireAgentMembership();
+  const access = await requireCatalogMembership();
   if ("error" in access) return { error: access.error };
 
   const supabase = await createSupabaseServerClient();
@@ -182,7 +200,7 @@ export const receiveStockAction = async (rawValues: unknown): Promise<ActionResu
     return { error: "Indica una cantidad válida para reponer." };
   }
 
-  const access = await requireAgentMembership();
+  const access = await requireCatalogMembership();
   if ("error" in access) return { error: access.error };
 
   const supabase = await createSupabaseServerClient();
@@ -227,7 +245,7 @@ export const createPromotionAction = async (rawValues: unknown): Promise<ActionR
     return { error: parsed.error.issues[0]?.message ?? "Revisa la promoción." };
   }
 
-  const access = await requireAgentMembership();
+  const access = await requireCatalogMembership();
   if ("error" in access) return { error: access.error };
 
   const supabase = await createSupabaseServerClient();
@@ -250,7 +268,7 @@ export const createPromotionAction = async (rawValues: unknown): Promise<ActionR
 };
 
 export const togglePromotionAction = async (promotionId: number, active: boolean): Promise<ActionResult> => {
-  const access = await requireAgentMembership();
+  const access = await requireCatalogMembership();
   if ("error" in access) return { error: access.error };
 
   const supabase = await createSupabaseServerClient();
@@ -274,7 +292,7 @@ export const updateOrderStatusAction = async (rawValues: unknown): Promise<Actio
     return { error: "El estado del pedido no es válido." };
   }
 
-  const access = await requireAgentMembership();
+  const access = await requireOrdersMembership();
   if ("error" in access) return { error: access.error };
 
   if (parsed.data.status === "cancelled") {
@@ -303,7 +321,7 @@ export const cancelOrderAction = async (rawValues: unknown): Promise<ActionResul
     return { error: "El pedido no es válido." };
   }
 
-  const access = await requireAgentMembership();
+  const access = await requireOrdersMembership();
   if ("error" in access) return { error: access.error };
 
   const supabase = await createSupabaseServerClient();
@@ -324,5 +342,129 @@ export const cancelOrderAction = async (rawValues: unknown): Promise<ActionResul
 
   revalidatePath("/orders");
   revalidatePath("/inventory");
+  await recordAuditEvent({
+    organizationId: access.membership.organizationId,
+    action: "order.cancel",
+    entity: "order",
+    entityId: parsed.data.orderId,
+  });
   return { success: "Pedido cancelado y stock restaurado." };
+};
+
+const paymentSchema = z.object({
+  orderId: z.number().int().positive(),
+  paymentStatus: z.enum(PAYMENT_STATUSES),
+  paymentMethod: z.string().trim().max(40).optional(),
+});
+
+export const updateOrderPaymentAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = paymentSchema.safeParse(rawValues);
+  if (!parsed.success || !isPaymentStatus(parsed.data.paymentStatus)) {
+    return { error: "El estado de pago no es válido." };
+  }
+
+  const access = await requirePaymentMembership();
+  if ("error" in access) return { error: access.error };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      payment_status: parsed.data.paymentStatus,
+      payment_method: parsed.data.paymentMethod || null,
+    })
+    .eq("id", parsed.data.orderId)
+    .eq("organization_id", access.membership.organizationId);
+
+  if (error) {
+    return { error: error.message || "No se pudo actualizar el pago." };
+  }
+
+  revalidatePath("/orders");
+  await recordAuditEvent({
+    organizationId: access.membership.organizationId,
+    action: "order.payment",
+    entity: "order",
+    entityId: parsed.data.orderId,
+    payload: { paymentStatus: parsed.data.paymentStatus, paymentMethod: parsed.data.paymentMethod },
+  });
+  return { success: parsed.data.paymentStatus === "paid" ? "Pedido marcado como pagado." : "Pago actualizado." };
+};
+
+export const importCatalogCsvAction = async (csvText: string): Promise<ActionResult> => {
+  const rows = parseCatalogCsv(csvText);
+  if (!rows.length) {
+    return { error: "El CSV está vacío o no tiene columnas name,price." };
+  }
+
+  const access = await requireCatalogMembership();
+  if ("error" in access) return { error: access.error };
+
+  let created = 0;
+  for (const row of rows.slice(0, 200)) {
+    const result = await createProductAction({
+      name: row.name,
+      sku: row.sku,
+      category: row.category,
+      kind: row.kind,
+      price: row.price,
+      trackStock: row.kind !== "service",
+      initialStock: row.initialStock ?? 0,
+    });
+    if (!result.error) created += 1;
+  }
+
+  revalidatePath("/inventory");
+  return { success: `Se importaron ${created} de ${Math.min(rows.length, 200)} productos.` };
+};
+
+const deliveryZoneSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  fee: z.number().nonnegative().max(100_000),
+  etaMinutes: z.number().int().positive().max(240).optional(),
+});
+
+export const createDeliveryZoneAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = deliveryZoneSchema.safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Revisa la zona de delivery." };
+  }
+
+  const access = await requireCatalogMembership();
+  if ("error" in access) return { error: access.error };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("delivery_zones").insert({
+    organization_id: access.membership.organizationId,
+    name: parsed.data.name,
+    fee: parsed.data.fee,
+    eta_minutes: parsed.data.etaMinutes ?? null,
+    active: true,
+  });
+
+  if (error) {
+    return { error: error.message || "No se pudo crear la zona." };
+  }
+
+  revalidatePath("/inventory");
+  return { success: "Zona de delivery creada." };
+};
+
+export const toggleDeliveryZoneAction = async (zoneId: number, active: boolean): Promise<ActionResult> => {
+  const access = await requireCatalogMembership();
+  if ("error" in access) return { error: access.error };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("delivery_zones")
+    .update({ active })
+    .eq("id", zoneId)
+    .eq("organization_id", access.membership.organizationId);
+
+  if (error) {
+    return { error: error.message || "No se pudo actualizar la zona." };
+  }
+
+  revalidatePath("/inventory");
+  return { success: active ? "Zona activada." : "Zona desactivada." };
 };

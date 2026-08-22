@@ -6,7 +6,7 @@ import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/m
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ModuleShell } from "@/components/suite/module-shell";
 import { Skeleton } from "@/components/ui/skeleton";
-import { loadAgentSettings, getDefaultAgentSettings } from "@/lib/agent/settings";
+import { loadAgentSettings, getDefaultAgentSettings, loadKnowledgeArticles } from "@/lib/agent/settings";
 import { env } from "@/lib/config/env";
 import { DEFAULT_MODULES } from "@/lib/modules/constants";
 import { loadOrganizationModules } from "@/lib/modules/settings";
@@ -55,6 +55,14 @@ export default async function SettingsPage() {
   const modules = membership
     ? await loadOrganizationModules(supabase, membership.organizationId)
     : DEFAULT_MODULES;
+  const articles = membership ? await loadKnowledgeArticles(membership.organizationId, false) : [];
+  const { data: orgBilling } = membership
+    ? await supabase
+        .from("organizations")
+        .select("plan, tax_rate")
+        .eq("id", membership.organizationId)
+        .maybeSingle()
+    : { data: null };
 
   return (
     <ModuleShell
@@ -95,7 +103,14 @@ export default async function SettingsPage() {
           settings={agentSettings}
           modules={modules}
           geminiConfigured={Boolean(env.geminiApiKey)}
+          articles={articles}
         />
+        {orgBilling ? (
+          <p className="text-sm text-muted-foreground">
+            Plan {orgBilling.plan || "starter"} · ITBIS {Math.round(Number(orgBilling.tax_rate ?? 0.18) * 100)}%. El cobro de
+            suscripción no está conectado; el ITBIS se aplica solo en el ticket.
+          </p>
+        ) : null}
       </div>
     </ModuleShell>
   );

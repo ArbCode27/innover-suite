@@ -3,9 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AGENT_MODEL, DEFAULT_AGENT_PROMPT } from "@/lib/agent/constants";
+import { DEFAULT_BUSINESS_HOURS, DEFAULT_CLOSED_MESSAGE, parseBusinessHours } from "@/lib/agent/hours";
 import { upsertAgentSettings } from "@/lib/agent/settings";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+const weekdaySchema = z
+  .object({
+    open: z.string().regex(/^\d{2}:\d{2}$/),
+    close: z.string().regex(/^\d{2}:\d{2}$/),
+  })
+  .nullable();
 
 const saveAgentSettingsSchema = z.object({
   enabled: z.boolean(),
@@ -14,6 +22,13 @@ const saveAgentSettingsSchema = z.object({
   toolsFunnel: z.boolean(),
   toolsHandoff: z.boolean(),
   requireBookingConfirmation: z.boolean(),
+  closedMessage: z.string().trim().max(500).optional(),
+  businessHours: z
+    .object({
+      timezone: z.string().optional(),
+      days: z.record(z.string(), weekdaySchema),
+    })
+    .optional(),
 });
 
 type ActionResult = {
@@ -50,6 +65,10 @@ export const saveAgentSettingsAction = async (rawValues: unknown): Promise<Actio
     toolsHandoff: parsed.data.toolsHandoff,
     requireBookingConfirmation: parsed.data.requireBookingConfirmation,
     language: "es-DO",
+    businessHours: parsed.data.businessHours
+      ? parseBusinessHours(parsed.data.businessHours)
+      : DEFAULT_BUSINESS_HOURS,
+    closedMessage: parsed.data.closedMessage?.trim() || DEFAULT_CLOSED_MESSAGE,
   });
 
   if (error) {
@@ -59,4 +78,93 @@ export const saveAgentSettingsAction = async (rawValues: unknown): Promise<Actio
 
   revalidatePath("/settings");
   return { success: "Configuración del agente guardada." };
+};
+
+const knowledgeSchema = z.object({
+  title: z.string().trim().min(3).max(120),
+  body: z.string().trim().min(8).max(4000),
+});
+
+export const createKnowledgeArticleAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = knowledgeSchema.safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: "Título y contenido son obligatorios." };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
+    return { error: "Solo owner o admin pueden editar la base de conocimiento." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("knowledge_articles").insert({
+    organization_id: membership.organizationId,
+    title: parsed.data.title,
+    body: parsed.data.body,
+    active: true,
+  });
+
+  if (error) {
+    return { error: error.message || "No se pudo guardar el artículo." };
+  }
+
+  revalidatePath("/settings");
+  return { success: "Artículo publicado para el agente." };
+};
+
+export const toggleKnowledgeArticleAction = async (articleId: number, active: boolean): Promise<ActionResult> => {
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
+    return { error: "Solo owner o admin pueden editar la base de conocimiento." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("knowledge_articles")
+    .update({ active })
+    .eq("id", articleId)
+    .eq("organization_id", membership.organizationId);
+
+  if (error) {
+    return { error: error.message || "No se pudo actualizar el artículo." };
+  }
+
+  revalidatePath("/settings");
+  return { success: active ? "Artículo activado." : "Artículo desactivado." };
+};
+
+const reviewSchema = z.object({
+  turnId: z.number().int().positive(),
+  score: z.number().int().min(1).max(5),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export const reviewAgentTurnAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = reviewSchema.safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: "La calificación no es válida." };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin", "agent"])) {
+    return { error: "No tienes permisos para calificar turnos." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("agent_turns")
+    .update({
+      review_score: parsed.data.score,
+      review_notes: parsed.data.notes || null,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", parsed.data.turnId)
+    .eq("organization_id", membership.organizationId);
+
+  if (error) {
+    return { error: error.message || "No se pudo guardar la revisión." };
+  }
+
+  revalidatePath("/quality");
+  return { success: "Revisión guardada." };
 };

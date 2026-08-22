@@ -2,7 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   isProductKind,
   toNumber,
+  type DeliveryZoneRecord,
   type InventoryMovementRecord,
+  type ProductKind,
   type ProductRecord,
   type PromotionRecord,
 } from "@/lib/commerce/types";
@@ -18,6 +20,7 @@ type ProductRow = {
   currency: string;
   active: boolean;
   track_stock: boolean;
+  parent_id?: number | null;
   inventory_item_id: number | null;
   inventory_items:
     | { on_hand?: number | string | null; reorder_point?: number | string | null }
@@ -40,6 +43,7 @@ export const mapProductRow = (row: ProductRow): ProductRecord => {
     currency: row.currency || "DOP",
     active: row.active,
     trackStock: row.track_stock,
+    parentId: row.parent_id ?? null,
     inventoryItemId: row.inventory_item_id,
     onHand: inventory?.on_hand == null ? null : toNumber(inventory.on_hand),
     reorderPoint: inventory?.reorder_point == null ? null : toNumber(inventory.reorder_point),
@@ -50,13 +54,25 @@ export const loadCatalog = async (supabase: SupabaseClient, organizationId: numb
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, name, description, sku, category, kind, price, currency, active, track_stock, inventory_item_id, inventory_items!inventory_item_id(on_hand, reorder_point)",
+      "id, name, description, sku, category, kind, price, currency, active, track_stock, parent_id, inventory_item_id, inventory_items!inventory_item_id(on_hand, reorder_point)",
     )
     .eq("organization_id", organizationId)
     .order("name", { ascending: true });
 
   if (error) {
-    throw new Error(error.message || "No se pudo cargar el catálogo.");
+    const fallback = await supabase
+      .from("products")
+      .select(
+        "id, name, description, sku, category, kind, price, currency, active, track_stock, inventory_item_id, inventory_items!inventory_item_id(on_hand, reorder_point)",
+      )
+      .eq("organization_id", organizationId)
+      .order("name", { ascending: true });
+
+    if (fallback.error) {
+      throw new Error(fallback.error.message || "No se pudo cargar el catálogo.");
+    }
+
+    return (fallback.data ?? []).map((row) => mapProductRow(row as ProductRow));
   }
 
   return (data ?? []).map((row) => mapProductRow(row as ProductRow));
@@ -112,4 +128,120 @@ export const loadInventoryMovements = async (supabase: SupabaseClient, organizat
       orderId: (row.order_id as number | null) ?? null,
     };
   });
+};
+
+export const loadDeliveryZones = async (supabase: SupabaseClient, organizationId: number) => {
+  const { data, error } = await supabase
+    .from("delivery_zones")
+    .select("id, name, fee, eta_minutes, active")
+    .eq("organization_id", organizationId)
+    .order("name", { ascending: true });
+
+  if (error) {
+    return [] as DeliveryZoneRecord[];
+  }
+
+  return (data ?? []).map(
+    (row): DeliveryZoneRecord => ({
+      id: row.id as number,
+      name: row.name as string,
+      fee: toNumber(row.fee),
+      etaMinutes: (row.eta_minutes as number | null) ?? null,
+      active: row.active === true,
+    }),
+  );
+};
+
+export const catalogToCsv = (products: ProductRecord[]) => {
+  const header = "name,sku,category,kind,price,stock,active";
+  const lines = products.map((product) =>
+    [
+      csvEscape(product.name),
+      csvEscape(product.sku ?? ""),
+      csvEscape(product.category ?? ""),
+      product.kind,
+      product.price,
+      product.onHand ?? "",
+      product.active ? "true" : "false",
+    ].join(","),
+  );
+  return [header, ...lines].join("\n");
+};
+
+export const parseCatalogCsv = (raw: string) => {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return [] as Array<{
+    name: string;
+    sku?: string;
+    category?: string;
+    kind: ProductKind;
+    price: number;
+    initialStock?: number;
+  }>;
+
+  const header = lines[0].toLowerCase();
+  const hasHeader = header.includes("name") && header.includes("price");
+  const rows = hasHeader ? lines.slice(1) : lines;
+
+  return rows
+    .map((line) => parseCsvLine(line))
+    .filter((cells) => cells.length >= 2)
+    .map((cells) => {
+      const [name, sku, category, kind, price, stock] = hasHeader
+        ? cells
+        : [cells[0], cells[1], cells[2], cells[3], cells[4], cells[5]];
+      const parsedKind = isProductKind(kind) ? kind : "physical";
+      return {
+        name: name?.trim() ?? "",
+        sku: sku?.trim() || undefined,
+        category: category?.trim() || undefined,
+        kind: parsedKind,
+        price: toNumber(price),
+        initialStock: stock ? toNumber(stock) : undefined,
+      };
+    })
+    .filter((row) => row.name.length >= 2 && row.price >= 0);
+};
+
+const csvEscape = (value: string | number) => {
+  const text = String(value);
+  if (/[",\n]/.test(text)) {
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+  return text;
+};
+
+const parseCsvLine = (line: string) => {
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quoted) {
+      if (char === '"' && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+    if (char === '"') {
+      quoted = true;
+      continue;
+    }
+    if (char === ",") {
+      cells.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current);
+  return cells;
 };

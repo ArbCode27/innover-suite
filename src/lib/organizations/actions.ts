@@ -1,10 +1,12 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { recordAuditEvent } from "@/lib/organizations/audit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
+import { getCurrentMembership, hasOrganizationRole, type OrganizationRole } from "@/lib/organizations/membership";
 
 const createOrganizationSchema = z.object({
   name: z.string().trim().min(3, "El nombre de la organización debe tener al menos 3 caracteres"),
@@ -12,8 +14,15 @@ const createOrganizationSchema = z.object({
 
 const inviteAdvisorSchema = z.object({
   email: z.email("Ingresa un correo válido"),
-  role: z.enum(["admin", "agent", "viewer"]),
+  role: z.enum(["admin", "agent", "viewer", "kitchen", "cashier"]),
 });
+
+const inviteOrigin = async () => {
+  const headerStore = await headers();
+  const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "localhost:3000";
+  const proto = headerStore.get("x-forwarded-proto") || "https";
+  return `${proto}://${host}`;
+};
 
 export const createOrganizationAction = async (rawValues: unknown) => {
   const parsed = createOrganizationSchema.safeParse(rawValues);
@@ -38,7 +47,7 @@ export const createOrganizationAction = async (rawValues: unknown) => {
     return { error: error.message || "No se pudo crear la organización" };
   }
 
-  redirect("/inbox");
+  redirect("/onboarding/setup");
 };
 
 export const inviteAdvisorAction = async (rawValues: unknown) => {
@@ -61,22 +70,83 @@ export const inviteAdvisorAction = async (rawValues: unknown) => {
     return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
   }
 
-  const { error } = await supabase.from("organization_invitations").upsert(
-    {
-      organization_id: membership.organizationId,
-      email: parsed.data.email.toLowerCase(),
-      role: parsed.data.role,
-      invited_by_user_id: user.id,
-      accepted_at: null,
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    { onConflict: "organization_id,email" },
-  );
+  const token = crypto.randomUUID();
+  const { data, error } = await supabase
+    .from("organization_invitations")
+    .upsert(
+      {
+        organization_id: membership.organizationId,
+        email: parsed.data.email.toLowerCase(),
+        role: parsed.data.role,
+        invited_by_user_id: user.id,
+        accepted_at: null,
+        token,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      { onConflict: "organization_id,email" },
+    )
+    .select("token")
+    .maybeSingle();
 
   if (error) {
     return { error: error.message || "No se pudo guardar la invitación" };
   }
 
+  const inviteToken = (data?.token as string | undefined) || token;
+  const inviteUrl = `${await inviteOrigin()}/invite/${inviteToken}`;
+  await recordAuditEvent({
+    organizationId: membership.organizationId,
+    actorUserId: user.id,
+    action: "invite.create",
+    entity: "invitation",
+    payload: { email: parsed.data.email.toLowerCase(), role: parsed.data.role },
+  });
   revalidatePath("/settings");
-  return { success: "Invitación registrada. Comparte el enlace de onboarding al asesor." };
+  return {
+    success: "Invitación lista. Copia el enlace y envíalo al asesor.",
+    inviteUrl,
+  };
 };
+
+export const completeOnboardingAction = async () => {
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
+    redirect("/home");
+  }
+
+  const supabase = await createSupabaseServerClient();
+  await supabase
+    .from("organizations")
+    .update({ onboarding_completed_at: new Date().toISOString() })
+    .eq("id", membership.organizationId);
+
+  revalidatePath("/home");
+  redirect("/home");
+};
+
+export const updateOrganizationTaxAction = async (rawValues: unknown) => {
+  const parsed = z.object({ taxRate: z.number().min(0).max(1) }).safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: "El ITBIS debe estar entre 0 y 1 (ej. 0.18)." };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
+    return { error: "Solo owner o admin pueden cambiar el ITBIS." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("organizations")
+    .update({ tax_rate: parsed.data.taxRate })
+    .eq("id", membership.organizationId);
+
+  if (error) {
+    return { error: error.message || "No se pudo guardar el ITBIS." };
+  }
+
+  revalidatePath("/settings");
+  return { success: "ITBIS actualizado. Se aplicará en el próximo pedido." };
+};
+
+export type InviteRole = Extract<OrganizationRole, "admin" | "agent" | "viewer" | "kitchen" | "cashier">;

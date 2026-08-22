@@ -1,10 +1,12 @@
 export const PRODUCT_KINDS = ["physical", "food", "service"] as const;
 export const ORDER_STATUSES = ["received", "preparing", "ready", "completed", "cancelled"] as const;
 export const FULFILLMENT_TYPES = ["pickup", "delivery", "dine_in", "unspecified"] as const;
+export const PAYMENT_STATUSES = ["unpaid", "pending", "paid", "refunded"] as const;
 
 export type ProductKind = (typeof PRODUCT_KINDS)[number];
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export type FulfillmentType = (typeof FULFILLMENT_TYPES)[number];
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 export type ProductRecord = {
   id: number;
@@ -17,9 +19,18 @@ export type ProductRecord = {
   currency: string;
   active: boolean;
   trackStock: boolean;
+  parentId: number | null;
   inventoryItemId: number | null;
   onHand: number | null;
   reorderPoint: number | null;
+};
+
+export type DeliveryZoneRecord = {
+  id: number;
+  name: string;
+  fee: number;
+  etaMinutes: number | null;
+  active: boolean;
 };
 
 export type PromotionRecord = {
@@ -48,7 +59,15 @@ export type OrderRecord = {
   channel: string | null;
   customerNote: string | null;
   subtotal: number;
+  discountAmount: number;
+  taxAmount: number;
+  deliveryFee: number;
   total: number;
+  deliveryAddress: string | null;
+  deliveryZone: string | null;
+  etaMinutes: number | null;
+  paymentStatus: PaymentStatus;
+  paymentMethod: string | null;
   createdAt: string;
   updatedAt: string;
   contactId: number | null;
@@ -97,6 +116,13 @@ export const FULFILLMENT_LABELS: Record<FulfillmentType, string> = {
   unspecified: "Sin especificar",
 };
 
+export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  unpaid: "Sin pagar",
+  pending: "Pendiente",
+  paid: "Pagado",
+  refunded: "Reembolsado",
+};
+
 export const ACTIVE_ORDER_STATUSES: OrderStatus[] = ["received", "preparing", "ready"];
 
 export const NEXT_ORDER_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
@@ -129,3 +155,6 @@ export const isOrderStatus = (value: unknown): value is OrderStatus =>
 
 export const isFulfillmentType = (value: unknown): value is FulfillmentType =>
   typeof value === "string" && FULFILLMENT_TYPES.includes(value as FulfillmentType);
+
+export const isPaymentStatus = (value: unknown): value is PaymentStatus =>
+  typeof value === "string" && PAYMENT_STATUSES.includes(value as PaymentStatus);

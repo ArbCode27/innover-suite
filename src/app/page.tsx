@@ -7,7 +7,7 @@ const Home = async () => {
     data: { user },
   } = await supabase.auth.getUser();
 
-  redirect(user ? "/inbox" : "/login");
+  redirect(user ? "/home" : "/login");
 };
 
 export default Home;

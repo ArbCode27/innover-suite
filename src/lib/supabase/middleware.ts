@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC_PATHS = [
   "/login",
   "/privacy",
+  "/invite",
   "/api/health",
   "/api/auth/instagram/callback",
   "/api/auth/messenger/callback",
@@ -86,7 +87,7 @@ export const updateSession = async (request: NextRequest) => {
     }
 
     if (membership?.organization_id && (pathname === "/login" || pathname === "/")) {
-      return redirectWithCookies(request, sessionResponse, "/inbox");
+      return redirectWithCookies(request, sessionResponse, "/home");
     }
   }
 

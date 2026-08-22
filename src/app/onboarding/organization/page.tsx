@@ -13,7 +13,7 @@ const OrganizationOnboardingPage = async () => {
   const membership = await getCurrentMembership();
 
   if (membership) {
-    redirect("/inbox");
+    redirect("/home");
   }
 
   return (
@@ -25,8 +25,7 @@ const OrganizationOnboardingPage = async () => {
           </p>
           <CardTitle className="text-2xl">Crea tu organización</CardTitle>
           <CardDescription>
-            Este CRM es multiempresa. La organización será el contenedor de tus asesores,
-            cuentas de Instagram, conversaciones y mensajes.
+            Este CRM agrupa tu equipo, canales, conversaciones y pedidos en una sola organización.
           </CardDescription>
         </CardHeader>
         <CardContent>

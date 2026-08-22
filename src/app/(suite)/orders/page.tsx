@@ -4,11 +4,11 @@ import { ModuleShell } from "@/components/suite/module-shell";
 import { loadOrders } from "@/lib/commerce/orders";
 import type { OrderRecord } from "@/lib/commerce/types";
 import { requireSuiteModule } from "@/lib/modules/guard";
-import { hasOrganizationRole } from "@/lib/organizations/membership";
+import { canManageOrders, canMarkPayment } from "@/lib/organizations/membership";
 
 export default async function OrdersPage() {
   const { membership, supabase, modules } = await requireSuiteModule("orders");
-  const canManage = hasOrganizationRole(membership, ["owner", "admin", "agent"]);
+  const canManage = canManageOrders(membership);
   const kitchenMode = modules.kitchen;
 
   let orders: OrderRecord[] = [];
@@ -46,6 +46,7 @@ export default async function OrdersPage() {
           kitchenMode={kitchenMode}
           initialOrders={orders}
           canManage={canManage}
+          canMarkPayment={canMarkPayment(membership)}
         />
       )}
     </ModuleShell>

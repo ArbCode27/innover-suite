@@ -21,8 +21,15 @@ type ToolContext = {
   contactId: number;
   turnId: number;
   channel: string;
+  lastInboundText: string;
   settings: AgentSettings;
   modules: OrganizationModules;
+};
+
+export const isCustomerConfirmationText = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return false;
+  return /^(confirmar|confirmo|sí|si|ok|dale|listo|va)([.!¡? ]|$)/i.test(normalized) || /\bconfirm(o|ar)\b/i.test(normalized);
 };
 
 const logToolRun = async (
@@ -198,8 +205,8 @@ export const executeAgentTool = async (
       return { ok: false, result };
     }
 
-    if (!parsed.data.confirmedByCustomer) {
-      const result = { error: "El cliente aún no confirmó el pedido. Resume ítems y total, y espera confirmación." };
+    if (!parsed.data.confirmedByCustomer && !isCustomerConfirmationText(context.lastInboundText)) {
+      const result = { error: "El cliente aún no confirmó el pedido. Resume ítems y total, y pide que responda CONFIRMAR." };
       await logToolRun(context, name, parsed.data, result, false);
       return { ok: false, result };
     }
@@ -212,6 +219,8 @@ export const executeAgentTool = async (
       channel: context.channel,
       fulfillment: isFulfillmentType(parsed.data.fulfillment) ? parsed.data.fulfillment : "unspecified",
       customerNote: parsed.data.customerNote,
+      deliveryAddress: parsed.data.deliveryAddress,
+      deliveryZone: parsed.data.deliveryZone,
       items: parsed.data.items,
     });
 
@@ -223,7 +232,7 @@ export const executeAgentTool = async (
     await insertSystemMessage({
       organizationId: context.organizationId,
       conversationId: context.conversationId,
-      content: `Pedido #${created.orderId}: ${created.summary}. Total ${formatMoney(created.total)}. Stock descontado.`,
+      content: `Pedido #${created.orderId}: ${created.summary}. Subtotal ${formatMoney(created.subtotal)}${created.discount ? ` · desc. ${formatMoney(created.discount)}` : ""} · ITBIS ${formatMoney(created.tax)}${created.deliveryFee ? ` · envío ${formatMoney(created.deliveryFee)}` : ""}. Total ${formatMoney(created.total)}. Stock descontado.`,
     });
 
     const result = {

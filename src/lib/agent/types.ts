@@ -1,3 +1,5 @@
+import type { BusinessHours } from "@/lib/agent/hours";
+
 export type AgentSettings = {
   organizationId: number;
   enabled: boolean;
@@ -8,6 +10,8 @@ export type AgentSettings = {
   toolsHandoff: boolean;
   requireBookingConfirmation: boolean;
   language: string;
+  businessHours: BusinessHours;
+  closedMessage: string;
 };
 
 export type AgentJob = {

@@ -1,20 +1,37 @@
+import { redirect } from "next/navigation";
 import { ContactRound, MessageCircle, Tags, Users } from "lucide-react";
-import { EmptyMetaState } from "@/components/suite/empty-meta-state";
+import { ContactsBoard } from "./contacts-board";
 import { ModuleShell } from "@/components/suite/module-shell";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { loadContacts } from "@/lib/contacts/board";
+import { canUseInbox, getCurrentMembership } from "@/lib/organizations/membership";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-const metrics = [
-  { label: "Contactos", value: "0", icon: Users },
-  { label: "Canales", value: "0", icon: MessageCircle },
-  { label: "Etiquetas", value: "0", icon: Tags },
-  { label: "Afiliaciones", value: "0", icon: ContactRound },
-];
+type ContactsPageProps = {
+  searchParams: Promise<{ q?: string }>;
+};
 
-export default function ContactsPage() {
+export default async function ContactsPage({ searchParams }: ContactsPageProps) {
+  const membership = await getCurrentMembership();
+  if (!membership) redirect("/onboarding/organization");
+  if (!canUseInbox(membership)) redirect("/home");
+
+  const { q } = await searchParams;
+  const supabase = await createSupabaseServerClient();
+  const contacts = await loadContacts(supabase, membership.organizationId, q);
+  const tagged = contacts.filter((contact) => contact.tags.length).length;
+
+  const metrics = [
+    { label: "Contactos", value: String(contacts.length), icon: Users },
+    { label: "Con teléfono", value: String(contacts.filter((item) => item.phone).length), icon: MessageCircle },
+    { label: "Con etiqueta", value: String(tagged), icon: Tags },
+    { label: "Con correo", value: String(contacts.filter((item) => item.email).length), icon: ContactRound },
+  ];
+
   return (
     <ModuleShell
-      title="Contactos y afiliaciones"
-      description="Centraliza personas captadas por Meta, WhatsApp e Instagram con historial y canal de origen."
+      title="Contactos"
+      description="Personas captadas por WhatsApp, Instagram o Messenger, con historial, etiquetas y notas internas."
       eyebrow="Base comercial"
     >
       <div className="grid gap-4 md:grid-cols-4">
@@ -32,11 +49,7 @@ export default function ContactsPage() {
           </Card>
         ))}
       </div>
-
-      <EmptyMetaState
-        title="Conecta Meta para crear contactos automáticamente"
-        description="Aún no hay contactos. Cuando entren mensajes desde Meta, el CRM creará perfiles, canales y etiquetas para iniciar el seguimiento comercial."
-      />
+      <ContactsBoard contacts={contacts} initialQuery={q ?? ""} />
     </ModuleShell>
   );
 }

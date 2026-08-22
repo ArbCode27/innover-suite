@@ -24,7 +24,7 @@ export const signIn = async (rawValues: unknown) => {
     return { error: getAuthErrorMessage(error.message) };
   }
 
-  redirect("/inbox");
+  redirect("/home");
 };
 
 export const signOut = async () => {

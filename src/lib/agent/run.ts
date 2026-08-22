@@ -15,7 +15,8 @@ import {
   type GeminiContent,
   type GeminiTurnFailure,
 } from "@/lib/agent/gemini";
-import { loadAgentSettings } from "@/lib/agent/settings";
+import { isWithinBusinessHours } from "@/lib/agent/hours";
+import { formatKnowledgeContext, loadAgentSettings, loadKnowledgeArticles } from "@/lib/agent/settings";
 import { buildAgentToolDeclarations } from "@/lib/agent/tools";
 import type { AgentJob } from "@/lib/agent/types";
 import {
@@ -234,6 +235,7 @@ const buildSystemInstruction = (params: {
   stages: Array<{ id: number; name: string }>;
   upcomingAppointments: string[];
   commerceContext: string | null;
+  knowledgeContext: string | null;
 }) => {
   const stageList = params.stages.map((stage) => `- ${stage.name} (stageId: ${stage.id})`).join("\n") || "- (sin etapas)";
   const appointments = params.upcomingAppointments.length
@@ -242,8 +244,9 @@ const buildSystemInstruction = (params: {
   const commerceBlock = params.commerceContext
     ? `
 ${params.commerceContext}
-- Confirmación de pedido obligatoria: sí. Resume el ticket y espera un sí antes de create_order.`
+- Confirmación de pedido: resume el ticket (ítems, ITBIS, envío y total) y espera un sí o CONFIRMAR antes de create_order.`
     : "";
+  const knowledgeBlock = params.knowledgeContext ? `\n${params.knowledgeContext}` : "";
 
   return `${AGENT_GUARDRAILS}
 
@@ -261,7 +264,7 @@ Contexto de esta conversación:
 - Etapas disponibles:
 ${stageList}
 - Próximas citas del contacto:
-${appointments}${commerceBlock}`;
+${appointments}${commerceBlock}${knowledgeBlock}`;
 };
 
 const handleUnrecoverableTurn = async (params: {
@@ -375,6 +378,17 @@ export const runConversationAgent = async (job: AgentJob) => {
       return;
     }
 
+    if (!isWithinBusinessHours(settings.businessHours)) {
+      await sendAiOutboundMessage({
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        text: settings.closedMessage,
+        metadata: { source: "agent", closedHours: true },
+      });
+      await finishTurn(turnId, { status: "skipped", error: "Fuera de horario del agente." });
+      return;
+    }
+
     const contactNameRaw = conversation.contacts as { full_name?: string } | { full_name?: string }[] | null;
     const contactName = Array.isArray(contactNameRaw)
       ? contactNameRaw[0]?.full_name
@@ -405,6 +419,10 @@ export const runConversationAgent = async (job: AgentJob) => {
         parts,
       });
     }
+
+    const lastInbound =
+      [...history].reverse().find((row) => row.direction === "inbound");
+    const lastInboundText = typeof lastInbound?.content === "string" ? lastInbound.content : "";
 
     if (!contents.length) {
       await finishTurn(turnId, { status: "skipped", error: "Sin contenido para responder." });
@@ -442,6 +460,28 @@ export const runConversationAgent = async (job: AgentJob) => {
       }
     }
 
+    let knowledgeContext: string | null = null;
+    try {
+      const articles = await loadKnowledgeArticles(job.organizationId, true);
+      knowledgeContext = formatKnowledgeContext(articles) || null;
+      const { data: notes } = await admin
+        .from("contact_notes")
+        .select("body")
+        .eq("organization_id", job.organizationId)
+        .eq("contact_id", conversation.contact_id)
+        .eq("visible_to_agent", true)
+        .order("created_at", { ascending: false })
+        .limit(8);
+      const noteLines = (notes ?? [])
+        .map((note) => (typeof note.body === "string" ? note.body.trim() : ""))
+        .filter(Boolean);
+      if (noteLines.length) {
+        knowledgeContext = `${knowledgeContext ?? ""}\nNotas internas visibles para el agente:\n${noteLines.map((line) => `- ${line}`).join("\n")}`.trim();
+      }
+    } catch {
+      knowledgeContext = knowledgeContext;
+    }
+
     const systemInstruction = buildSystemInstruction({
       prompt: settings.systemPrompt,
       contactName: contactName || "Cliente",
@@ -455,6 +495,7 @@ export const runConversationAgent = async (job: AgentJob) => {
         (row) => `${row.title}: ${formatTime(row.starts_at as string)} – ${formatTime(row.ends_at as string)}`,
       ),
       commerceContext,
+      knowledgeContext,
     });
 
     const toolDeclarations = buildAgentToolDeclarations(settings, modules);
@@ -514,6 +555,7 @@ export const runConversationAgent = async (job: AgentJob) => {
             contactId: conversation.contact_id as number,
             turnId,
             channel: conversation.channel as string,
+            lastInboundText,
             settings,
             modules,
           },

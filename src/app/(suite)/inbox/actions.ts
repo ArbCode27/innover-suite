@@ -394,3 +394,47 @@ export const setConversationModeAction = async (
         : "Agente IA reactivado en esta conversación.",
   };
 };
+
+export const assignConversationAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = z
+    .object({
+      conversationId: z.number().int().positive(),
+      assignToMe: z.boolean(),
+    })
+    .safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: "La conversación no es válida." };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin", "agent"])) {
+    return { error: "No tienes permisos para asignar conversaciones." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("conversations")
+    .update(
+      parsed.data.assignToMe
+        ? { assigned_user_id: user.id, assigned_at: now, mode: "human", status: "in_progress", updated_at: now }
+        : { assigned_user_id: null, assigned_at: null, updated_at: now },
+    )
+    .eq("id", parsed.data.conversationId)
+    .eq("organization_id", membership.organizationId);
+
+  if (error) {
+    return { error: error.message || "No se pudo actualizar la asignación." };
+  }
+
+  revalidatePath("/inbox");
+  return { success: parsed.data.assignToMe ? "Conversación asignada a ti." : "Conversación liberada." };
+};
+

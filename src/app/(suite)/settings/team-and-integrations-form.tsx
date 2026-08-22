@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 
 const inviteSchema = z.object({
   email: z.email("Ingresa un correo válido"),
+  role: z.enum(["admin", "agent", "viewer", "kitchen", "cashier"]),
 });
 
 type InviteValues = z.infer<typeof inviteSchema>;
@@ -163,18 +164,23 @@ export const TeamAndIntegrationsForm = ({
   const messengerStatus = searchParams.get("ms");
   const googleStatus = searchParams.get("gc");
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const inviteForm = useForm<InviteValues>({
     resolver: zodResolver(inviteSchema),
-    defaultValues: { email: "" },
+    defaultValues: { email: "", role: "agent" },
   });
 
   const handleInvite = inviteForm.handleSubmit(async (values) => {
     setInviteMessage(null);
-    const result = await inviteAdvisorAction({ ...values, role: "agent" });
+    setInviteUrl(null);
+    const result = await inviteAdvisorAction(values);
     setInviteMessage(result?.success || result?.error || null);
+    if (result && "inviteUrl" in result && result.inviteUrl) {
+      setInviteUrl(result.inviteUrl);
+    }
   });
 
-  const inviteError = inviteMessage && !inviteMessage.toLowerCase().includes("registrada");
+  const inviteError = inviteMessage && !inviteMessage.toLowerCase().includes("lista");
   const instagramStatusMessage = igStatus ? INSTAGRAM_STATUS_LABELS[igStatus] : null;
   const instagramStatusIsError = Boolean(igStatus && !["connected", "disconnected"].includes(igStatus));
   const messengerStatusMessage = messengerStatus ? MESSENGER_STATUS_LABELS[messengerStatus] : null;
@@ -344,6 +350,17 @@ export const TeamAndIntegrationsForm = ({
                         className="sm:flex-1"
                         {...inviteForm.register("email")}
                       />
+                      <select
+                        aria-label="Rol"
+                        className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+                        {...inviteForm.register("role")}
+                      >
+                        <option value="agent">Asesor</option>
+                        <option value="admin">Admin</option>
+                        <option value="viewer">Viewer</option>
+                        <option value="kitchen">Cocina</option>
+                        <option value="cashier">Caja</option>
+                      </select>
                       <Button disabled={inviteForm.formState.isSubmitting} type="submit">
                         {inviteForm.formState.isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus />}
                         Invitar
@@ -356,6 +373,9 @@ export const TeamAndIntegrationsForm = ({
                   <p className={`text-sm ${inviteError ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
                     {inviteMessage}
                   </p>
+                ) : null}
+                {inviteUrl ? (
+                  <p className="break-all rounded-xl border border-primary/15 bg-muted/40 p-3 text-xs">{inviteUrl}</p>
                 ) : null}
               </form>
             ) : (

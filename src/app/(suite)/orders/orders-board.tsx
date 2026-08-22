@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, ChefHat, Loader2, Undo2 } from "lucide-react";
+import { Check, ChefHat, Loader2, Printer, Undo2, Wallet } from "lucide-react";
 import { toast } from "sonner";
-import { cancelOrderAction, updateOrderStatusAction } from "@/lib/commerce/actions";
+import { cancelOrderAction, updateOrderPaymentAction, updateOrderStatusAction } from "@/lib/commerce/actions";
 import { mapOrderRow, ORDER_SELECT } from "@/lib/commerce/orders";
 import {
   ACTIVE_ORDER_STATUSES,
@@ -13,6 +13,7 @@ import {
   KITCHEN_STATUS_LABELS,
   NEXT_ORDER_STATUS,
   ORDER_STATUS_LABELS,
+  PAYMENT_STATUS_LABELS,
   type OrderRecord,
   type OrderStatus,
 } from "@/lib/commerce/types";
@@ -28,6 +29,7 @@ type OrdersBoardProps = {
   kitchenMode: boolean;
   initialOrders: OrderRecord[];
   canManage: boolean;
+  canMarkPayment: boolean;
 };
 
 const isMetaChannel = (value: string | null): value is MetaChannel =>
@@ -42,12 +44,31 @@ const formatTime = (value: string) =>
     minute: "2-digit",
   }).format(new Date(value));
 
-export const OrdersBoard = ({ organizationId, kitchenMode, initialOrders, canManage }: OrdersBoardProps) => {
+const playNewOrderTone = () => {
+  try {
+    const context = new AudioContext();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = 880;
+    gain.gain.value = 0.08;
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.18);
+  } catch {
+    // El navegador puede bloquear audio hasta un gesto del usuario.
+  }
+};
+
+export const OrdersBoard = ({ organizationId, kitchenMode, initialOrders, canManage, canMarkPayment }: OrdersBoardProps) => {
   const [orders, setOrders] = useState(initialOrders);
   const [isPending, startTransition] = useTransition();
+  const knownIdsRef = useRef(new Set(initialOrders.map((order) => order.id)));
 
   useEffect(() => {
     setOrders(initialOrders);
+    knownIdsRef.current = new Set(initialOrders.map((order) => order.id));
   }, [initialOrders]);
 
   useEffect(() => {
@@ -66,7 +87,13 @@ export const OrdersBoard = ({ organizationId, kitchenMode, initialOrders, canMan
             .limit(80)
             .then(({ data, error }) => {
               if (error || !data) return;
-              setOrders(data.map((row) => mapOrderRow(row as Parameters<typeof mapOrderRow>[0])));
+              const next = data.map((row) => mapOrderRow(row as Parameters<typeof mapOrderRow>[0]));
+              const known = knownIdsRef.current;
+              if (next.some((order) => !known.has(order.id) && order.status === "received")) {
+                playNewOrderTone();
+              }
+              knownIdsRef.current = new Set(next.map((order) => order.id));
+              setOrders(next);
             });
         },
       )
@@ -97,6 +124,25 @@ export const OrdersBoard = ({ organizationId, kitchenMode, initialOrders, canMan
         return;
       }
       setOrders((current) => current.map((item) => (item.id === order.id ? { ...item, status: next } : item)));
+      toast.success(result.success);
+    });
+  };
+
+  const handlePay = (order: OrderRecord) => {
+    const nextStatus = order.paymentStatus === "paid" ? "unpaid" : "paid";
+    startTransition(async () => {
+      const result = await updateOrderPaymentAction({
+        orderId: order.id,
+        paymentStatus: nextStatus,
+        paymentMethod: nextStatus === "paid" ? "caja" : undefined,
+      });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setOrders((current) =>
+        current.map((item) => (item.id === order.id ? { ...item, paymentStatus: nextStatus } : item)),
+      );
       toast.success(result.success);
     });
   };
@@ -145,6 +191,14 @@ export const OrdersBoard = ({ organizationId, kitchenMode, initialOrders, canMan
                       </div>
                       <p className="text-sm font-medium">{formatMoney(order.total)}</p>
                     </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {PAYMENT_STATUS_LABELS[order.paymentStatus]}
+                      {order.taxAmount ? ` · ITBIS ${formatMoney(order.taxAmount)}` : ""}
+                      {order.deliveryFee ? ` · envío ${formatMoney(order.deliveryFee)}` : ""}
+                    </p>
+                    {order.deliveryAddress ? (
+                      <p className="mt-1 text-xs text-muted-foreground">{order.deliveryAddress}</p>
+                    ) : null}
                     <ul className="mt-2 space-y-1 text-sm">
                       {order.items.map((item) => (
                         <li key={item.id}>
@@ -176,7 +230,19 @@ export const OrdersBoard = ({ organizationId, kitchenMode, initialOrders, canMan
                         </Button>
                         {order.conversationId ? (
                           <Button asChild size="sm" variant="ghost">
-                            <Link href="/inbox">Chat</Link>
+                            <Link href={`/inbox?conversation=${order.conversationId}`}>Chat</Link>
+                          </Button>
+                        ) : null}
+                        <Button asChild size="sm" variant="ghost">
+                          <Link href={`/print/orders/${order.id}`} target="_blank">
+                            <Printer />
+                            Ticket
+                          </Link>
+                        </Button>
+                        {canMarkPayment ? (
+                          <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={() => handlePay(order)}>
+                            <Wallet />
+                            {order.paymentStatus === "paid" ? "Marcar impago" : "Cobrar"}
                           </Button>
                         ) : null}
                       </div>

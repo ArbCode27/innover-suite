@@ -1,6 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export type OrganizationRole = "owner" | "admin" | "agent" | "viewer";
+export type OrganizationRole = "owner" | "admin" | "agent" | "viewer" | "kitchen" | "cashier";
 
 export type OrganizationMembership = {
   organizationId: number;
@@ -59,10 +59,34 @@ export const getCurrentMembership = async (): Promise<OrganizationMembership | n
 export const hasOrganizationRole = (
   membership: OrganizationMembership | null,
   roles: OrganizationRole[],
-) => {
-  if (!membership) {
-    return false;
-  }
+) => Boolean(membership && roles.includes(membership.role));
 
-  return roles.includes(membership.role);
+export const canUseInbox = (membership: OrganizationMembership | null) =>
+  hasOrganizationRole(membership, ["owner", "admin", "agent", "viewer"]);
+
+export const canReplyInbox = (membership: OrganizationMembership | null) =>
+  hasOrganizationRole(membership, ["owner", "admin", "agent"]);
+
+export const canManageCatalog = (membership: OrganizationMembership | null) =>
+  hasOrganizationRole(membership, ["owner", "admin", "agent", "kitchen"]);
+
+export const canManageOrders = (membership: OrganizationMembership | null) =>
+  hasOrganizationRole(membership, ["owner", "admin", "agent", "kitchen", "cashier"]);
+
+export const canMarkPayment = (membership: OrganizationMembership | null) =>
+  hasOrganizationRole(membership, ["owner", "admin", "agent", "cashier"]);
+
+export const canViewReports = (membership: OrganizationMembership | null) =>
+  hasOrganizationRole(membership, ["owner", "admin"]);
+
+export const canManageOrganization = (membership: OrganizationMembership | null) =>
+  hasOrganizationRole(membership, ["owner", "admin"]);
+
+export const ROLE_LABELS: Record<OrganizationRole, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  agent: "Asesor",
+  viewer: "Viewer",
+  kitchen: "Cocina",
+  cashier: "Caja",
 };
