@@ -38,7 +38,7 @@ export const loadAgentCommerceSnapshot = async (organizationId: number) => {
 
   const { data: productRows } = await admin
     .from("products")
-    .select("id, name, kind, price, currency, category, active, track_stock, inventory_items(on_hand, track_stock)")
+    .select("id, name, kind, price, currency, category, active, track_stock, inventory_items!inventory_item_id(on_hand, track_stock)")
     .eq("organization_id", organizationId)
     .eq("active", true)
     .order("name", { ascending: true })

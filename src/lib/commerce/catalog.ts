@@ -50,7 +50,7 @@ export const loadCatalog = async (supabase: SupabaseClient, organizationId: numb
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, name, description, sku, category, kind, price, currency, active, track_stock, inventory_item_id, inventory_items(on_hand, reorder_point)",
+      "id, name, description, sku, category, kind, price, currency, active, track_stock, inventory_item_id, inventory_items!inventory_item_id(on_hand, reorder_point)",
     )
     .eq("organization_id", organizationId)
     .order("name", { ascending: true });
