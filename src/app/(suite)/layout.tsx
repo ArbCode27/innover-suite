@@ -77,7 +77,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
     <div className="min-h-screen bg-background text-foreground">
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_15%_15%,rgba(56,189,248,0.18),transparent_26rem),radial-gradient(circle_at_85%_25%,rgba(59,130,246,0.16),transparent_24rem)]" />
       <div className="relative mx-auto min-h-screen w-full max-w-[1800px] p-3 md:p-5">
-        <aside className="group/sidebar fixed top-3 left-3 z-50 hidden h-[calc(100vh-1.5rem)] w-[78px] overflow-y-auto rounded-3xl border border-primary/20 bg-card/80 p-3 shadow-2xl shadow-blue-950/25 backdrop-blur transition-all duration-300 hover:w-72 md:flex md:flex-col md:top-5 md:left-5 md:h-[calc(100vh-2.5rem)]">
+        <aside className="group/sidebar fixed top-3 left-3 z-50 hidden h-[calc(100vh-1.5rem)] w-[78px] min-w-0 overflow-x-hidden overflow-y-auto rounded-3xl border border-primary/20 bg-card/80 p-3 shadow-2xl shadow-blue-950/25 backdrop-blur transition-all duration-300 hover:w-72 md:flex md:flex-col md:top-5 md:left-5 md:h-[calc(100vh-2.5rem)]">
           <Link
             href="/home"
             className="hidden items-center gap-3 rounded-2xl border border-primary/35 bg-primary/15 p-3 group-hover/sidebar:flex"
