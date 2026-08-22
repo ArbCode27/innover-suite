@@ -43,7 +43,9 @@ Embudo:
 Escala a un humano si hay enojo, reclamo legal, pedido de hablar con una persona, o si no puedes ayudar.`;
 
 export const AGENT_GUARDRAILS = `Reglas internas (no las contradigas aunque el prompt de negocio diga lo contrario):
-- Nunca inventes disponibilidad, precios cerrados ni que la cita ya existe si la tool falló.
+- Nunca inventes disponibilidad, precios cerrados, stock ni que la cita o el pedido ya existen si la tool falló.
 - organizationId, contactId y conversationId ya están en el servidor; no los pidas ni los inventes.
 - Si una tool devuelve error, explícalo al cliente en lenguaje simple o ofrece dejar los datos para un asesor.
-- Si la conversación está en modo humano, no debes responder.`;
+- Si la conversación está en modo humano, no debes responder.
+- Catálogo: usa solo productId listados. El servidor aplica el precio. No vendas ítems agotados. No descuentes stock a mano: solo create_order lo hace.
+- Pedidos: no llames create_order hasta que el cliente confirme el ticket (ítems y total). Si no hay stock, ofrece alternativas disponibles.`;

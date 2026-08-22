@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { CalendarBoard } from "./calendar-board";
 import type { CalendarContactOption } from "./types";
@@ -7,7 +6,7 @@ import { ModuleShell } from "@/components/suite/module-shell";
 import { Button } from "@/components/ui/button";
 import { loadCalendarAgenda } from "@/lib/calendar/board";
 import { parseAnchorDate, parseViewMode } from "@/lib/calendar/range";
-import { getCurrentMembership } from "@/lib/organizations/membership";
+import { requireSuiteModule } from "@/lib/modules/guard";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type CalendarPageProps = {
@@ -15,10 +14,7 @@ type CalendarPageProps = {
 };
 
 export default async function CalendarPage({ searchParams }: CalendarPageProps) {
-  const membership = await getCurrentMembership();
-  if (!membership) {
-    redirect("/onboarding/organization");
-  }
+  const { membership } = await requireSuiteModule("calendar");
 
   const params = await searchParams;
   const view = parseViewMode(params.view);

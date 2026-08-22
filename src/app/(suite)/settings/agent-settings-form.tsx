@@ -5,6 +5,7 @@ import { Bot, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { saveAgentSettingsAction } from "@/lib/agent/actions";
 import type { AgentSettings } from "@/lib/agent/types";
+import type { OrganizationModules } from "@/lib/modules/constants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,12 +15,14 @@ import { Label } from "@/components/ui/label";
 type AgentSettingsFormProps = {
   canManageOrganization: boolean;
   settings: AgentSettings;
+  modules: OrganizationModules;
   geminiConfigured: boolean;
 };
 
 export const AgentSettingsForm = ({
   canManageOrganization,
   settings,
+  modules,
   geminiConfigured,
 }: AgentSettingsFormProps) => {
   const [enabled, setEnabled] = useState(settings.enabled);
@@ -109,22 +112,26 @@ export const AgentSettingsForm = ({
 
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">Function calling</legend>
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={toolsCalendar}
-              onCheckedChange={(value) => setToolsCalendar(value === true)}
-              disabled={!canManageOrganization}
-            />
-            Agendar citas en Google Calendar
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={toolsFunnel}
-              onCheckedChange={(value) => setToolsFunnel(value === true)}
-              disabled={!canManageOrganization}
-            />
-            Mover al cliente en el embudo
-          </label>
+          {modules.calendar ? (
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={toolsCalendar}
+                onCheckedChange={(value) => setToolsCalendar(value === true)}
+                disabled={!canManageOrganization}
+              />
+              Agendar citas en Google Calendar
+            </label>
+          ) : null}
+          {modules.funnels ? (
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={toolsFunnel}
+                onCheckedChange={(value) => setToolsFunnel(value === true)}
+                disabled={!canManageOrganization}
+              />
+              Mover al cliente en el embudo
+            </label>
+          ) : null}
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={toolsHandoff}
@@ -133,14 +140,21 @@ export const AgentSettingsForm = ({
             />
             Ceder la conversación a un asesor
           </label>
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={requireBookingConfirmation}
-              onCheckedChange={(value) => setRequireBookingConfirmation(value === true)}
-              disabled={!canManageOrganization}
-            />
-            Exigir confirmación del cliente antes de crear la cita
-          </label>
+          {modules.calendar ? (
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={requireBookingConfirmation}
+                onCheckedChange={(value) => setRequireBookingConfirmation(value === true)}
+                disabled={!canManageOrganization}
+              />
+              Exigir confirmación del cliente antes de crear la cita
+            </label>
+          ) : null}
+          {modules.orders ? (
+            <p className="text-xs leading-5 text-muted-foreground">
+              Pedidos e inventario están activos: la IA confirmará ventas con precios reales y descontará stock sola.
+            </p>
+          ) : null}
         </fieldset>
 
         {formError ? <p className="text-sm text-destructive">{formError}</p> : null}

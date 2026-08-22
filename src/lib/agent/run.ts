@@ -18,11 +18,16 @@ import {
 import { loadAgentSettings } from "@/lib/agent/settings";
 import { buildAgentToolDeclarations } from "@/lib/agent/tools";
 import type { AgentJob } from "@/lib/agent/types";
+import {
+  formatCommerceContext,
+  loadAgentCommerceSnapshot,
+} from "@/lib/commerce/agent";
 import { loadAgentFunnelSnapshot } from "@/lib/funnels/agent";
 import {
   escalateConversationToHuman,
   sendAiOutboundMessage,
 } from "@/lib/inbox/agent-outbound";
+import { loadOrganizationModulesAdmin } from "@/lib/modules/settings";
 import { buildGeminiMessageParts } from "@/lib/media/agent";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logMetaWebhook } from "@/lib/webhooks/meta/logger";
@@ -228,11 +233,17 @@ const buildSystemInstruction = (params: {
   currentStage: string;
   stages: Array<{ id: number; name: string }>;
   upcomingAppointments: string[];
+  commerceContext: string | null;
 }) => {
   const stageList = params.stages.map((stage) => `- ${stage.name} (stageId: ${stage.id})`).join("\n") || "- (sin etapas)";
   const appointments = params.upcomingAppointments.length
     ? params.upcomingAppointments.map((item) => `- ${item}`).join("\n")
     : "- ninguna";
+  const commerceBlock = params.commerceContext
+    ? `
+${params.commerceContext}
+- Confirmación de pedido obligatoria: sí. Resume el ticket y espera un sí antes de create_order.`
+    : "";
 
   return `${AGENT_GUARDRAILS}
 
@@ -250,7 +261,7 @@ Contexto de esta conversación:
 - Etapas disponibles:
 ${stageList}
 - Próximas citas del contacto:
-${appointments}`;
+${appointments}${commerceBlock}`;
 };
 
 const handleUnrecoverableTurn = async (params: {
@@ -349,6 +360,7 @@ export const runConversationAgent = async (job: AgentJob) => {
   const turnId = claimed.id;
   const admin = getSupabaseAdminClient();
   let lastModel: string | null = null;
+  const modules = await loadOrganizationModulesAdmin(job.organizationId);
 
   try {
     const { data: conversation } = await admin
@@ -399,16 +411,36 @@ export const runConversationAgent = async (job: AgentJob) => {
       return;
     }
 
-    const funnel = await loadAgentFunnelSnapshot(job.organizationId, conversation.contact_id as number);
-    const { data: appointmentRows } = await admin
-      .from("appointments")
-      .select("title, starts_at, ends_at")
-      .eq("organization_id", job.organizationId)
-      .eq("contact_id", conversation.contact_id)
-      .neq("status", "cancelled")
-      .gte("starts_at", new Date().toISOString())
-      .order("starts_at", { ascending: true })
-      .limit(5);
+    const funnel = modules.funnels
+      ? await loadAgentFunnelSnapshot(job.organizationId, conversation.contact_id as number)
+      : { funnelName: null, stages: [] as Array<{ id: number; name: string }>, currentStage: null };
+
+    const appointmentRows = modules.calendar
+      ? (
+          await admin
+            .from("appointments")
+            .select("title, starts_at, ends_at")
+            .eq("organization_id", job.organizationId)
+            .eq("contact_id", conversation.contact_id)
+            .neq("status", "cancelled")
+            .gte("starts_at", new Date().toISOString())
+            .order("starts_at", { ascending: true })
+            .limit(5)
+        ).data
+      : [];
+
+    let commerceContext: string | null = null;
+    if (modules.catalog) {
+      try {
+        const snapshot = await loadAgentCommerceSnapshot(job.organizationId);
+        commerceContext = formatCommerceContext(snapshot);
+      } catch (error) {
+        logMetaWebhook("warn", "agent.catalog_unavailable", {
+          organizationId: job.organizationId,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
 
     const systemInstruction = buildSystemInstruction({
       prompt: settings.systemPrompt,
@@ -422,9 +454,10 @@ export const runConversationAgent = async (job: AgentJob) => {
       upcomingAppointments: (appointmentRows ?? []).map(
         (row) => `${row.title}: ${formatTime(row.starts_at as string)} – ${formatTime(row.ends_at as string)}`,
       ),
+      commerceContext,
     });
 
-    const toolDeclarations = buildAgentToolDeclarations(settings);
+    const toolDeclarations = buildAgentToolDeclarations(settings, modules);
     let functionCallsPending = true;
     let finalText = "";
     let handoff = false;
@@ -480,7 +513,9 @@ export const runConversationAgent = async (job: AgentJob) => {
             conversationId: job.conversationId,
             contactId: conversation.contact_id as number,
             turnId,
+            channel: conversation.channel as string,
             settings,
+            modules,
           },
           call.name,
           call.args,

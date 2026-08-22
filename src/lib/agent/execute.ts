@@ -1,9 +1,14 @@
 import { createChatAppointment } from "@/lib/calendar/agent";
+import { cancelCommerceOrderForAgent, createCommerceOrderForAgent } from "@/lib/commerce/agent";
+import { formatMoney, isFulfillmentType } from "@/lib/commerce/types";
 import { moveContactToFunnelStage } from "@/lib/funnels/agent";
 import { insertSystemMessage } from "@/lib/inbox/agent-outbound";
+import type { OrganizationModules } from "@/lib/modules/constants";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
+  cancelOrderArgsSchema,
   createAppointmentArgsSchema,
+  createOrderArgsSchema,
   handoffToHumanArgsSchema,
   moveContactToStageArgsSchema,
 } from "@/lib/agent/tools";
@@ -15,7 +20,9 @@ type ToolContext = {
   conversationId: number;
   contactId: number;
   turnId: number;
+  channel: string;
   settings: AgentSettings;
+  modules: OrganizationModules;
 };
 
 const logToolRun = async (
@@ -43,7 +50,7 @@ export const executeAgentTool = async (
   rawArgs: Record<string, unknown>,
 ): Promise<{ ok: boolean; result: Record<string, unknown>; handoff?: boolean }> => {
   if (name === "create_appointment") {
-    if (!context.settings.toolsCalendar) {
+    if (!context.settings.toolsCalendar || !context.modules.calendar) {
       const result = { error: "La herramienta de calendario está desactivada." };
       await logToolRun(context, name, rawArgs, result, false);
       return { ok: false, result };
@@ -96,7 +103,7 @@ export const executeAgentTool = async (
   }
 
   if (name === "move_contact_to_stage") {
-    if (!context.settings.toolsFunnel) {
+    if (!context.settings.toolsFunnel || !context.modules.funnels) {
       const result = { error: "La herramienta de embudo está desactivada." };
       await logToolRun(context, name, rawArgs, result, false);
       return { ok: false, result };
@@ -175,6 +182,94 @@ export const executeAgentTool = async (
     const result = { ok: true, handoff: true };
     await logToolRun(context, name, parsed.data, result, true);
     return { ok: true, result, handoff: true };
+  }
+
+  if (name === "create_order") {
+    if (!context.modules.orders) {
+      const result = { error: "Los pedidos no están habilitados para este negocio." };
+      await logToolRun(context, name, rawArgs, result, false);
+      return { ok: false, result };
+    }
+
+    const parsed = createOrderArgsSchema.safeParse(rawArgs);
+    if (!parsed.success) {
+      const result = { error: parsed.error.issues[0]?.message ?? "Argumentos inválidos para el pedido." };
+      await logToolRun(context, name, rawArgs, result, false);
+      return { ok: false, result };
+    }
+
+    if (!parsed.data.confirmedByCustomer) {
+      const result = { error: "El cliente aún no confirmó el pedido. Resume ítems y total, y espera confirmación." };
+      await logToolRun(context, name, parsed.data, result, false);
+      return { ok: false, result };
+    }
+
+    const created = await createCommerceOrderForAgent({
+      organizationId: context.organizationId,
+      contactId: context.contactId,
+      conversationId: context.conversationId,
+      turnId: context.turnId,
+      channel: context.channel,
+      fulfillment: isFulfillmentType(parsed.data.fulfillment) ? parsed.data.fulfillment : "unspecified",
+      customerNote: parsed.data.customerNote,
+      items: parsed.data.items,
+    });
+
+    if (!created.ok) {
+      await logToolRun(context, name, parsed.data, { error: created.error }, false);
+      return { ok: false, result: { error: created.error } };
+    }
+
+    await insertSystemMessage({
+      organizationId: context.organizationId,
+      conversationId: context.conversationId,
+      content: `Pedido #${created.orderId}: ${created.summary}. Total ${formatMoney(created.total)}. Stock descontado.`,
+    });
+
+    const result = {
+      ok: true,
+      orderId: created.orderId,
+      total: created.total,
+      summary: created.summary,
+    };
+    await logToolRun(context, name, parsed.data, result, true);
+    return { ok: true, result };
+  }
+
+  if (name === "cancel_order") {
+    if (!context.modules.orders) {
+      const result = { error: "Los pedidos no están habilitados para este negocio." };
+      await logToolRun(context, name, rawArgs, result, false);
+      return { ok: false, result };
+    }
+
+    const parsed = cancelOrderArgsSchema.safeParse(rawArgs);
+    if (!parsed.success) {
+      const result = { error: parsed.error.issues[0]?.message ?? "Indica el pedido a cancelar." };
+      await logToolRun(context, name, rawArgs, result, false);
+      return { ok: false, result };
+    }
+
+    const cancelled = await cancelCommerceOrderForAgent({
+      organizationId: context.organizationId,
+      orderId: parsed.data.orderId,
+      reason: parsed.data.reason,
+    });
+
+    if (!cancelled.ok) {
+      await logToolRun(context, name, parsed.data, { error: cancelled.error }, false);
+      return { ok: false, result: { error: cancelled.error } };
+    }
+
+    await insertSystemMessage({
+      organizationId: context.organizationId,
+      conversationId: context.conversationId,
+      content: `Pedido #${cancelled.orderId} cancelado. Inventario restaurado. Motivo: ${parsed.data.reason}`,
+    });
+
+    const result = { ok: true, orderId: cancelled.orderId };
+    await logToolRun(context, name, parsed.data, result, true);
+    return { ok: true, result };
   }
 
   const result = { error: `Herramienta desconocida: ${name}` };

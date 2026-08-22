@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { APPOINTMENT_PURPOSES } from "@/lib/calendar/constants";
 import type { AgentSettings } from "@/lib/agent/types";
+import { FULFILLMENT_TYPES } from "@/lib/commerce/types";
+import type { OrganizationModules } from "@/lib/modules/constants";
 
 export const createAppointmentArgsSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -22,16 +24,51 @@ export const handoffToHumanArgsSchema = z.object({
   reason: z.string().trim().min(4).max(240),
 });
 
+export const createOrderArgsSchema = z.object({
+  items: z
+    .array(
+      z.preprocess(
+        (value) => {
+          if (!value || typeof value !== "object") return value;
+          const row = value as Record<string, unknown>;
+          return {
+            productId: row.productId ?? row.product_id,
+            quantity: row.quantity,
+            notes: row.notes,
+          };
+        },
+        z.object({
+          productId: z.coerce.number().int().positive(),
+          quantity: z.coerce.number().positive().max(1000),
+          notes: z.string().trim().max(240).optional(),
+        }),
+      ),
+    )
+    .min(1)
+    .max(40),
+  fulfillment: z.enum(FULFILLMENT_TYPES).optional(),
+  customerNote: z.string().trim().max(400).optional(),
+  confirmedByCustomer: z.boolean(),
+});
+
+export const cancelOrderArgsSchema = z.object({
+  orderId: z.coerce.number().int().positive(),
+  reason: z.string().trim().min(4).max(240),
+});
+
 export type GeminiFunctionDeclaration = {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
 };
 
-export const buildAgentToolDeclarations = (settings: AgentSettings): GeminiFunctionDeclaration[] => {
+export const buildAgentToolDeclarations = (
+  settings: AgentSettings,
+  modules?: OrganizationModules,
+): GeminiFunctionDeclaration[] => {
   const tools: GeminiFunctionDeclaration[] = [];
 
-  if (settings.toolsCalendar) {
+  if (settings.toolsCalendar && modules?.calendar !== false) {
     tools.push({
       name: "create_appointment",
       description:
@@ -60,7 +97,7 @@ export const buildAgentToolDeclarations = (settings: AgentSettings): GeminiFunct
     });
   }
 
-  if (settings.toolsFunnel) {
+  if (settings.toolsFunnel && modules?.funnels !== false) {
     tools.push({
       name: "move_contact_to_stage",
       description:
@@ -88,6 +125,56 @@ export const buildAgentToolDeclarations = (settings: AgentSettings): GeminiFunct
           reason: { type: "STRING", description: "Por qué escalas." },
         },
         required: ["reason"],
+      },
+    });
+  }
+
+  if (modules?.orders) {
+    tools.push({
+      name: "create_order",
+      description:
+        "Crea un pedido con precios e inventario del catálogo. Solo úsala cuando el cliente confirmó los ítems. El servidor descuenta stock; si falta existencias, la tool falla y debes ofrecer alternativas.",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          items: {
+            type: "ARRAY",
+            description: "Líneas del pedido. productId sale del catálogo del contexto.",
+            items: {
+              type: "OBJECT",
+              properties: {
+                productId: { type: "INTEGER", description: "ID del producto del catálogo." },
+                quantity: { type: "NUMBER", description: "Cantidad pedida." },
+                notes: { type: "STRING", description: "Notas de la línea, por ejemplo sin cebolla." },
+              },
+              required: ["productId", "quantity"],
+            },
+          },
+          fulfillment: {
+            type: "STRING",
+            format: "enum",
+            enum: [...FULFILLMENT_TYPES],
+            description: "pickup, delivery, dine_in o unspecified.",
+          },
+          customerNote: { type: "STRING", description: "Nota general del cliente." },
+          confirmedByCustomer: {
+            type: "BOOLEAN",
+            description: "true solo si el cliente confirmó el pedido.",
+          },
+        },
+        required: ["items", "confirmedByCustomer"],
+      },
+    });
+    tools.push({
+      name: "cancel_order",
+      description: "Cancela un pedido de este negocio y restaura el inventario descontado.",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          orderId: { type: "INTEGER", description: "ID del pedido a cancelar." },
+          reason: { type: "STRING", description: "Por qué se cancela." },
+        },
+        required: ["orderId", "reason"],
       },
     });
   }

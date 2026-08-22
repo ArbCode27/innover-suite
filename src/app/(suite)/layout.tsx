@@ -2,14 +2,18 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import {
   CalendarDays,
+  ClipboardList,
   Contact,
   Inbox,
   KanbanSquare,
   LogOut,
+  Package,
   Settings,
   Sparkles,
 } from "lucide-react";
 import { signOut } from "@/lib/auth/actions";
+import { DEFAULT_MODULES, type OrganizationModules } from "@/lib/modules/constants";
+import { loadOrganizationModules } from "@/lib/modules/settings";
 import { getCurrentMembership } from "@/lib/organizations/membership";
 import { ThemeToggle } from "@/components/suite/theme-toggle";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -18,20 +22,33 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 const navItems = [
-  { href: "/inbox", label: "Chats", icon: Inbox },
-  { href: "/funnels", label: "Embudos", icon: KanbanSquare },
-  { href: "/calendar", label: "Calendario", icon: CalendarDays },
-  { href: "/contacts", label: "Contactos", icon: Contact },
-  { href: "/settings", label: "Ajustes", icon: Settings },
+  { href: "/inbox", label: "Chats", icon: Inbox, module: null },
+  { href: "/orders", label: "Pedidos", icon: ClipboardList, module: "orders" as const },
+  { href: "/inventory", label: "Inventario", icon: Package, module: "catalog" as const },
+  { href: "/funnels", label: "Embudos", icon: KanbanSquare, module: "funnels" as const },
+  { href: "/calendar", label: "Calendario", icon: CalendarDays, module: "calendar" as const },
+  { href: "/contacts", label: "Contactos", icon: Contact, module: null },
+  { href: "/settings", label: "Ajustes", icon: Settings, module: null },
 ];
+
+const visibleNavItems = (modules: OrganizationModules) =>
+  navItems
+    .filter((item) => !item.module || modules[item.module])
+    .map((item) =>
+      item.href === "/orders" && modules.kitchen ? { ...item, label: "Comandas" } : item,
+    );
 
 const SuiteLayout = async ({ children }: { children: ReactNode }) => {
   const supabase = await createSupabaseServerClient();
   const membership = await getCurrentMembership();
+  const modules = membership
+    ? await loadOrganizationModules(supabase, membership.organizationId)
+    : DEFAULT_MODULES;
   const {
     data: { user },
   } = await supabase.auth.getUser();
   const initials = user?.email?.slice(0, 2).toUpperCase() ?? "IS";
+  const items = visibleNavItems(modules);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -53,7 +70,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
             </span>
           </Link>
           <nav className="mt-6 space-y-2">
-            {navItems.map((item) => (
+            {items.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

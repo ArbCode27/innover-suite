@@ -1,16 +1,12 @@
-import { redirect } from "next/navigation";
 import { ModuleShell } from "@/components/suite/module-shell";
 import { loadFunnelBoard } from "@/lib/funnels/board";
-import { getCurrentMembership } from "@/lib/organizations/membership";
+import { requireSuiteModule } from "@/lib/modules/guard";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { FunnelBoard } from "./funnel-board";
 import type { FunnelContactOption } from "./types";
 
 export default async function FunnelsPage() {
-  const membership = await getCurrentMembership();
-  if (!membership) {
-    redirect("/onboarding/organization");
-  }
+  const { membership } = await requireSuiteModule("funnels");
 
   const supabase = await createSupabaseServerClient();
   const board = await loadFunnelBoard(supabase, membership.organizationId);

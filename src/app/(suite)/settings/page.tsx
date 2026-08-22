@@ -1,12 +1,15 @@
 import { Suspense } from "react";
 import { TeamAndIntegrationsForm } from "./team-and-integrations-form";
 import { AgentSettingsForm } from "./agent-settings-form";
+import { ModulesSettingsForm } from "./modules-settings-form";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ModuleShell } from "@/components/suite/module-shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { loadAgentSettings, getDefaultAgentSettings } from "@/lib/agent/settings";
 import { env } from "@/lib/config/env";
+import { DEFAULT_MODULES } from "@/lib/modules/constants";
+import { loadOrganizationModules } from "@/lib/modules/settings";
 
 export default async function SettingsPage() {
   const membership = await getCurrentMembership();
@@ -49,11 +52,14 @@ export default async function SettingsPage() {
   const agentSettings = membership
     ? await loadAgentSettings(membership.organizationId)
     : getDefaultAgentSettings(0);
+  const modules = membership
+    ? await loadOrganizationModules(supabase, membership.organizationId)
+    : DEFAULT_MODULES;
 
   return (
     <ModuleShell
       title="Configuración del CRM"
-      description={`Conecta canales, calendario, agente IA y equipo para ${membership?.organizationName || "tu organización"}. ${connectedCount} de 3 integraciones activas.`}
+      description={`Conecta canales, define las funciones del negocio, calendario, agente IA y equipo para ${membership?.organizationName || "tu organización"}. ${connectedCount} de 3 integraciones activas.`}
       eyebrow="Integraciones"
     >
       <div className="space-y-8">
@@ -83,9 +89,11 @@ export default async function SettingsPage() {
             organizationName={membership?.organizationName || "Organización"}
           />
         </Suspense>
+        <ModulesSettingsForm canManageOrganization={canManageOrganization} modules={modules} />
         <AgentSettingsForm
           canManageOrganization={canManageOrganization}
           settings={agentSettings}
+          modules={modules}
           geminiConfigured={Boolean(env.geminiApiKey)}
         />
       </div>
