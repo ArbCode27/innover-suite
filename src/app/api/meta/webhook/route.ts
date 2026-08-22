@@ -4,6 +4,7 @@ import { handleMetaVerification } from "@/lib/webhooks/meta/verify-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export const GET = (request: NextRequest) => handleMetaVerification(request);
 

@@ -1,4 +1,4 @@
-import { DEFAULT_AGENT_PROMPT, AGENT_MODEL } from "@/lib/agent/constants";
+import { AGENT_MODEL, DEFAULT_AGENT_PROMPT, RETIRED_AGENT_MODELS } from "@/lib/agent/constants";
 import type { AgentSettings } from "@/lib/agent/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -18,7 +18,7 @@ const mapSettings = (row: SettingsRow): AgentSettings => ({
   organizationId: row.organization_id,
   enabled: row.enabled,
   systemPrompt: row.system_prompt || DEFAULT_AGENT_PROMPT,
-  model: row.model || AGENT_MODEL,
+  model: row.model && !RETIRED_AGENT_MODELS.has(row.model) ? row.model : AGENT_MODEL,
   toolsCalendar: row.tools_calendar,
   toolsFunnel: row.tools_funnel,
   toolsHandoff: row.tools_handoff,

@@ -1,0 +1,37 @@
+import { NextRequest, NextResponse } from "next/server";
+import { retryFailedAgentTurns } from "@/lib/agent/run";
+import { env } from "@/lib/config/env";
+import { logMetaWebhook } from "@/lib/webhooks/meta/logger";
+
+const hasValidCronSecret = (request: NextRequest) => {
+  if (!env.cronSecret) {
+    return false;
+  }
+
+  const authHeader = request.headers.get("authorization");
+  const tokenFromHeader = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length).trim()
+    : null;
+  const tokenFromCustomHeader = request.headers.get("x-cron-secret");
+  return tokenFromHeader === env.cronSecret || tokenFromCustomHeader === env.cronSecret;
+};
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+export async function GET(request: NextRequest) {
+  if (!hasValidCronSecret(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const retried = await retryFailedAgentTurns(20);
+    logMetaWebhook("info", "agent.retry_cron_completed", { retried });
+    return NextResponse.json({ ok: true, retried });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    logMetaWebhook("error", "agent.retry_cron_failed", { error: message });
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

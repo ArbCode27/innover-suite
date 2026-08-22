@@ -1,6 +1,21 @@
-export const AGENT_MODEL = "gemini-2.0-flash";
+export const AGENT_MODEL = "gemini-3.6-flash";
+export const AGENT_FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite"] as const;
+export const RETIRED_AGENT_MODELS = new Set([
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+]);
 export const AGENT_HISTORY_LIMIT = 20;
 export const AGENT_MAX_TOOL_TURNS = 4;
+export const AGENT_MAX_RETRIES = 3;
+export const AGENT_PRIMARY_ATTEMPTS = 1;
+export const AGENT_FALLBACK_ATTEMPTS = 1;
+export const AGENT_RETRY_BASE_MS = 60_000;
+export const AGENT_STALE_RUNNING_MS = 90_000;
+export const AGENT_COURTESY_MESSAGE =
+  "Dame un momento, estoy revisando tu mensaje y te respondo enseguida.";
+export const AGENT_HANDOFF_MESSAGE =
+  "Te está atendiendo un asesor de nuestro equipo. En breve te escriben.";
 
 export const DEFAULT_AGENT_PROMPT = `Eres el asesor virtual de la organización. Atiendes leads por chat (WhatsApp, Instagram o Messenger) en español dominicano, claro y breve.
 

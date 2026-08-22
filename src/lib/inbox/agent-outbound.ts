@@ -108,10 +108,35 @@ export const insertSystemMessage = async (params: {
   });
 };
 
+export const escalateConversationToHuman = async (params: {
+  organizationId: number;
+  conversationId: number;
+  reason: string;
+}) => {
+  const admin = getSupabaseAdminClient();
+  const now = new Date().toISOString();
+  await admin
+    .from("conversations")
+    .update({
+      mode: "human",
+      status: "in_progress",
+      updated_at: now,
+    })
+    .eq("id", params.conversationId)
+    .eq("organization_id", params.organizationId);
+
+  await insertSystemMessage({
+    organizationId: params.organizationId,
+    conversationId: params.conversationId,
+    content: `Conversación cedida a un asesor. Motivo: ${params.reason}`,
+  });
+};
+
 export const sendAiOutboundMessage = async (params: {
   organizationId: number;
   conversationId: number;
   text: string;
+  metadata?: Record<string, unknown>;
 }) => {
   const text = params.text.trim();
   if (!text) {
@@ -158,6 +183,7 @@ export const sendAiOutboundMessage = async (params: {
         delivery_status: "pending",
         recipient_id: recipientId,
         channel: typedConversation.channel,
+        ...params.metadata,
       },
       created_at: now,
     })
@@ -184,6 +210,7 @@ export const sendAiOutboundMessage = async (params: {
         delivery_status: outboundResult.ok ? "sent" : "failed",
         recipient_id: recipientId,
         channel: typedConversation.channel,
+        ...params.metadata,
         ...(outboundResult.ok ? {} : { delivery_error: outboundResult.errorMessage }),
       },
     })
