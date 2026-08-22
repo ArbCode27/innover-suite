@@ -218,6 +218,13 @@ export const InventoryBoard = ({ products, promotions, movements, canManage }: I
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium">{product.name}</p>
                       <Badge variant="outline">{PRODUCT_KIND_LABELS[product.kind]}</Badge>
+                      {product.kind === "service" || !product.trackStock ? (
+                        <Badge variant="outline">Sin control de stock</Badge>
+                      ) : (
+                        <Badge variant={isLow ? "destructive" : "secondary"}>
+                          {product.onHand ?? 0} en mano
+                        </Badge>
+                      )}
                       {product.active ? null : <Badge variant="destructive">Inactivo</Badge>}
                       {isLow ? <Badge variant="destructive">Stock bajo</Badge> : null}
                     </div>
@@ -225,9 +232,6 @@ export const InventoryBoard = ({ products, promotions, movements, canManage }: I
                       {formatMoney(product.price, product.currency)}
                       {product.sku ? ` · SKU ${product.sku}` : ""}
                       {product.category ? ` · ${product.category}` : ""}
-                      {product.kind === "service" || !product.trackStock
-                        ? " · sin control de stock"
-                        : ` · ${product.onHand ?? 0} en mano`}
                     </p>
                   </div>
                   {canManage ? (
