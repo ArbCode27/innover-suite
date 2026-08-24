@@ -15,7 +15,7 @@ import {
   type GeminiContent,
   type GeminiTurnFailure,
 } from "@/lib/agent/gemini";
-import { isWithinBusinessHours } from "@/lib/agent/hours";
+import { areAdvisorsAvailable, isAfterHoursAiCoverage } from "@/lib/agent/hours";
 import { formatKnowledgeContext, loadAgentSettings, loadKnowledgeArticles } from "@/lib/agent/settings";
 import { buildAgentToolDeclarations } from "@/lib/agent/tools";
 import type { AgentJob } from "@/lib/agent/types";
@@ -26,6 +26,7 @@ import {
 import { loadAgentFunnelSnapshot } from "@/lib/funnels/agent";
 import {
   escalateConversationToHuman,
+  insertSystemMessage,
   sendAiOutboundMessage,
 } from "@/lib/inbox/agent-outbound";
 import { loadOrganizationModulesAdmin } from "@/lib/modules/settings";
@@ -236,6 +237,9 @@ const buildSystemInstruction = (params: {
   upcomingAppointments: string[];
   commerceContext: string | null;
   knowledgeContext: string | null;
+  advisorsAvailable: boolean;
+  closedMessage: string;
+  officeTimezone: string;
 }) => {
   const stageList = params.stages.map((stage) => `- ${stage.name} (stageId: ${stage.id})`).join("\n") || "- (sin etapas)";
   const appointments = params.upcomingAppointments.length
@@ -254,10 +258,13 @@ Prompt de negocio:
 ${params.prompt}
 
 Contexto de esta conversación:
-- Fecha de hoy: ${params.today} (${CALENDAR_TIME_ZONE})
+- Fecha de hoy: ${params.today} (${params.officeTimezone})
 - Canal: ${params.channel}
 - Contacto: ${params.contactName}
 - Confirmación de cita obligatoria: ${params.requireConfirmation ? "sí" : "no"}
+- IA: activa 24/7
+- Asesores humanos: ${params.advisorsAvailable ? "disponibles ahora (horario de oficina)" : "no disponibles ahora (oficina cerrada)"}
+${params.advisorsAvailable ? "" : `- Si piden un asesor, NO uses handoff_to_human. Explica el horario y sigue ayudando. Tono sugerido: "${params.closedMessage}"`}
 - El cliente puede enviar texto, fotos, audios, videos, documentos o ubicaciones. Interpreta esas entradas. No digas que no puedes ver archivos si te llegaron.
 - Embudo: ${params.funnelName || "no configurado"}
 - Etapa actual: ${params.currentStage}
@@ -273,22 +280,33 @@ const handleUnrecoverableTurn = async (params: {
   retryCount: number;
   courtesySent: boolean;
   failure: GeminiTurnFailure;
+  advisorsAvailable: boolean;
+  closedMessage: string;
 }) => {
   const nextRetryCount = params.retryCount + 1;
   const reachedLimit = nextRetryCount >= AGENT_MAX_RETRIES || !params.failure.retryable;
 
   if (reachedLimit) {
-    await sendAiOutboundMessage({
-      organizationId: params.job.organizationId,
-      conversationId: params.job.conversationId,
-      text: AGENT_HANDOFF_MESSAGE,
-      metadata: { source: "agent_fallback", kind: "handoff" },
-    });
-    await escalateConversationToHuman({
-      organizationId: params.job.organizationId,
-      conversationId: params.job.conversationId,
-      reason: "El agente no pudo responder tras varios reintentos.",
-    });
+    if (params.advisorsAvailable) {
+      await sendAiOutboundMessage({
+        organizationId: params.job.organizationId,
+        conversationId: params.job.conversationId,
+        text: AGENT_HANDOFF_MESSAGE,
+        metadata: { source: "agent_fallback", kind: "handoff" },
+      });
+      await escalateConversationToHuman({
+        organizationId: params.job.organizationId,
+        conversationId: params.job.conversationId,
+        reason: "El agente no pudo responder tras varios reintentos.",
+      });
+    } else {
+      await sendAiOutboundMessage({
+        organizationId: params.job.organizationId,
+        conversationId: params.job.conversationId,
+        text: params.closedMessage,
+        metadata: { source: "agent_fallback", kind: "office_closed" },
+      });
+    }
     await finishTurn(params.turnId, {
       status: "failed",
       error: params.failure.error,
@@ -364,6 +382,7 @@ export const runConversationAgent = async (job: AgentJob) => {
   const admin = getSupabaseAdminClient();
   let lastModel: string | null = null;
   const modules = await loadOrganizationModulesAdmin(job.organizationId);
+  const advisorsAvailable = areAdvisorsAvailable(settings.businessHours);
 
   try {
     const { data: conversation } = await admin
@@ -373,20 +392,38 @@ export const runConversationAgent = async (job: AgentJob) => {
       .eq("organization_id", job.organizationId)
       .maybeSingle();
 
-    if (!conversation?.id || conversation.mode !== "ai" || !conversation.contact_id) {
+    if (!conversation?.id || !conversation.contact_id) {
       await finishTurn(turnId, { status: "skipped", error: "Conversación no elegible para el agente." });
       return;
     }
 
-    if (!isWithinBusinessHours(settings.businessHours)) {
-      await sendAiOutboundMessage({
+    const shouldCoverAfterHours =
+      conversation.mode === "human" &&
+      !advisorsAvailable &&
+      isAfterHoursAiCoverage(settings.businessHours);
+
+    if (conversation.mode !== "ai" && !shouldCoverAfterHours) {
+      await finishTurn(turnId, { status: "skipped", error: "Conversación no elegible para el agente." });
+      return;
+    }
+
+    if (shouldCoverAfterHours) {
+      const now = new Date().toISOString();
+      await admin
+        .from("conversations")
+        .update({
+          mode: "ai",
+          assigned_user_id: null,
+          assigned_at: null,
+          updated_at: now,
+        })
+        .eq("id", job.conversationId)
+        .eq("organization_id", job.organizationId);
+      await insertSystemMessage({
         organizationId: job.organizationId,
         conversationId: job.conversationId,
-        text: settings.closedMessage,
-        metadata: { source: "agent", closedHours: true },
+        content: "Fuera de horario de oficina. La IA continúa la atención.",
       });
-      await finishTurn(turnId, { status: "skipped", error: "Fuera de horario del agente." });
-      return;
     }
 
     const contactNameRaw = conversation.contacts as { full_name?: string } | { full_name?: string }[] | null;
@@ -496,6 +533,9 @@ export const runConversationAgent = async (job: AgentJob) => {
       ),
       commerceContext,
       knowledgeContext,
+      advisorsAvailable,
+      closedMessage: settings.closedMessage,
+      officeTimezone: settings.businessHours.timezone || CALENDAR_TIME_ZONE,
     });
 
     const toolDeclarations = buildAgentToolDeclarations(settings, modules);
@@ -528,6 +568,8 @@ export const runConversationAgent = async (job: AgentJob) => {
           turnId,
           retryCount: claimed.retryCount,
           courtesySent: claimed.courtesySent,
+          advisorsAvailable,
+          closedMessage: settings.closedMessage,
           failure: generation,
         });
         return;
@@ -582,6 +624,8 @@ export const runConversationAgent = async (job: AgentJob) => {
             turnId,
             retryCount: claimed.retryCount,
             courtesySent: claimed.courtesySent,
+            advisorsAvailable,
+            closedMessage: settings.closedMessage,
             failure: closing,
           });
           return;
@@ -614,6 +658,8 @@ export const runConversationAgent = async (job: AgentJob) => {
         turnId,
         retryCount: claimed.retryCount,
         courtesySent: claimed.courtesySent,
+        advisorsAvailable,
+        closedMessage: settings.closedMessage,
         failure: {
           ok: false,
           model: lastModel,
@@ -645,6 +691,8 @@ export const runConversationAgent = async (job: AgentJob) => {
       turnId,
       retryCount: claimed.retryCount,
       courtesySent: claimed.courtesySent,
+      advisorsAvailable,
+      closedMessage: settings.closedMessage,
       failure: {
         ok: false,
         model: lastModel,

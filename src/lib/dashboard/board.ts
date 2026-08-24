@@ -103,6 +103,15 @@ export type DashboardStageFunnel = {
   lostReasons: Array<{ reason: string; count: number }>;
 };
 
+export type DashboardFinanceComparison = {
+  revenue: number;
+  previousRevenue: number;
+  orders: number;
+  previousOrders: number;
+  revenueGrowthPercent: number | null;
+  ordersGrowthPercent: number | null;
+};
+
 export type DashboardFinance = {
   aov: number;
   revenue30d: number;
@@ -114,6 +123,12 @@ export type DashboardFinance = {
   byChannel: Array<{ channel: string; revenue: number; orders: number }>;
   byAgent: Array<{ userId: string; label: string; revenue: number; orders: number }>;
   daily: Array<{ date: string; revenue: number; orders: number }>;
+  previousDaily: Array<{ date: string; revenue: number; orders: number }>;
+  comparisons: {
+    weekly: DashboardFinanceComparison;
+    monthly: DashboardFinanceComparison;
+    annual: DashboardFinanceComparison;
+  };
 };
 
 export type DashboardRetention = {
@@ -150,7 +165,21 @@ export type DashboardProductRow = {
 export type DashboardRestaurant = {
   topProducts: DashboardProductRow[];
   peakHour: { hour: number; orders: number } | null;
+  hourlyOrders: Array<{ hour: number; orders: number }>;
   aov: number;
+  aovPrev: number;
+  ordersCount: number;
+};
+
+export type DashboardServicesComparison = {
+  scheduled: number;
+  previousScheduled: number;
+  done: number;
+  previousDone: number;
+  cancelled: number;
+  previousCancelled: number;
+  scheduledGrowthPercent: number | null;
+  doneGrowthPercent: number | null;
 };
 
 export type DashboardServices = {
@@ -160,6 +189,11 @@ export type DashboardServices = {
   showRate: number | null;
   byPurpose: Array<{ purpose: string; count: number }>;
   topTitles: Array<{ title: string; count: number }>;
+  comparisons: {
+    weekly: DashboardServicesComparison;
+    monthly: DashboardServicesComparison;
+    annual: DashboardServicesComparison;
+  };
 };
 
 export type DashboardRetail = {
@@ -232,6 +266,68 @@ const growthPercent = (current: number, previous: number) => {
   return ((current - previous) / previous) * 100;
 };
 
+const summarizeOrders = (
+  rows: Array<{ created_at: string; status: string; total: number | string }>,
+  startIso: string,
+  endIso?: string,
+) => {
+  const start = new Date(startIso).getTime();
+  const end = endIso ? new Date(endIso).getTime() : Number.POSITIVE_INFINITY;
+  const active = rows.filter((row) => {
+    if (row.status === "cancelled") return false;
+    const time = new Date(row.created_at).getTime();
+    return time >= start && time < end;
+  });
+  return {
+    revenue: active.reduce((sum, row) => sum + toNumber(row.total), 0),
+    orders: active.length,
+  };
+};
+
+const toFinanceComparison = (
+  current: { revenue: number; orders: number },
+  previous: { revenue: number; orders: number },
+) => ({
+  revenue: current.revenue,
+  previousRevenue: previous.revenue,
+  orders: current.orders,
+  previousOrders: previous.orders,
+  revenueGrowthPercent: growthPercent(current.revenue, previous.revenue),
+  ordersGrowthPercent: growthPercent(current.orders, previous.orders),
+});
+
+const toServicesComparison = (
+  current: { scheduled: number; done: number; cancelled: number },
+  previous: { scheduled: number; done: number; cancelled: number },
+): DashboardServicesComparison => ({
+  scheduled: current.scheduled,
+  previousScheduled: previous.scheduled,
+  done: current.done,
+  previousDone: previous.done,
+  cancelled: current.cancelled,
+  previousCancelled: previous.cancelled,
+  scheduledGrowthPercent: growthPercent(current.scheduled, previous.scheduled),
+  doneGrowthPercent: growthPercent(current.done, previous.done),
+});
+
+const summarizeAppointments = (
+  rows: Array<{ starts_at: string; status: string }>,
+  startIso: string,
+  endIso?: string,
+) => {
+  const start = new Date(startIso).getTime();
+  const end = endIso ? new Date(endIso).getTime() : Number.POSITIVE_INFINITY;
+  const inWindow = rows.filter((row) => {
+    const time = new Date(row.starts_at).getTime();
+    return time >= start && time < end;
+  });
+  return {
+    scheduled: inWindow.filter((row) => row.status !== "cancelled").length,
+    done: inWindow.filter((row) => row.status === "done").length,
+    cancelled: inWindow.filter((row) => row.status === "cancelled").length,
+  };
+};
+
 const percentOrNull = (value: number, total: number) => {
   if (!total) return null;
   return Math.round((value / total) * 100);
@@ -244,6 +340,35 @@ const localDateKey = (iso: string) =>
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(iso));
+
+const localDateKeyFromOffset = (offset: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() - offset);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: CALENDAR_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+};
+
+const buildDailySeries = (
+  rows: Array<{ created_at: string; total: number | string }>,
+  days: number,
+  endOffset = 0,
+) => {
+  const dailyMap = new Map<string, { revenue: number; orders: number }>();
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    dailyMap.set(localDateKeyFromOffset(offset + endOffset), { revenue: 0, orders: 0 });
+  }
+  rows.forEach((row) => {
+    const current = dailyMap.get(localDateKey(row.created_at));
+    if (!current) return;
+    current.revenue += toNumber(row.total);
+    current.orders += 1;
+  });
+  return [...dailyMap.entries()].map(([date, value]) => ({ date, ...value }));
+};
 
 const localWeekdayHour = (iso: string) => {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -487,7 +612,10 @@ export const loadDashboardBoard = async (
   const now = Date.now();
   const since30 = startOfRangeIso(30);
   const since60 = startOfRangeIso(60);
-  const since90 = startOfRangeIso(90);
+  const since7 = startOfRangeIso(7);
+  const since14 = startOfRangeIso(14);
+  const since365 = startOfRangeIso(365);
+  const since730 = startOfRangeIso(730);
   const [
 
     today,
@@ -527,7 +655,7 @@ export const loadDashboardBoard = async (
             "id, total, status, payment_status, channel, conversation_id, contact_id, created_at, order_items(product_id, name_snapshot, quantity, unit_price)",
           )
           .eq("organization_id", organizationId)
-          .gte("created_at", since90)
+          .gte("created_at", since730)
           .order("created_at", { ascending: false })
           .limit(DASHBOARD_ORDER_LIMIT)
       : Promise.resolve(emptyList()),
@@ -561,8 +689,8 @@ export const loadDashboardBoard = async (
           .from("appointments")
           .select("id, title, status, purpose, starts_at")
           .eq("organization_id", organizationId)
-          .gte("starts_at", since30)
-          .limit(500)
+          .gte("starts_at", since730)
+          .limit(1500)
       : Promise.resolve(emptyList()),
     supabase
       .from("channel_accounts")
@@ -921,26 +1049,6 @@ export const loadDashboardBoard = async (
       channelMap.set(key, current);
     });
 
-    const dailyMap = new Map<string, { revenue: number; orders: number }>();
-    for (let offset = 13; offset >= 0; offset -= 1) {
-      const date = new Date();
-      date.setDate(date.getDate() - offset);
-      const key = new Intl.DateTimeFormat("en-CA", {
-        timeZone: CALENDAR_TIME_ZONE,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(date);
-      dailyMap.set(key, { revenue: 0, orders: 0 });
-    }
-    activeRecent.forEach((row) => {
-      const key = localDateKey(row.created_at);
-      const current = dailyMap.get(key);
-      if (!current) return;
-      current.revenue += toNumber(row.total);
-      current.orders += 1;
-    });
-
     finance = {
       aov: activeRecent.length
         ? activeRecent.reduce((sum, row) => sum + toNumber(row.total), 0) / activeRecent.length
@@ -963,7 +1071,22 @@ export const loadDashboardBoard = async (
           orders: value.orders,
         }))
         .sort((a, b) => b.revenue - a.revenue),
-      daily: [...dailyMap.entries()].map(([date, value]) => ({ date, ...value })),
+      daily: buildDailySeries(activeRecent, 30),
+      previousDaily: buildDailySeries(activePrevious, 30, 30),
+      comparisons: {
+        weekly: toFinanceComparison(
+          summarizeOrders(orderRows, since7),
+          summarizeOrders(orderRows, since14, since7),
+        ),
+        monthly: toFinanceComparison(
+          summarizeOrders(orderRows, since30),
+          summarizeOrders(orderRows, since60, since30),
+        ),
+        annual: toFinanceComparison(
+          summarizeOrders(orderRows, since365),
+          summarizeOrders(orderRows, since730, since365),
+        ),
+      },
     };
 
     const ordersByContact = new Map<number, { count: number; first: number; last: number; revenue: number }>();
@@ -1118,37 +1241,45 @@ export const loadDashboardBoard = async (
 
   const recentActiveOrders = activeRecent;
   const restaurant: DashboardRestaurant | null = modules.kitchen
-    ? {
-        topProducts: topProductsFromOrders(recentActiveOrders),
-        peakHour: (() => {
-          const hours = Array.from({ length: 24 }, () => 0);
-          recentActiveOrders.forEach((row) => {
-            hours[localWeekdayHour(row.created_at).hour] += 1;
-          });
-          const peak = hours.reduce((best, count, hour) => (count > best.count ? { hour, count } : best), {
-            hour: 0,
-            count: 0,
-          });
-          return peak.count ? { hour: peak.hour, orders: peak.count } : null;
-        })(),
-        aov: finance?.aov ?? 0,
-      }
+    ? (() => {
+        const hours = Array.from({ length: 24 }, () => 0);
+        recentActiveOrders.forEach((row) => {
+          hours[localWeekdayHour(row.created_at).hour] += 1;
+        });
+        const peak = hours.reduce((best, count, hour) => (count > best.count ? { hour, count } : best), {
+          hour: 0,
+          count: 0,
+        });
+        const prevRevenue = activePrevious.reduce((sum, row) => sum + toNumber(row.total), 0);
+        return {
+          topProducts: topProductsFromOrders(recentActiveOrders),
+          peakHour: peak.count ? { hour: peak.hour, orders: peak.count } : null,
+          hourlyOrders: hours.map((orders, hour) => ({ hour, orders })),
+          aov: finance?.aov ?? 0,
+          aovPrev: activePrevious.length ? prevRevenue / activePrevious.length : 0,
+          ordersCount: recentActiveOrders.length,
+        };
+      })()
     : null;
 
   const appointmentRows = (appointmentsResult.data ?? []) as Array<{
     title: string | null;
     status: string;
     purpose: string | null;
+    starts_at: string;
   }>;
+  const recentAppointments = appointmentRows.filter(
+    (row) => new Date(row.starts_at).getTime() >= new Date(since30).getTime(),
+  );
   const services: DashboardServices | null =
     modules.calendar && !modules.kitchen
       ? (() => {
-          const scheduled = appointmentRows.filter((row) => row.status !== "cancelled").length;
-          const done = appointmentRows.filter((row) => row.status === "done").length;
-          const cancelled = appointmentRows.filter((row) => row.status === "cancelled").length;
+          const scheduled = recentAppointments.filter((row) => row.status !== "cancelled").length;
+          const done = recentAppointments.filter((row) => row.status === "done").length;
+          const cancelled = recentAppointments.filter((row) => row.status === "cancelled").length;
           const purposeMap = new Map<string, number>();
           const titleMap = new Map<string, number>();
-          appointmentRows.forEach((row) => {
+          recentAppointments.forEach((row) => {
             const purpose = row.purpose || "consulta";
             purposeMap.set(purpose, (purposeMap.get(purpose) ?? 0) + 1);
             const title = row.title?.trim() || "Cita";
@@ -1164,6 +1295,20 @@ export const loadDashboardBoard = async (
               .map(([title, count]) => ({ title, count }))
               .sort((a, b) => b.count - a.count)
               .slice(0, 5),
+            comparisons: {
+              weekly: toServicesComparison(
+                summarizeAppointments(appointmentRows, since7),
+                summarizeAppointments(appointmentRows, since14, since7),
+              ),
+              monthly: toServicesComparison(
+                summarizeAppointments(appointmentRows, since30),
+                summarizeAppointments(appointmentRows, since60, since30),
+              ),
+              annual: toServicesComparison(
+                summarizeAppointments(appointmentRows, since365),
+                summarizeAppointments(appointmentRows, since730, since365),
+              ),
+            },
           };
         })()
       : null;

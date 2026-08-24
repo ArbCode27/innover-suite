@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { parseCatalogCsv } from "@/lib/commerce/catalog";
 import { isOrderStatus, isPaymentStatus, PAYMENT_STATUSES, PRODUCT_KINDS } from "@/lib/commerce/types";
 import { recordAuditEvent } from "@/lib/organizations/audit";
+import { loadOrganizationCurrencies, resolveOrganizationCurrency } from "@/lib/organizations/currencies";
 
 type ActionResult = {
   success?: string;
@@ -47,6 +48,7 @@ const productSchema = z.object({
   trackStock: z.boolean(),
   initialStock: z.number().nonnegative().max(1_000_000).optional(),
   reorderPoint: z.number().nonnegative().max(1_000_000).optional(),
+  currency: z.string().trim().length(3).optional(),
 });
 
 const updateProductSchema = productSchema
@@ -110,6 +112,9 @@ export const createProductAction = async (rawValues: unknown): Promise<ActionRes
     inventoryItemId = inventory.id as number;
   }
 
+  const orgCurrencies = await loadOrganizationCurrencies(supabase, access.membership.organizationId);
+  const currency = resolveOrganizationCurrency(parsed.data.currency, orgCurrencies);
+
   const { error } = await supabase.from("products").insert({
     organization_id: access.membership.organizationId,
     inventory_item_id: inventoryItemId,
@@ -119,7 +124,7 @@ export const createProductAction = async (rawValues: unknown): Promise<ActionRes
     category: parsed.data.category || null,
     kind: parsed.data.kind,
     price: parsed.data.price,
-    currency: "DOP",
+    currency,
     active: true,
     track_stock: trackStock,
   });
@@ -158,6 +163,9 @@ export const updateProductAction = async (rawValues: unknown): Promise<ActionRes
     return { error: "El producto no existe." };
   }
 
+  const orgCurrencies = await loadOrganizationCurrencies(supabase, access.membership.organizationId);
+  const currency = resolveOrganizationCurrency(parsed.data.currency, orgCurrencies);
+
   const { error } = await supabase
     .from("products")
     .update({
@@ -167,6 +175,7 @@ export const updateProductAction = async (rawValues: unknown): Promise<ActionRes
       category: parsed.data.category || null,
       kind: parsed.data.kind,
       price: parsed.data.price,
+      currency,
       active: parsed.data.active,
       track_stock: trackStock,
     })
@@ -422,6 +431,7 @@ const deliveryZoneSchema = z.object({
   name: z.string().trim().min(2).max(80),
   fee: z.number().nonnegative().max(100_000),
   etaMinutes: z.number().int().positive().max(240).optional(),
+  currency: z.string().trim().length(3).optional(),
 });
 
 export const createDeliveryZoneAction = async (rawValues: unknown): Promise<ActionResult> => {
@@ -434,16 +444,29 @@ export const createDeliveryZoneAction = async (rawValues: unknown): Promise<Acti
   if ("error" in access) return { error: access.error };
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.from("delivery_zones").insert({
+  const orgCurrencies = await loadOrganizationCurrencies(supabase, access.membership.organizationId);
+  const currency = resolveOrganizationCurrency(parsed.data.currency, orgCurrencies);
+  const payload = {
     organization_id: access.membership.organizationId,
     name: parsed.data.name,
     fee: parsed.data.fee,
     eta_minutes: parsed.data.etaMinutes ?? null,
     active: true,
-  });
+    currency,
+  };
+  const { error } = await supabase.from("delivery_zones").insert(payload);
 
   if (error) {
-    return { error: error.message || "No se pudo crear la zona." };
+    const { error: fallbackError } = await supabase.from("delivery_zones").insert({
+      organization_id: payload.organization_id,
+      name: payload.name,
+      fee: payload.fee,
+      eta_minutes: payload.eta_minutes,
+      active: payload.active,
+    });
+    if (fallbackError) {
+      return { error: fallbackError.message || "No se pudo crear la zona." };
+    }
   }
 
   revalidatePath("/inventory");

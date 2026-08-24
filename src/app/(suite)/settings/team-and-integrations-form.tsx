@@ -9,6 +9,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarDays, Camera, Loader2, MessagesSquare, Unplug, UserPlus } from "lucide-react";
 import { inviteAdvisorAction } from "@/lib/organizations/actions";
+import { AppSelect } from "@/components/ui/app-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -169,6 +170,7 @@ export const TeamAndIntegrationsForm = ({
     resolver: zodResolver(inviteSchema),
     defaultValues: { email: "", role: "agent" },
   });
+  const selectedRole = inviteForm.watch("role");
 
   const handleInvite = inviteForm.handleSubmit(async (values) => {
     setInviteMessage(null);
@@ -350,17 +352,19 @@ export const TeamAndIntegrationsForm = ({
                         className="sm:flex-1"
                         {...inviteForm.register("email")}
                       />
-                      <select
+                      <AppSelect
                         aria-label="Rol"
-                        className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
-                        {...inviteForm.register("role")}
-                      >
-                        <option value="agent">Asesor</option>
-                        <option value="admin">Admin</option>
-                        <option value="viewer">Viewer</option>
-                        <option value="kitchen">Cocina</option>
-                        <option value="cashier">Caja</option>
-                      </select>
+                        className="sm:w-36 sm:shrink-0"
+                        value={selectedRole}
+                        onValueChange={(value) => inviteForm.setValue("role", value as InviteValues["role"])}
+                        options={[
+                          { value: "agent", label: "Asesor" },
+                          { value: "admin", label: "Admin" },
+                          { value: "viewer", label: "Viewer" },
+                          { value: "kitchen", label: "Cocina" },
+                          { value: "cashier", label: "Caja" },
+                        ]}
+                      />
                       <Button disabled={inviteForm.formState.isSubmitting} type="submit">
                         {inviteForm.formState.isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus />}
                         Invitar

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { loadFunnelBoard } from "@/lib/funnels/board";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
+import { loadOrganizationCurrencies, resolveOrganizationCurrency } from "@/lib/organizations/currencies";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { FunnelCardView } from "./types";
 
@@ -14,6 +15,7 @@ const createCardSchema = z.object({
   stageId: z.number().int().positive(),
   title: z.string().trim().min(1).max(120),
   valueAmount: z.number().nonnegative().max(1_000_000_000).optional(),
+  currency: z.string().trim().length(3).optional(),
   conversationId: z.number().int().positive().optional(),
 });
 
@@ -134,23 +136,54 @@ export const createFunnelCardAction = async (
   }
 
   const position = await nextStagePosition(stageContext.stageId, access.membership.organizationId);
-  const { data: inserted, error: insertError } = await supabase
+  const orgCurrencies = await loadOrganizationCurrencies(supabase, access.membership.organizationId);
+  const currency = parsed.data.valueAmount
+    ? resolveOrganizationCurrency(parsed.data.currency, orgCurrencies)
+    : null;
+  const insertPayload = {
+    organization_id: access.membership.organizationId,
+    funnel_id: stageContext.funnelId,
+    stage_id: stageContext.stageId,
+    contact_id: contact.id,
+    conversation_id: conversationId,
+    title: parsed.data.title,
+    value_amount: parsed.data.valueAmount ?? null,
+    currency,
+    owner_user_id: user.id,
+    position,
+  };
+  const cardSelect =
+    "id, stage_id, contact_id, conversation_id, title, value_amount, currency, owner_user_id, position, updated_at, contacts(full_name, phone), conversations(channel)";
+  let { data: inserted, error: insertError } = await supabase
     .from("funnel_cards")
-    .insert({
-      organization_id: access.membership.organizationId,
-      funnel_id: stageContext.funnelId,
-      stage_id: stageContext.stageId,
-      contact_id: contact.id,
-      conversation_id: conversationId,
-      title: parsed.data.title,
-      value_amount: parsed.data.valueAmount ?? null,
-      owner_user_id: user.id,
-      position,
-    })
-    .select(
-      "id, stage_id, contact_id, conversation_id, title, value_amount, owner_user_id, position, updated_at, contacts(full_name, phone), conversations(channel)",
-    )
+    .insert(insertPayload)
+    .select(cardSelect)
     .single();
+
+  if (insertError) {
+    if (isUniqueViolation(insertError)) {
+      return { error: "Este contacto ya está en el embudo." };
+    }
+    const fallback = await supabase
+      .from("funnel_cards")
+      .insert({
+        organization_id: insertPayload.organization_id,
+        funnel_id: insertPayload.funnel_id,
+        stage_id: insertPayload.stage_id,
+        contact_id: insertPayload.contact_id,
+        conversation_id: insertPayload.conversation_id,
+        title: insertPayload.title,
+        value_amount: insertPayload.value_amount,
+        owner_user_id: insertPayload.owner_user_id,
+        position: insertPayload.position,
+      })
+      .select(
+        "id, stage_id, contact_id, conversation_id, title, value_amount, owner_user_id, position, updated_at, contacts(full_name, phone), conversations(channel)",
+      )
+      .single();
+    inserted = fallback.data;
+    insertError = fallback.error;
+  }
 
   if (insertError || !inserted) {
     if (isUniqueViolation(insertError)) {
@@ -171,6 +204,7 @@ export const createFunnelCardAction = async (
         conversationId: inserted.conversation_id,
         title: inserted.title,
         valueAmount: inserted.value_amount === null ? null : Number(inserted.value_amount),
+        currency: ((inserted as { currency?: string | null }).currency as string | null) ?? currency,
         ownerUserId: inserted.owner_user_id,
         position: inserted.position,
         updatedAt: inserted.updated_at,

@@ -24,6 +24,7 @@ type CardRow = {
   conversation_id: number | null;
   title: string;
   value_amount: number | string | null;
+  currency?: string | null;
   owner_user_id: string | null;
   position: number;
   updated_at: string;
@@ -52,6 +53,7 @@ export const mapFunnelCard = (row: CardRow): FunnelCardView => ({
   conversationId: row.conversation_id,
   title: row.title,
   valueAmount: asNumber(row.value_amount),
+  currency: row.currency ?? null,
   ownerUserId: row.owner_user_id,
   position: row.position,
   updatedAt: row.updated_at,
@@ -165,17 +167,35 @@ export const loadFunnelBoard = async (
   const stages = (stageRows ?? []) as StageRow[];
   const stageIds = stages.map((stage) => stage.id);
 
-  const { data: cardRows, error: cardsError } = stageIds.length
-    ? await supabase
+  const cardSelectWithCurrency =
+    "id, stage_id, contact_id, conversation_id, title, value_amount, currency, owner_user_id, position, updated_at, contacts(full_name, phone), conversations(channel)";
+  const cardSelect =
+    "id, stage_id, contact_id, conversation_id, title, value_amount, owner_user_id, position, updated_at, contacts(full_name, phone), conversations(channel)";
+
+  let cardRows: unknown[] | null = [];
+  let cardsError: { message?: string } | null = null;
+  if (stageIds.length) {
+    const withCurrency = await supabase
+      .from("funnel_cards")
+      .select(cardSelectWithCurrency)
+      .eq("organization_id", organizationId)
+      .eq("funnel_id", funnel.id)
+      .order("position", { ascending: true })
+      .order("id", { ascending: true });
+    if (withCurrency.error) {
+      const fallback = await supabase
         .from("funnel_cards")
-        .select(
-          "id, stage_id, contact_id, conversation_id, title, value_amount, owner_user_id, position, updated_at, contacts(full_name, phone), conversations(channel)",
-        )
+        .select(cardSelect)
         .eq("organization_id", organizationId)
         .eq("funnel_id", funnel.id)
         .order("position", { ascending: true })
-        .order("id", { ascending: true })
-    : { data: [], error: null };
+        .order("id", { ascending: true });
+      cardRows = fallback.data;
+      cardsError = fallback.error;
+    } else {
+      cardRows = withCurrency.data;
+    }
+  }
 
   if (cardsError) {
     throw cardsError;

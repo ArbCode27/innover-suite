@@ -29,6 +29,7 @@ export type DeliveryZoneRecord = {
   id: number;
   name: string;
   fee: number;
+  currency: string;
   etaMinutes: number | null;
   active: boolean;
 };

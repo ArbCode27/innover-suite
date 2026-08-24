@@ -30,7 +30,7 @@ export default async function HomePage() {
   return (
     <ModuleShell
       title={`Dashboard de ${membership.organizationName}`}
-      description="KPIs en vivo según las funciones activas de tu CRM: SLA, equipo, IA, embudo, finanzas y operación."
+      description="KPIs en vivo según las funciones activas de tu CRM: equipo, IA, embudo, finanzas y operación."
       eyebrow={org?.plan ? `Plan ${org.plan}` : "Inicio"}
       actions={
         canUseInbox(membership) ? (

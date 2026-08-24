@@ -20,6 +20,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { DollarSign, GripVertical, KanbanSquare, Loader2, Plus, Target, Users } from "lucide-react";
 import { toast } from "sonner";
 import { CHANNEL_BADGE_CLASSNAMES, CHANNEL_LABELS } from "@/lib/contacts/display";
+import { AppSelect } from "@/components/ui/app-select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,22 +35,19 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { formatMoney } from "@/lib/commerce/types";
+import { PriceCurrencyField } from "@/components/ui/price-currency-field";
+import type { OrganizationCurrencySettings } from "@/lib/organizations/currencies";
 import { createFunnelCardAction, moveFunnelCardAction } from "./actions";
 import type { FunnelBoardView, FunnelCardView, FunnelContactOption, FunnelMetrics, FunnelStageView } from "./types";
 
 type FunnelBoardProps = {
   initialBoard: FunnelBoardView;
   contacts: FunnelContactOption[];
+  currencies: OrganizationCurrencySettings;
 };
 
 const STAGE_DOT_COLORS = ["bg-sky-500", "bg-cyan-400", "bg-violet-400", "bg-emerald-400"];
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("es-DO", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
 
 const resolveInitials = (name: string) => {
   const words = name.replace(/^@/, "").trim().split(" ").filter(Boolean);
@@ -120,7 +118,9 @@ const FunnelCardBody = ({ card, isOverlay = false }: { card: FunnelCardView; isO
         ) : (
           <Badge variant="outline">Manual</Badge>
         )}
-        {card.valueAmount ? <Badge variant="outline">{formatCurrency(card.valueAmount)}</Badge> : null}
+        {card.valueAmount ? (
+          <Badge variant="outline">{formatMoney(card.valueAmount, card.currency ?? "DOP")}</Badge>
+        ) : null}
       </div>
     </div>
   </div>
@@ -215,13 +215,14 @@ const StageColumn = ({
   );
 };
 
-export const FunnelBoard = ({ initialBoard, contacts }: FunnelBoardProps) => {
+export const FunnelBoard = ({ initialBoard, contacts, currencies }: FunnelBoardProps) => {
   const [board, setBoard] = useState(initialBoard);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [contactId, setContactId] = useState(contacts[0]?.id ? String(contacts[0].id) : "");
   const [stageId, setStageId] = useState(initialBoard.stages[0]?.id ? String(initialBoard.stages[0].id) : "");
   const [title, setTitle] = useState(contacts[0]?.fullName ?? "");
   const [valueAmount, setValueAmount] = useState("");
+  const [valueCurrency, setValueCurrency] = useState(currencies.defaultCode);
   const [formError, setFormError] = useState<string | null>(null);
   const [activeCard, setActiveCard] = useState<FunnelCardView | null>(null);
   const [overStageId, setOverStageId] = useState<number | null>(null);
@@ -231,7 +232,7 @@ export const FunnelBoard = ({ initialBoard, contacts }: FunnelBoardProps) => {
   const metrics = useMemo(() => computeMetrics(board.stages), [board.stages]);
   const metricItems = [
     { label: "Oportunidades", value: String(metrics.opportunityCount), icon: Target },
-    { label: "Valor estimado", value: formatCurrency(metrics.estimatedValue), icon: DollarSign },
+    { label: "Valor estimado", value: formatMoney(metrics.estimatedValue, currencies.defaultCode), icon: DollarSign },
     { label: "Contactos activos", value: String(metrics.contactCount), icon: Users },
     { label: "Etapas", value: String(metrics.stageCount), icon: KanbanSquare },
   ];
@@ -266,6 +267,7 @@ export const FunnelBoard = ({ initialBoard, contacts }: FunnelBoardProps) => {
         stageId: selectedStageId,
         title: title.trim(),
         valueAmount: parsedValue,
+        currency: parsedValue === undefined ? undefined : valueCurrency,
       });
 
       if (result.error || !result.data?.card) {
@@ -284,6 +286,7 @@ export const FunnelBoard = ({ initialBoard, contacts }: FunnelBoardProps) => {
       }));
       setIsSheetOpen(false);
       setValueAmount("");
+      setValueCurrency(currencies.defaultCode);
       toast.success("Oportunidad agregada al embudo");
     });
   };
@@ -451,33 +454,30 @@ export const FunnelBoard = ({ initialBoard, contacts }: FunnelBoardProps) => {
           <div className="space-y-4 px-4">
             <div className="space-y-2">
               <Label htmlFor="funnel-contact">Contacto</Label>
-              <select
+              <AppSelect
                 id="funnel-contact"
-                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                aria-label="Contacto"
                 value={contactId}
-                onChange={(event) => handleContactChange(event.target.value)}
-              >
-                {contacts.map((contact) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.fullName}
-                  </option>
-                ))}
-              </select>
+                onValueChange={handleContactChange}
+                placeholder="Selecciona un contacto"
+                options={contacts.map((contact) => ({
+                  value: String(contact.id),
+                  label: contact.fullName,
+                }))}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="funnel-stage">Etapa</Label>
-              <select
+              <AppSelect
                 id="funnel-stage"
-                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                aria-label="Etapa"
                 value={stageId}
-                onChange={(event) => setStageId(event.target.value)}
-              >
-                {board.stages.map((stage) => (
-                  <option key={stage.id} value={stage.id}>
-                    {stage.name}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setStageId}
+                options={board.stages.map((stage) => ({
+                  value: String(stage.id),
+                  label: stage.name,
+                }))}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="funnel-title">Título</Label>
@@ -488,16 +488,16 @@ export const FunnelBoard = ({ initialBoard, contacts }: FunnelBoardProps) => {
                 onChange={(event) => setTitle(event.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="funnel-value">Valor estimado (opcional)</Label>
-              <Input
-                id="funnel-value"
-                inputMode="decimal"
-                value={valueAmount}
-                placeholder="0"
-                onChange={(event) => setValueAmount(event.target.value)}
-              />
-            </div>
+            <PriceCurrencyField
+              id="funnel-value"
+              label="Valor estimado (opcional)"
+              amount={valueAmount}
+              currency={valueCurrency}
+              currencies={currencies}
+              placeholder="0"
+              onAmountChange={setValueAmount}
+              onCurrencyChange={setValueCurrency}
+            />
             {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
             {!contacts.length ? (
               <p className="text-sm text-muted-foreground">

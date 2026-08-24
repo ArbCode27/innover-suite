@@ -3,6 +3,8 @@ import { parseContactUsername } from "@/lib/contacts/display";
 import { resolveMessagePreview } from "@/lib/media/parse";
 import { canUseInbox, getCurrentMembership } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { areAdvisorsAvailable, isScheduleEnabled } from "@/lib/agent/hours";
+import { loadAgentSettings } from "@/lib/agent/settings";
 import { InboxPanel } from "./inbox-panel";
 import { normalizeInboxMessage, type InboxConversation, type InboxMessage } from "./types";
 
@@ -147,6 +149,10 @@ export default async function InboxPage({
     );
   }
 
+  const agentSettings = await loadAgentSettings(membership.organizationId);
+  const officeClosed =
+    isScheduleEnabled(agentSettings.businessHours) && !areAdvisorsAvailable(agentSettings.businessHours);
+
   return (
     <section>
       <InboxPanel
@@ -155,6 +161,7 @@ export default async function InboxPage({
         initialConversationId={firstConversationId}
         initialConversations={conversations}
         initialMessagesByConversation={initialMessagesByConversation}
+        officeClosed={officeClosed}
       />
     </section>
   );

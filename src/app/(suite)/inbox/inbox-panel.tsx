@@ -74,6 +74,7 @@ type InboxPanelProps = {
   initialConversationId: number | null;
   initialConversations: InboxConversation[];
   initialMessagesByConversation: Record<number, InboxMessage[]>;
+  officeClosed?: boolean;
 };
 
 type ComposerAttachment = {
@@ -183,6 +184,7 @@ export const InboxPanel = ({
   initialConversationId,
   initialConversations,
   initialMessagesByConversation,
+  officeClosed = false,
 }: InboxPanelProps) => {
   const [conversations, setConversations] = useState(initialConversations);
   const [activeFilter, setActiveFilter] = useState<InboxFilter>("all");
@@ -733,6 +735,11 @@ export const InboxPanel = ({
               {organizationName}
             </Badge>
           </div>
+          {officeClosed ? (
+            <p className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-950 dark:text-amber-100">
+              Oficina cerrada. La IA sigue atendiendo; los asesores están inactivos hasta el próximo horario.
+            </p>
+          ) : null}
 
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

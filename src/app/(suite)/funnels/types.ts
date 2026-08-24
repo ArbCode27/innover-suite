@@ -22,6 +22,7 @@ export type FunnelCardView = {
   conversationId: number | null;
   title: string;
   valueAmount: number | null;
+  currency: string | null;
   ownerUserId: string | null;
   position: number;
   updatedAt: string;

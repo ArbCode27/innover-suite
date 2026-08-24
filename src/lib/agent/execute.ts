@@ -12,6 +12,7 @@ import {
   handoffToHumanArgsSchema,
   moveContactToStageArgsSchema,
 } from "@/lib/agent/tools";
+import { areAdvisorsAvailable } from "@/lib/agent/hours";
 import type { AgentSettings } from "@/lib/agent/types";
 import { formatTime } from "@/lib/calendar/range";
 
@@ -159,6 +160,15 @@ export const executeAgentTool = async (
     if (!parsed.success) {
       const result = { error: parsed.error.issues[0]?.message ?? "Indica por qué escalas a un humano." };
       await logToolRun(context, name, rawArgs, result, false);
+      return { ok: false, result };
+    }
+
+    if (!areAdvisorsAvailable(context.settings.businessHours)) {
+      const result = {
+        error:
+          "Los asesores no están disponibles ahora porque la oficina está cerrada. Sigue tú atendiendo. Explica que el equipo humano vuelve al abrir y no prometas una transferencia inmediata.",
+      };
+      await logToolRun(context, name, parsed.data, result, false);
       return { ok: false, result };
     }
 

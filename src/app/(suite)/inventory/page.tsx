@@ -6,10 +6,12 @@ import { loadCatalog, loadDeliveryZones, loadInventoryMovements, loadPromotions 
 import type { DeliveryZoneRecord, InventoryMovementRecord, ProductRecord, PromotionRecord } from "@/lib/commerce/types";
 import { requireSuiteModule } from "@/lib/modules/guard";
 import { canManageCatalog } from "@/lib/organizations/membership";
+import { loadOrganizationCurrencies } from "@/lib/organizations/currencies";
 
 export default async function InventoryPage() {
   const { membership, supabase } = await requireSuiteModule("catalog");
   const canManage = canManageCatalog(membership);
+  const currencies = await loadOrganizationCurrencies(supabase, membership.organizationId);
 
   let products: ProductRecord[] = [];
   let promotions: PromotionRecord[] = [];
@@ -21,7 +23,7 @@ export default async function InventoryPage() {
     [products, promotions, movements, zones] = await Promise.all([
       loadCatalog(supabase, membership.organizationId),
       loadPromotions(supabase, membership.organizationId),
-      loadInventoryMovements(supabase, membership.organizationId),
+      loadInventoryMovements(supabase, membership.organizationId, 500),
       loadDeliveryZones(supabase, membership.organizationId),
     ]);
   } catch (error) {
@@ -46,8 +48,14 @@ export default async function InventoryPage() {
         </p>
       ) : (
         <>
-          <InventoryOps products={products} zones={zones} canManage={canManage} />
-          <InventoryBoard products={products} promotions={promotions} movements={movements} canManage={canManage} />
+          <InventoryOps zones={zones} currencies={currencies} canManage={canManage} />
+          <InventoryBoard
+            products={products}
+            promotions={promotions}
+            movements={movements}
+            currencies={currencies}
+            canManage={canManage}
+          />
         </>
       )}
     </ModuleShell>

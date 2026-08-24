@@ -4,12 +4,14 @@ import { requireSuiteModule } from "@/lib/modules/guard";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { FunnelBoard } from "./funnel-board";
 import type { FunnelContactOption } from "./types";
+import { loadOrganizationCurrencies } from "@/lib/organizations/currencies";
 
 export default async function FunnelsPage() {
   const { membership } = await requireSuiteModule("funnels");
 
   const supabase = await createSupabaseServerClient();
   const board = await loadFunnelBoard(supabase, membership.organizationId);
+  const currencies = await loadOrganizationCurrencies(supabase, membership.organizationId);
 
   const { data: contactRows, error: contactsError } = await supabase
     .from("contacts")
@@ -33,7 +35,7 @@ export default async function FunnelsPage() {
       description="Arrastra cada contacto entre etapas para avanzar el pipeline."
       eyebrow={board.name}
     >
-      <FunnelBoard initialBoard={board} contacts={contacts} />
+      <FunnelBoard initialBoard={board} contacts={contacts} currencies={currencies} />
     </ModuleShell>
   );
 }

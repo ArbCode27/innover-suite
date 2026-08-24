@@ -120,7 +120,7 @@ export const buildAgentToolDeclarations = (
     tools.push({
       name: "handoff_to_human",
       description:
-        "Cede la conversación a un asesor humano y detiene al agente. Úsala si el cliente lo pide, hay enojo, o no puedes resolver.",
+        "Cede la conversación a un asesor humano y detiene al agente. Úsala solo si hay asesores disponibles (horario de oficina). Si la oficina está cerrada, no la uses: sigue tú atendiendo.",
       parameters: {
         type: "OBJECT",
         properties: {

@@ -131,11 +131,19 @@ export const loadInventoryMovements = async (supabase: SupabaseClient, organizat
 };
 
 export const loadDeliveryZones = async (supabase: SupabaseClient, organizationId: number) => {
-  const { data, error } = await supabase
+  const withCurrency = await supabase
     .from("delivery_zones")
-    .select("id, name, fee, eta_minutes, active")
+    .select("id, name, fee, eta_minutes, active, currency")
     .eq("organization_id", organizationId)
     .order("name", { ascending: true });
+
+  const { data, error } = withCurrency.error
+    ? await supabase
+        .from("delivery_zones")
+        .select("id, name, fee, eta_minutes, active")
+        .eq("organization_id", organizationId)
+        .order("name", { ascending: true })
+    : withCurrency;
 
   if (error) {
     return [] as DeliveryZoneRecord[];
@@ -146,6 +154,7 @@ export const loadDeliveryZones = async (supabase: SupabaseClient, organizationId
       id: row.id as number,
       name: row.name as string,
       fee: toNumber(row.fee),
+      currency: ((row as { currency?: string }).currency as string | undefined) || "DOP",
       etaMinutes: (row.eta_minutes as number | null) ?? null,
       active: row.active === true,
     }),

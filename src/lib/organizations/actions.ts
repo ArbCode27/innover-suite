@@ -7,6 +7,7 @@ import { z } from "zod";
 import { recordAuditEvent } from "@/lib/organizations/audit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getCurrentMembership, hasOrganizationRole, type OrganizationRole } from "@/lib/organizations/membership";
+import { normalizeCurrencySettings } from "@/lib/organizations/currencies";
 
 const createOrganizationSchema = z.object({
   name: z.string().trim().min(3, "El nombre de la organización debe tener al menos 3 caracteres"),
@@ -147,6 +148,46 @@ export const updateOrganizationTaxAction = async (rawValues: unknown) => {
 
   revalidatePath("/settings");
   return { success: "ITBIS actualizado. Se aplicará en el próximo pedido." };
+};
+
+export const updateOrganizationCurrenciesAction = async (rawValues: unknown) => {
+  const parsed = z
+    .object({
+      codes: z.array(z.string()).min(1, "Elige al menos una moneda."),
+      defaultCode: z.string().trim().min(3),
+    })
+    .safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Revisa las monedas seleccionadas." };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
+    return { error: "Solo owner o admin pueden cambiar las monedas." };
+  }
+
+  const settings = normalizeCurrencySettings(parsed.data.codes, parsed.data.defaultCode);
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("organizations")
+    .update({
+      currencies: settings.codes,
+      default_currency: settings.defaultCode,
+    })
+    .eq("id", membership.organizationId);
+
+  if (error) {
+    return {
+      error: error.message || "No se pudieron guardar las monedas. ¿Corriste supabase/organization-currencies.sql?",
+    };
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/inventory");
+  revalidatePath("/funnels");
+  revalidatePath("/orders");
+  revalidatePath("/home");
+  return { success: "Monedas actualizadas." };
 };
 
 export type InviteRole = Extract<OrganizationRole, "admin" | "agent" | "viewer" | "kitchen" | "cashier">;

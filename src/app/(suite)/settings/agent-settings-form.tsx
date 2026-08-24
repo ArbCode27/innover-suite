@@ -37,8 +37,6 @@ export const AgentSettingsForm = ({
   const [requireBookingConfirmation, setRequireBookingConfirmation] = useState(
     settings.requireBookingConfirmation,
   );
-  const [closedMessage, setClosedMessage] = useState(settings.closedMessage);
-  const [weekdayHours, setWeekdayHours] = useState(settings.businessHours.days);
   const [articleForm, setArticleForm] = useState({ title: "", body: "" });
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -53,8 +51,6 @@ export const AgentSettingsForm = ({
         toolsFunnel,
         toolsHandoff,
         requireBookingConfirmation,
-        closedMessage,
-        businessHours: { timezone: settings.businessHours.timezone, days: weekdayHours },
       });
 
       if (result.error) {
@@ -78,7 +74,7 @@ export const AgentSettingsForm = ({
             <div>
               <CardTitle>Agente de inteligencia artificial</CardTitle>
               <CardDescription className="mt-1 leading-6">
-                Define el prompt y las tools. El agente responde solo si la conversación está en modo IA.
+                Define el prompt y las tools. El agente responde 24/7; el horario de oficina solo aplica a los asesores.
               </CardDescription>
             </div>
           </div>
@@ -165,65 +161,6 @@ export const AgentSettingsForm = ({
             </p>
           ) : null}
         </fieldset>
-
-        <div className="space-y-2">
-          <Label>Horario del agente</Label>
-          <p className="text-xs text-muted-foreground">Fuera de horario envía el mensaje de cerrado y no usa tools.</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {["1", "2", "3", "4", "5", "6", "0"].map((day) => {
-              const labels: Record<string, string> = {
-                "1": "Lun",
-                "2": "Mar",
-                "3": "Mié",
-                "4": "Jue",
-                "5": "Vie",
-                "6": "Sáb",
-                "0": "Dom",
-              };
-              const hours = weekdayHours[day];
-              return (
-                <div key={day} className="flex items-center gap-2 text-sm">
-                  <span className="w-10">{labels[day]}</span>
-                  <Input
-                    aria-label={`Apertura ${labels[day]}`}
-                    value={hours?.open ?? ""}
-                    placeholder="cerrado"
-                    disabled={!canManageOrganization}
-                    onChange={(event) => {
-                      const open = event.target.value;
-                      setWeekdayHours((current) => ({
-                        ...current,
-                        [day]: open ? { open, close: current[day]?.close || "22:00" } : null,
-                      }));
-                    }}
-                  />
-                  <Input
-                    aria-label={`Cierre ${labels[day]}`}
-                    value={hours?.close ?? ""}
-                    placeholder="—"
-                    disabled={!canManageOrganization}
-                    onChange={(event) => {
-                      const close = event.target.value;
-                      setWeekdayHours((current) => ({
-                        ...current,
-                        [day]: close ? { open: current[day]?.open || "08:00", close } : null,
-                      }));
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
-          <Label htmlFor="closed-message">Mensaje fuera de horario</Label>
-          <textarea
-            id="closed-message"
-            value={closedMessage}
-            onChange={(event) => setClosedMessage(event.target.value)}
-            disabled={!canManageOrganization}
-            rows={3}
-            className="min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-          />
-        </div>
 
         <div className="space-y-2">
           <Label>Base de conocimiento</Label>

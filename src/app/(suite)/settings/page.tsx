@@ -1,7 +1,9 @@
 import { Suspense } from "react";
 import { TeamAndIntegrationsForm } from "./team-and-integrations-form";
 import { AgentSettingsForm } from "./agent-settings-form";
+import { OfficeHoursForm } from "./office-hours-form";
 import { ModulesSettingsForm } from "./modules-settings-form";
+import { CurrencySettingsForm } from "./currency-settings-form";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ModuleShell } from "@/components/suite/module-shell";
@@ -10,6 +12,7 @@ import { loadAgentSettings, getDefaultAgentSettings, loadKnowledgeArticles } fro
 import { env } from "@/lib/config/env";
 import { DEFAULT_MODULES } from "@/lib/modules/constants";
 import { loadOrganizationModules } from "@/lib/modules/settings";
+import { DEFAULT_CURRENCY_SETTINGS, loadOrganizationCurrencies } from "@/lib/organizations/currencies";
 
 export default async function SettingsPage() {
   const membership = await getCurrentMembership();
@@ -55,6 +58,9 @@ export default async function SettingsPage() {
   const modules = membership
     ? await loadOrganizationModules(supabase, membership.organizationId)
     : DEFAULT_MODULES;
+  const currencies = membership
+    ? await loadOrganizationCurrencies(supabase, membership.organizationId)
+    : DEFAULT_CURRENCY_SETTINGS;
   const articles = membership ? await loadKnowledgeArticles(membership.organizationId, false) : [];
   const { data: orgBilling } = membership
     ? await supabase
@@ -98,12 +104,18 @@ export default async function SettingsPage() {
           />
         </Suspense>
         <ModulesSettingsForm canManageOrganization={canManageOrganization} modules={modules} />
+        <CurrencySettingsForm canManageOrganization={canManageOrganization} currencies={currencies} />
         <AgentSettingsForm
           canManageOrganization={canManageOrganization}
           settings={agentSettings}
           modules={modules}
           geminiConfigured={Boolean(env.geminiApiKey)}
           articles={articles}
+        />
+        <OfficeHoursForm
+          canManageOrganization={canManageOrganization}
+          businessHours={agentSettings.businessHours}
+          closedMessage={agentSettings.closedMessage}
         />
         {orgBilling ? (
           <p className="text-sm text-muted-foreground">

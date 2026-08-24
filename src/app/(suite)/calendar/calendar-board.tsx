@@ -34,6 +34,7 @@ import type {
   CalendarEventView,
   CalendarViewMode,
 } from "./types";
+import { AppSelect } from "@/components/ui/app-select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -407,19 +408,17 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
           <div className="space-y-4 px-4">
             <div className="space-y-2">
               <Label htmlFor="calendar-contact">Contacto</Label>
-              <select
+              <AppSelect
                 id="calendar-contact"
-                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                aria-label="Contacto"
                 value={contactId}
-                onChange={(event) => handleContactChange(event.target.value)}
-              >
-                {contacts.map((contact) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.fullName}
-                    {contact.email ? ` · ${contact.email}` : ""}
-                  </option>
-                ))}
-              </select>
+                onValueChange={handleContactChange}
+                placeholder="Selecciona un contacto"
+                options={contacts.map((contact) => ({
+                  value: String(contact.id),
+                  label: contact.email ? `${contact.fullName} · ${contact.email}` : contact.fullName,
+                }))}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="calendar-title">Título</Label>
@@ -427,18 +426,16 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
             </div>
             <div className="space-y-2">
               <Label htmlFor="calendar-purpose">Motivo</Label>
-              <select
+              <AppSelect
                 id="calendar-purpose"
-                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                aria-label="Motivo"
                 value={purpose}
-                onChange={(event) => setPurpose(event.target.value as AppointmentPurpose)}
-              >
-                {APPOINTMENT_PURPOSES.map((item) => (
-                  <option key={item} value={item}>
-                    {APPOINTMENT_PURPOSE_LABELS[item]}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(value) => setPurpose(value as AppointmentPurpose)}
+                options={APPOINTMENT_PURPOSES.map((item) => ({
+                  value: item,
+                  label: APPOINTMENT_PURPOSE_LABELS[item],
+                }))}
+              />
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-2 sm:col-span-1">

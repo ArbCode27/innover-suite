@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AGENT_MODEL, DEFAULT_AGENT_PROMPT } from "@/lib/agent/constants";
-import { DEFAULT_BUSINESS_HOURS, DEFAULT_CLOSED_MESSAGE, parseBusinessHours } from "@/lib/agent/hours";
-import { upsertAgentSettings } from "@/lib/agent/settings";
+import { DEFAULT_CLOSED_MESSAGE, parseBusinessHours } from "@/lib/agent/hours";
+import { loadAgentSettings, upsertAgentSettings } from "@/lib/agent/settings";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -26,9 +26,21 @@ const saveAgentSettingsSchema = z.object({
   businessHours: z
     .object({
       timezone: z.string().optional(),
+      enabled: z.boolean().optional(),
+      afterHoursAiCoverage: z.boolean().optional(),
       days: z.record(z.string(), weekdaySchema),
     })
     .optional(),
+});
+
+const saveOfficeHoursSchema = z.object({
+  closedMessage: z.string().trim().max(500).optional(),
+  businessHours: z.object({
+    timezone: z.string().optional(),
+    enabled: z.boolean().optional(),
+    afterHoursAiCoverage: z.boolean().optional(),
+    days: z.record(z.string(), weekdaySchema),
+  }),
 });
 
 type ActionResult = {
@@ -56,6 +68,7 @@ export const saveAgentSettingsAction = async (rawValues: unknown): Promise<Actio
     return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
   }
 
+  const current = await loadAgentSettings(membership.organizationId);
   const error = await upsertAgentSettings(membership.organizationId, user.id, {
     enabled: parsed.data.enabled,
     systemPrompt: parsed.data.systemPrompt || DEFAULT_AGENT_PROMPT,
@@ -67,8 +80,8 @@ export const saveAgentSettingsAction = async (rawValues: unknown): Promise<Actio
     language: "es-DO",
     businessHours: parsed.data.businessHours
       ? parseBusinessHours(parsed.data.businessHours)
-      : DEFAULT_BUSINESS_HOURS,
-    closedMessage: parsed.data.closedMessage?.trim() || DEFAULT_CLOSED_MESSAGE,
+      : current.businessHours,
+    closedMessage: parsed.data.closedMessage?.trim() || current.closedMessage,
   });
 
   if (error) {
@@ -78,6 +91,44 @@ export const saveAgentSettingsAction = async (rawValues: unknown): Promise<Actio
 
   revalidatePath("/settings");
   return { success: "Configuración del agente guardada." };
+};
+
+export const saveOfficeHoursAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = saveOfficeHoursSchema.safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Revisa el horario de oficina." };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
+    return { error: "Solo owner o admin pueden configurar el horario de oficina." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
+  }
+
+  const current = await loadAgentSettings(membership.organizationId);
+  const { organizationId: _organizationId, ...rest } = current;
+  const error = await upsertAgentSettings(membership.organizationId, user.id, {
+    ...rest,
+    businessHours: parseBusinessHours(parsed.data.businessHours),
+    closedMessage: parsed.data.closedMessage?.trim() || DEFAULT_CLOSED_MESSAGE,
+  });
+
+  if (error) {
+    console.error("[AGENT] save office hours failed", error);
+    return { error: "No se pudo guardar el horario de oficina. ¿Corriste el SQL de agent-upgrade?" };
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/inbox");
+  return { success: "Horario de oficina guardado." };
 };
 
 const knowledgeSchema = z.object({

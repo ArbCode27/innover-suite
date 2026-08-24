@@ -46,7 +46,7 @@ export default async function OnboardingSetupPage() {
   const steps = [
     { done: Boolean(modules.orders || modules.catalog || modules.funnels || modules.calendar), title: "Módulos", href: "/settings", hint: "Activa pedidos, catálogo, embudos o calendario." },
     { done: !modules.catalog || catalogCount > 0, title: "Catálogo", href: "/inventory", hint: "Carga productos o importa un CSV." },
-    { done: true, title: "Agente IA", href: "/settings#agent-ia", hint: "Revisa el prompt y el horario de atención." },
+    { done: true, title: "Agente IA", href: "/settings#agent-ia", hint: "Revisa el prompt. El horario de oficina está aparte: la IA atiende 24/7." },
     { done: Boolean(instagram || messenger), title: "Canal Meta", href: "/settings", hint: "Conecta Instagram, Messenger o WhatsApp." },
   ];
 

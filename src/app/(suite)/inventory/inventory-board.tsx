@@ -1,15 +1,18 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { Loader2, PackagePlus, Plus, Tag } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { ChevronLeft, ChevronRight, Download, Filter, Loader2, PackagePlus, Pencil, Plus, Search, Tag, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   createProductAction,
   createPromotionAction,
+  importCatalogCsvAction,
   receiveStockAction,
   togglePromotionAction,
   updateProductAction,
 } from "@/lib/commerce/actions";
+import { catalogToCsv } from "@/lib/commerce/catalog";
 import {
   formatMoney,
   PRODUCT_KIND_LABELS,
@@ -31,13 +34,20 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { InventoryMovementsButton, InventoryMovementsSheet } from "./inventory-movements-sheet";
+import { AppSelect } from "@/components/ui/app-select";
+import { PriceCurrencyField } from "@/components/ui/price-currency-field";
+import type { OrganizationCurrencySettings } from "@/lib/organizations/currencies";
 
 type InventoryBoardProps = {
   products: ProductRecord[];
   promotions: PromotionRecord[];
   movements: InventoryMovementRecord[];
+  currencies: OrganizationCurrencySettings;
   canManage: boolean;
 };
+
+const PAGE_SIZE = 8;
 
 const emptyProductForm = {
   name: "",
@@ -49,18 +59,70 @@ const emptyProductForm = {
   reorderPoint: "",
   description: "",
   trackStock: true,
+  currency: "DOP",
 };
 
-const selectClassName =
-  "h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+const productInitials = (name: string) =>
+  name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .toUpperCase();
 
-export const InventoryBoard = ({ products, promotions, movements, canManage }: InventoryBoardProps) => {
+const isLowStock = (product: ProductRecord) =>
+  Boolean(
+    product.trackStock &&
+      product.onHand != null &&
+      product.reorderPoint != null &&
+      product.onHand <= product.reorderPoint,
+  );
+
+export const InventoryBoard = ({ products, promotions, movements, currencies, canManage }: InventoryBoardProps) => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState(emptyProductForm);
+  const [form, setForm] = useState({ ...emptyProductForm, currency: currencies.defaultCode });
   const [promoForm, setPromoForm] = useState({ name: "", description: "", discountPercent: "" });
   const [receiveQty, setReceiveQty] = useState<Record<number, string>>({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [stockFilter, setStockFilter] = useState<"all" | "low">("all");
+  const [showFilters, setShowFilters] = useState(false);
+  const [isMovementsOpen, setIsMovementsOpen] = useState(false);
+  const [page, setPage] = useState(1);
   const [isPending, startTransition] = useTransition();
+  const [isImporting, startImport] = useTransition();
+
+  const categories = useMemo(() => {
+    const unique = new Set(
+      products.map((product) => product.category?.trim()).filter((value): value is string => Boolean(value)),
+    );
+    return [...unique].sort((a, b) => a.localeCompare(b, "es"));
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return products.filter((product) => {
+      const haystack = `${product.name} ${product.sku ?? ""} ${product.category ?? ""}`.toLowerCase();
+      if (query && !haystack.includes(query)) return false;
+      if (categoryFilter !== "all" && product.category !== categoryFilter) return false;
+      if (statusFilter === "active" && !product.active) return false;
+      if (statusFilter === "inactive" && product.active) return false;
+      if (stockFilter === "low" && !isLowStock(product)) return false;
+      return true;
+    });
+  }, [products, searchTerm, categoryFilter, statusFilter, stockFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pagedProducts = filteredProducts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const rangeStart = filteredProducts.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
+  const rangeEnd = Math.min(currentPage * PAGE_SIZE, filteredProducts.length);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, categoryFilter, statusFilter, stockFilter]);
 
   const lowStockCount = useMemo(
     () =>
@@ -76,7 +138,7 @@ export const InventoryBoard = ({ products, promotions, movements, canManage }: I
 
   const handleOpenCreate = () => {
     setEditingId(null);
-    setForm(emptyProductForm);
+    setForm({ ...emptyProductForm, currency: currencies.defaultCode });
     setIsSheetOpen(true);
   };
 
@@ -92,6 +154,7 @@ export const InventoryBoard = ({ products, promotions, movements, canManage }: I
       reorderPoint: product.reorderPoint == null ? "" : String(product.reorderPoint),
       description: product.description ?? "",
       trackStock: product.trackStock,
+      currency: product.currency || currencies.defaultCode,
     });
     setIsSheetOpen(true);
   };
@@ -114,6 +177,7 @@ export const InventoryBoard = ({ products, promotions, movements, canManage }: I
         description: form.description || undefined,
         reorderPoint: form.reorderPoint ? Number(form.reorderPoint) : undefined,
         initialStock: form.initialStock ? Number(form.initialStock) : undefined,
+        currency: form.currency,
         ...(editingId ? { id: editingId, active: true } : {}),
       };
 
@@ -143,6 +207,72 @@ export const InventoryBoard = ({ products, promotions, movements, canManage }: I
       toast.success(result.success);
       setReceiveQty((current) => ({ ...current, [inventoryItemId]: "" }));
     });
+  };
+
+  const handleToggleActive = (product: ProductRecord) => {
+    startTransition(async () => {
+      const result = await updateProductAction({
+        id: product.id,
+        name: product.name,
+        sku: product.sku || undefined,
+        category: product.category || undefined,
+        kind: product.kind,
+        price: product.price,
+        trackStock: product.trackStock,
+        description: product.description || undefined,
+        reorderPoint: product.reorderPoint ?? undefined,
+        currency: product.currency,
+        active: !product.active,
+      });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result.success);
+    });
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+  };
+
+  const handleToggleFilters = () => {
+    setShowFilters((current) => !current);
+  };
+
+  const handleOpenMovements = () => {
+    setIsMovementsOpen(true);
+  };
+
+  const handleExport = () => {
+    const csv = catalogToCsv(products);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "catalogo.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (file: File) => {
+    startImport(async () => {
+      const text = await file.text();
+      const result = await importCatalogCsvAction(text);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result.success);
+    });
+  };
+
+  const handlePreviousPage = () => {
+    setPage((current) => Math.max(1, current - 1));
+  };
+
+  const handleNextPage = () => {
+    setPage((current) => Math.min(pageCount, current + 1));
   };
 
   const handleCreatePromotion = () => {
@@ -189,104 +319,354 @@ export const InventoryBoard = ({ products, promotions, movements, canManage }: I
       </div>
 
       <Card className="border-primary/15 bg-card/80">
-        <CardHeader className="flex flex-row items-center justify-between gap-3">
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle>Catálogo e inventario</CardTitle>
             <CardDescription>La IA vende solo lo que está aquí, al precio y stock reales.</CardDescription>
           </div>
-          {canManage ? (
-            <Button type="button" onClick={handleOpenCreate}>
-              <Plus />
-              Agregar producto
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" onClick={handleExport}>
+              <Download />
+              Exportar
             </Button>
-          ) : null}
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {products.length ? (
-            products.map((product) => {
-              const isLow =
-                product.trackStock &&
-                product.onHand != null &&
-                product.reorderPoint != null &&
-                product.onHand <= product.reorderPoint;
-              return (
-                <div
-                  key={product.id}
-                  className="flex flex-col gap-3 rounded-xl border border-primary/10 bg-background/70 p-3 md:flex-row md:items-center md:justify-between"
+            {canManage ? (
+              <label className="inline-flex">
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="sr-only"
+                  aria-label="Importar CSV"
+                  disabled={isImporting}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) handleImport(file);
+                    event.target.value = "";
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  asChild
+                  title="CSV con columnas name, sku, category, kind, price, stock."
                 >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium">{product.name}</p>
-                      <Badge variant="outline">{PRODUCT_KIND_LABELS[product.kind]}</Badge>
-                      {product.kind === "service" || !product.trackStock ? (
-                        <Badge variant="outline">Sin control de stock</Badge>
-                      ) : (
-                        <Badge variant={isLow ? "destructive" : "secondary"}>
-                          {product.onHand ?? 0} en mano
-                        </Badge>
-                      )}
-                      {product.active ? null : <Badge variant="destructive">Inactivo</Badge>}
-                      {isLow ? <Badge variant="destructive">Stock bajo</Badge> : null}
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {formatMoney(product.price, product.currency)}
-                      {product.sku ? ` · SKU ${product.sku}` : ""}
-                      {product.category ? ` · ${product.category}` : ""}
-                    </p>
-                  </div>
-                  {canManage ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      {product.inventoryItemId && product.trackStock ? (
-                        <>
-                          <Input
-                            type="number"
-                            min={0}
-                            step="1"
-                            className="w-24"
-                            placeholder="+ stock"
-                            value={receiveQty[product.inventoryItemId] ?? ""}
-                            onChange={(event) =>
-                              setReceiveQty((current) => ({
-                                ...current,
-                                [product.inventoryItemId as number]: event.target.value,
-                              }))
-                            }
-                            aria-label={`Reponer ${product.name}`}
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={isPending}
-                            onClick={() => handleReceive(product.inventoryItemId as number)}
-                          >
-                            <PackagePlus />
-                            Reponer
+                  <span>
+                    {isImporting ? <Loader2 className="animate-spin" /> : <Upload />}
+                    Importar CSV
+                  </span>
+                </Button>
+              </label>
+            ) : null}
+            {canManage ? (
+              <Button type="button" onClick={handleOpenCreate}>
+                <Plus />
+                Agregar producto
+              </Button>
+            ) : null}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                aria-label="Buscar producto"
+                className="h-9 pl-9"
+                placeholder="Buscar por nombre, SKU o categoría"
+                value={searchTerm}
+                onChange={(event) => handleSearchChange(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant={showFilters ? "default" : "outline"}
+                aria-pressed={showFilters}
+                onClick={handleToggleFilters}
+              >
+                <Filter />
+                Filtrar
+              </Button>
+              <InventoryMovementsButton onClick={handleOpenMovements} />
+            </div>
+          </div>
+
+          {showFilters ? (
+            <div className="grid gap-2 sm:grid-cols-3">
+              <AppSelect
+                aria-label="Filtrar por categoría"
+                value={categoryFilter}
+                onValueChange={setCategoryFilter}
+                options={[
+                  { value: "all", label: "Todas las categorías" },
+                  ...categories.map((category) => ({ value: category, label: category })),
+                ]}
+              />
+              <AppSelect
+                aria-label="Filtrar por estado"
+                value={statusFilter}
+                onValueChange={(value) => setStatusFilter(value as "all" | "active" | "inactive")}
+                options={[
+                  { value: "all", label: "Todos los estados" },
+                  { value: "active", label: "Activos" },
+                  { value: "inactive", label: "Inactivos" },
+                ]}
+              />
+              <AppSelect
+                aria-label="Filtrar por stock"
+                value={stockFilter}
+                onValueChange={(value) => setStockFilter(value as "all" | "low")}
+                options={[
+                  { value: "all", label: "Todo el stock" },
+                  { value: "low", label: "Stock bajo" },
+                ]}
+              />
+            </div>
+          ) : null}
+
+          {filteredProducts.length ? (
+            <>
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="border-b border-primary/10 text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-3 font-medium">ID</th>
+                      <th className="px-3 py-3 font-medium">Nombre</th>
+                      <th className="px-3 py-3 font-medium">SKU</th>
+                      <th className="px-3 py-3 font-medium">Categoría</th>
+                      <th className="px-3 py-3 font-medium">Precio</th>
+                      <th className="px-3 py-3 font-medium">Stock</th>
+                      <th className="px-3 py-3 font-medium">Estado</th>
+                      {canManage ? <th className="px-3 py-3 font-medium">Acciones</th> : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedProducts.map((product) => {
+                      const low = isLowStock(product);
+                      return (
+                        <tr key={product.id} className="border-b border-primary/8 last:border-0">
+                          <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{product.id}</td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center gap-3">
+                              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                                {productInitials(product.name)}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="truncate font-medium">{product.name}</p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {PRODUCT_KIND_LABELS[product.kind]}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 text-muted-foreground">{product.sku || "—"}</td>
+                          <td className="px-3 py-3 text-muted-foreground">{product.category || "—"}</td>
+                          <td className="px-3 py-3 font-medium">{formatMoney(product.price, product.currency)}</td>
+                          <td className="px-3 py-3">
+                            {product.kind === "service" || !product.trackStock ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              <span className={cn("font-medium", low && "text-destructive")}>
+                                {product.onHand ?? 0}
+                                {low ? <span className="ml-1 text-xs font-normal">bajo</span> : null}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-3">
+                            <button
+                              type="button"
+                              disabled={!canManage || isPending}
+                              className={cn(
+                                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                                product.active
+                                  ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
+                                  : "bg-amber-500/12 text-amber-700 dark:text-amber-300",
+                              )}
+                              onClick={() => handleToggleActive(product)}
+                              aria-label={product.active ? "Desactivar producto" : "Activar producto"}
+                            >
+                              <span className="size-1.5 rounded-full bg-current" />
+                              {product.active ? "Activo" : "Inactivo"}
+                            </button>
+                          </td>
+                          {canManage ? (
+                            <td className="px-3 py-3">
+                              <div className="flex items-center gap-2">
+                                {product.inventoryItemId && product.trackStock ? (
+                                  <>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      step="1"
+                                      className="h-8 w-20"
+                                      placeholder="+ stock"
+                                      value={receiveQty[product.inventoryItemId] ?? ""}
+                                      onChange={(event) =>
+                                        setReceiveQty((current) => ({
+                                          ...current,
+                                          [product.inventoryItemId as number]: event.target.value,
+                                        }))
+                                      }
+                                      aria-label={`Reponer ${product.name}`}
+                                    />
+                                    <Button
+                                      type="button"
+                                      size="icon-sm"
+                                      variant="outline"
+                                      disabled={isPending}
+                                      aria-label={`Guardar reposición de ${product.name}`}
+                                      onClick={() => handleReceive(product.inventoryItemId as number)}
+                                    >
+                                      <PackagePlus />
+                                    </Button>
+                                  </>
+                                ) : null}
+                                <Button
+                                  type="button"
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  aria-label={`Editar ${product.name}`}
+                                  onClick={() => handleOpenEdit(product)}
+                                >
+                                  <Pencil />
+                                </Button>
+                              </div>
+                            </td>
+                          ) : null}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-2 md:hidden">
+                {pagedProducts.map((product) => {
+                  const low = isLowStock(product);
+                  return (
+                    <div key={product.id} className="rounded-xl border border-primary/10 bg-background/70 p-3">
+                      <div className="flex items-start gap-3">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                          {productInitials(product.name)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-medium">{product.name}</p>
+                            <span
+                              className={cn(
+                                "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                product.active
+                                  ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
+                                  : "bg-amber-500/12 text-amber-700 dark:text-amber-300",
+                              )}
+                            >
+                              <span className="size-1.5 rounded-full bg-current" />
+                              {product.active ? "Activo" : "Inactivo"}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {formatMoney(product.price, product.currency)}
+                            {product.sku ? ` · ${product.sku}` : ""}
+                            {product.category ? ` · ${product.category}` : ""}
+                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <Badge variant="outline">{PRODUCT_KIND_LABELS[product.kind]}</Badge>
+                            {product.kind === "service" || !product.trackStock ? (
+                              <Badge variant="outline">Sin stock</Badge>
+                            ) : (
+                              <Badge variant={low ? "destructive" : "secondary"}>{product.onHand ?? 0} en mano</Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {canManage ? (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {product.inventoryItemId && product.trackStock ? (
+                            <>
+                              <Input
+                                type="number"
+                                min={0}
+                                step="1"
+                                className="w-24"
+                                placeholder="+ stock"
+                                value={receiveQty[product.inventoryItemId] ?? ""}
+                                onChange={(event) =>
+                                  setReceiveQty((current) => ({
+                                    ...current,
+                                    [product.inventoryItemId as number]: event.target.value,
+                                  }))
+                                }
+                                aria-label={`Reponer ${product.name}`}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={isPending}
+                                onClick={() => handleReceive(product.inventoryItemId as number)}
+                              >
+                                <PackagePlus />
+                                Reponer
+                              </Button>
+                            </>
+                          ) : null}
+                          <Button type="button" variant="ghost" size="sm" onClick={() => handleOpenEdit(product)}>
+                            <Pencil />
+                            Editar
                           </Button>
-                        </>
+                        </div>
                       ) : null}
-                      <Button type="button" variant="ghost" onClick={() => handleOpenEdit(product)}>
-                        Editar
-                      </Button>
                     </div>
-                  ) : null}
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-primary/10 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Mostrando {rangeStart} a {rangeEnd} de {filteredProducts.length} productos
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={currentPage <= 1}
+                    onClick={handlePreviousPage}
+                  >
+                    <ChevronLeft />
+                    Anterior
+                  </Button>
+                  <span className="flex size-8 items-center justify-center rounded-full border border-primary text-xs font-medium">
+                    {currentPage}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={currentPage >= pageCount}
+                    onClick={handleNextPage}
+                  >
+                    Siguiente
+                    <ChevronRight />
+                  </Button>
                 </div>
-              );
-            })
+              </div>
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Aún no hay productos. Agrega el stock que la IA podrá vender por chat.
+              {products.length
+                ? "Ningún producto coincide con la búsqueda o los filtros."
+                : "Aún no hay productos. Agrega el stock que la IA podrá vender por chat."}
             </p>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="border-primary/15 bg-card/80">
-          <CardHeader>
-            <CardTitle>Promociones</CardTitle>
-            <CardDescription>La IA las lee en cada conversación mientras estén activas.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+      <Card className="border-primary/15 bg-card/80">
+        <CardHeader>
+          <CardTitle>Promociones</CardTitle>
+          <CardDescription>La IA las lee en cada conversación mientras estén activas.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
             {canManage ? (
               <div className="grid gap-2">
                 <Input
@@ -355,28 +735,11 @@ export const InventoryBoard = ({ products, promotions, movements, canManage }: I
           </CardContent>
         </Card>
 
-        <Card className="border-primary/15 bg-card/80">
-          <CardHeader>
-            <CardTitle>Movimientos</CardTitle>
-            <CardDescription>Ventas de la IA, cancelaciones y reposiciones.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {movements.length ? (
-              movements.map((movement) => (
-                <p key={movement.id} className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">{movement.inventoryItemName}</span>
-                  {": "}
-                  {movement.quantity > 0 ? "+" : ""}
-                  {movement.quantity} · queda {movement.balanceAfter}
-                  {movement.orderId ? ` · pedido #${movement.orderId}` : ""}
-                </p>
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">Todavía no hay movimientos de inventario.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <InventoryMovementsSheet
+        open={isMovementsOpen}
+        movements={movements}
+        onOpenChange={setIsMovementsOpen}
+      />
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetContent>
@@ -394,28 +757,27 @@ export const InventoryBoard = ({ products, promotions, movements, canManage }: I
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="product-price">Precio (DOP)</Label>
-                <Input
+              <div className={currencies.codes.length > 1 ? "col-span-2" : undefined}>
+                <PriceCurrencyField
                   id="product-price"
-                  type="number"
-                  min={0}
-                  value={form.price}
-                  onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))}
+                  label="Precio"
+                  amount={form.price}
+                  currency={form.currency}
+                  currencies={currencies}
+                  onAmountChange={(value) => setForm((current) => ({ ...current, price: value }))}
+                  onCurrencyChange={(value) => setForm((current) => ({ ...current, currency: value }))}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="product-kind">Tipo</Label>
-                <select
+                <AppSelect
                   id="product-kind"
-                  className={selectClassName}
                   value={form.kind}
-                  onChange={(event) => setForm((current) => ({ ...current, kind: event.target.value as ProductKind }))}
-                >
-                  <option value="physical">Producto</option>
-                  <option value="food">Comida / plato</option>
-                  <option value="service">Servicio</option>
-                </select>
+                  onValueChange={(value) => setForm((current) => ({ ...current, kind: value as ProductKind }))}
+                  options={(Object.entries(PRODUCT_KIND_LABELS) as Array<[ProductKind, string]>).map(
+                    ([value, label]) => ({ value, label }),
+                  )}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
