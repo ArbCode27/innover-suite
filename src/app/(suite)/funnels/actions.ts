@@ -181,7 +181,9 @@ export const createFunnelCardAction = async (
         "id, stage_id, contact_id, conversation_id, title, value_amount, owner_user_id, position, updated_at, contacts(full_name, phone), conversations(channel)",
       )
       .single();
-    inserted = fallback.data;
+    inserted = fallback.data
+      ? { ...fallback.data, currency: currency ?? null }
+      : fallback.data;
     insertError = fallback.error;
   }
 

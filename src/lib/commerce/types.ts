@@ -124,7 +124,7 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   refunded: "Reembolsado",
 };
 
-export const ACTIVE_ORDER_STATUSES: OrderStatus[] = ["received", "preparing", "ready"];
+export const ACTIVE_ORDER_STATUSES = ["received", "preparing", "ready"] as const satisfies readonly OrderStatus[];
 
 export const NEXT_ORDER_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   received: "preparing",

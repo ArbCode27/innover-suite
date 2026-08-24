@@ -93,7 +93,10 @@ export const OfficeHoursForm = ({
   const [isPending, startTransition] = useTransition();
 
   const timezoneOptions = useMemo(() => {
-    const options = OFFICE_TIMEZONES.map((item) => ({ value: item.value, label: item.label }));
+    const options: Array<{ value: string; label: string }> = OFFICE_TIMEZONES.map((item) => ({
+      value: item.value,
+      label: item.label,
+    }));
     if (!options.some((item) => item.value === timezone)) {
       options.unshift({ value: timezone, label: timezone });
     }
