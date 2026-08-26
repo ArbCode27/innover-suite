@@ -36,6 +36,14 @@ export default async function SettingsPage() {
         .eq("channel", "messenger")
         .order("updated_at", { ascending: false })
     : { data: null, error: null };
+  const whatsappConnections = membership
+    ? await supabase
+        .from("channel_accounts")
+        .select("external_account_id, display_name, updated_at, metadata")
+        .eq("organization_id", membership.organizationId)
+        .eq("channel", "whatsapp")
+        .order("updated_at", { ascending: false })
+    : { data: null, error: null };
   const googleCalendarConnection = membership
     ? await supabase
         .from("calendar_connections")
@@ -49,6 +57,7 @@ export default async function SettingsPage() {
   const connectedCount = [
     Boolean(instagramConnection.data),
     Boolean(messengerConnections.data?.length),
+    Boolean(whatsappConnections.data?.length),
     Boolean(googleCalendarConnection.data),
   ].filter(Boolean).length;
 
@@ -73,13 +82,14 @@ export default async function SettingsPage() {
   return (
     <ModuleShell
       title="Configuración del CRM"
-      description={`Conecta canales, define las funciones del negocio, calendario, agente IA y equipo para ${membership?.organizationName || "tu organización"}. ${connectedCount} de 3 integraciones activas.`}
+      description={`Conecta canales, define las funciones del negocio, calendario, agente IA y equipo para ${membership?.organizationName || "tu organización"}. ${connectedCount} de 4 integraciones activas.`}
       eyebrow="Integraciones"
     >
       <div className="space-y-8">
         <Suspense
           fallback={
-            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <Skeleton className="h-64 rounded-xl" />
               <Skeleton className="h-64 rounded-xl" />
               <Skeleton className="h-64 rounded-xl" />
               <Skeleton className="h-64 rounded-xl" />
@@ -90,6 +100,7 @@ export default async function SettingsPage() {
             canManageOrganization={canManageOrganization}
             instagramConnection={instagramConnection.data}
             messengerConnections={messengerConnections.data ?? []}
+            whatsappConnections={whatsappConnections.data ?? []}
             googleCalendarConnection={
               googleCalendarConnection.data
                 ? {

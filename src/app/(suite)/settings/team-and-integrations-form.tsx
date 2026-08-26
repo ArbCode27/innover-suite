@@ -7,7 +7,8 @@ import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarDays, Camera, Loader2, MessagesSquare, Unplug, UserPlus } from "lucide-react";
+import { CalendarDays, Camera, Loader2, MessageCircle, MessagesSquare, Unplug, UserPlus } from "lucide-react";
+import { WhatsAppConnectButton } from "./whatsapp-connect-button";
 import { inviteAdvisorAction } from "@/lib/organizations/actions";
 import { AppSelect } from "@/components/ui/app-select";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,12 @@ type TeamAndIntegrationsFormProps = {
     external_account_id: string;
     display_name: string | null;
     updated_at: string;
+  }>;
+  whatsappConnections: Array<{
+    external_account_id: string;
+    display_name: string | null;
+    updated_at: string;
+    metadata: unknown;
   }>;
   googleCalendarConnection: {
     email: string | null;
@@ -94,6 +101,38 @@ const MESSENGER_STATUS_LABELS: Record<string, string> = {
   state_error: "No se pudo iniciar el flujo OAuth de Messenger.",
   auth_required: "Tu sesión expiró. Inicia sesión nuevamente para conectar Messenger.",
   forbidden: "No tienes permisos para gestionar integraciones de Messenger.",
+};
+
+const WHATSAPP_STATUS_LABELS: Record<string, string> = {
+  connected: "WhatsApp conectado correctamente.",
+  cancelled: "Conexión de WhatsApp cancelada por el usuario.",
+  invalid_callback: "Facebook devolvió un callback incompleto. Inténtalo de nuevo.",
+  invalid_state: "La sesión de conexión de WhatsApp expiró o no es válida. Reintenta desde el panel.",
+  token_exchange_failed: "No se pudo completar el intercambio de token de WhatsApp.",
+  no_numbers: "No se encontró ningún número de WhatsApp autorizado para conectar.",
+  subscription_failed: "Se guardó el número, pero no se pudo suscribir el webhook de WhatsApp.",
+  persist_failed: "Se autorizó WhatsApp, pero no se pudo guardar la conexión en el CRM.",
+  disconnect_failed: "No se pudo desconectar WhatsApp en este intento.",
+  disconnected: "WhatsApp desconectado correctamente.",
+  missing_env: "Faltan variables de entorno para WhatsApp Embedded Signup.",
+  state_error: "No se pudo iniciar el flujo de WhatsApp en este momento.",
+  auth_required: "Tu sesión expiró. Inicia sesión nuevamente para conectar WhatsApp.",
+  forbidden: "No tienes permisos para gestionar integraciones de WhatsApp.",
+  sdk_failed: "No se pudo cargar el SDK de Facebook. Revisa el bloqueo de scripts e inténtalo de nuevo.",
+  login_failed: "Facebook no completó el inicio de sesión de WhatsApp.",
+  signup_failed: "El alta de WhatsApp terminó con un error en Meta.",
+};
+
+const readWhatsAppMetadata = (value: unknown) => {
+  if (!value || typeof value !== "object") {
+    return { displayPhoneNumber: null as string | null, qualityRating: null as string | null };
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    displayPhoneNumber: typeof record.displayPhoneNumber === "string" ? record.displayPhoneNumber : null,
+    qualityRating: typeof record.qualityRating === "string" ? record.qualityRating : null,
+  };
 };
 
 const formatDate = (value: string) =>
@@ -156,6 +195,7 @@ const IntegrationCard = ({
 export const TeamAndIntegrationsForm = ({
   instagramConnection,
   messengerConnections,
+  whatsappConnections,
   googleCalendarConnection,
   organizationName,
   canManageOrganization,
@@ -163,6 +203,7 @@ export const TeamAndIntegrationsForm = ({
   const searchParams = useSearchParams();
   const igStatus = searchParams.get("ig");
   const messengerStatus = searchParams.get("ms");
+  const whatsappStatus = searchParams.get("wa");
   const googleStatus = searchParams.get("gc");
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
@@ -189,9 +230,14 @@ export const TeamAndIntegrationsForm = ({
   const messengerStatusIsError = Boolean(
     messengerStatus && !["connected", "disconnected"].includes(messengerStatus),
   );
+  const whatsappStatusMessage = whatsappStatus ? WHATSAPP_STATUS_LABELS[whatsappStatus] : null;
+  const whatsappStatusIsError = Boolean(
+    whatsappStatus && !["connected", "disconnected"].includes(whatsappStatus),
+  );
   const googleStatusMessage = googleStatus ? GOOGLE_STATUS_LABELS[googleStatus] : null;
   const googleStatusIsError = Boolean(googleStatus && !["connected", "disconnected"].includes(googleStatus));
   const hasMessengerConnections = messengerConnections.length > 0;
+  const hasWhatsAppConnections = whatsappConnections.length > 0;
 
   return (
     <div className="space-y-8">
@@ -205,7 +251,7 @@ export const TeamAndIntegrationsForm = ({
           </p>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <IntegrationCard
             id="instagram"
             icon={Camera}
@@ -283,6 +329,50 @@ export const TeamAndIntegrationsForm = ({
               </Button>
             ) : (
               <p className="text-sm text-muted-foreground">Pide a un admin que conecte esta cuenta.</p>
+            )}
+          </IntegrationCard>
+
+          <IntegrationCard
+            id="whatsapp"
+            icon={MessageCircle}
+            title="WhatsApp"
+            description="Conecta el número de WhatsApp Business para chats en el inbox."
+            connected={hasWhatsAppConnections}
+            statusMessage={whatsappStatusMessage}
+            statusIsError={whatsappStatusIsError}
+          >
+            {hasWhatsAppConnections ? (
+              <div className="space-y-3 rounded-xl border border-emerald-400/30 bg-emerald-500/5 p-3">
+                <div className="space-y-2">
+                  {whatsappConnections.map((connection) => {
+                    const metadata = readWhatsAppMetadata(connection.metadata);
+                    return (
+                      <div key={connection.external_account_id}>
+                        <p className="text-sm font-medium">
+                          {connection.display_name || metadata.displayPhoneNumber || "WhatsApp"}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {metadata.displayPhoneNumber || `ID ${connection.external_account_id}`}
+                          {metadata.qualityRating ? ` · calidad ${metadata.qualityRating}` : ""} ·{" "}
+                          {formatDate(connection.updated_at)}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+                {canManageOrganization ? (
+                  <form action="/api/auth/whatsapp/disconnect" method="post">
+                    <Button type="submit" variant="outline" className="w-full">
+                      <Unplug />
+                      Desconectar
+                    </Button>
+                  </form>
+                ) : null}
+              </div>
+            ) : canManageOrganization ? (
+              <WhatsAppConnectButton />
+            ) : (
+              <p className="text-sm text-muted-foreground">Pide a un admin que conecte WhatsApp.</p>
             )}
           </IntegrationCard>
 
