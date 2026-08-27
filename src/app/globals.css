@@ -149,6 +149,25 @@
     background: transparent;
   }
 
+  @media (max-width: 767.98px) {
+    html,
+    body,
+    * {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    *::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+
+    [data-slot="scroll-area-scrollbar"] {
+      display: none;
+    }
+  }
+
   body {
     @apply overflow-x-hidden bg-background text-foreground;
     background-image:
