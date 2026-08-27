@@ -1,3 +1,4 @@
+import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type OrganizationRole = "owner" | "admin" | "agent" | "viewer" | "kitchen" | "cashier";
@@ -22,20 +23,14 @@ const toOrganizationName = (value: MembershipRow["organizations"]) => {
   return value?.name ?? "Organización";
 };
 
-export const getCurrentMembership = async (): Promise<OrganizationMembership | null> => {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return null;
-  }
-
+export const loadMembershipForUser = async (
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<OrganizationMembership | null> => {
   const { data, error } = await supabase
     .from("organization_members")
     .select("organization_id, role, organizations(name)")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .eq("status", "active")
     .order("created_at", { ascending: true })
     .limit(1)
@@ -54,6 +49,29 @@ export const getCurrentMembership = async (): Promise<OrganizationMembership | n
     role: data.role,
     organizationName: toOrganizationName(data.organizations),
   };
+};
+
+export const loadCurrentMemberSession = async (
+  supabase?: SupabaseClient,
+): Promise<{ user: User | null; membership: OrganizationMembership | null }> => {
+  const client = supabase ?? (await createSupabaseServerClient());
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+
+  if (!user) {
+    return { user: null, membership: null };
+  }
+
+  return {
+    user,
+    membership: await loadMembershipForUser(client, user.id),
+  };
+};
+
+export const getCurrentMembership = async (): Promise<OrganizationMembership | null> => {
+  const { membership } = await loadCurrentMemberSession();
+  return membership;
 };
 
 export const hasOrganizationRole = (

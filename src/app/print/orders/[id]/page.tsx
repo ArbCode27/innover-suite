@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { loadOrderById } from "@/lib/commerce/orders";
 import { formatMoney } from "@/lib/commerce/types";
-import { canManageOrders, getCurrentMembership } from "@/lib/organizations/membership";
+import { canManageOrders, loadCurrentMemberSession } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type PrintPageProps = {
@@ -9,8 +9,9 @@ type PrintPageProps = {
 };
 
 export default async function OrderPrintPage({ params }: PrintPageProps) {
-  const membership = await getCurrentMembership();
-  if (!membership) redirect("/login");
+  const { user, membership } = await loadCurrentMemberSession();
+  if (!user) redirect("/login");
+  if (!membership) redirect("/onboarding/organization");
   if (!canManageOrders(membership)) redirect("/home");
 
   const orderId = Number((await params).id);

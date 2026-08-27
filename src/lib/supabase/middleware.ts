@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const AUTH_TIMEOUT_MS = 8000;
+
 const PUBLIC_PATHS = [
   "/login",
   "/privacy",
@@ -17,8 +19,27 @@ const PUBLIC_PATHS = [
   "/api/webhooks/meta",
 ];
 
-const isPublicPath = (pathname: string) =>
-  PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+const AUTH_SKIP_PATHS = [
+  "/privacy",
+  "/terms",
+  "/invite",
+  "/api/health",
+  "/api/auth/instagram/callback",
+  "/api/auth/messenger/callback",
+  "/api/auth/whatsapp/callback",
+  "/api/auth/google/callback",
+  "/api/cron/instagram/refresh",
+  "/api/cron/google/refresh",
+  "/api/meta/webhook",
+  "/api/webhooks/meta",
+];
+
+const isPrefixedPath = (pathname: string, paths: string[]) =>
+  paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+
+const isPublicPath = (pathname: string) => isPrefixedPath(pathname, PUBLIC_PATHS);
+
+const shouldSkipAuth = (pathname: string) => isPrefixedPath(pathname, AUTH_SKIP_PATHS);
 
 const isSafeWhatsAppOAuthReturnPath = (value: string | null) => {
   if (!value || !value.startsWith("/api/auth/whatsapp/callback")) {
@@ -35,6 +56,9 @@ const isSafeWhatsAppOAuthReturnPath = (value: string | null) => {
     return false;
   }
 };
+
+const hasSupabaseAuthCookie = (request: NextRequest) =>
+  request.cookies.getAll().some((cookie) => cookie.name.includes("-auth-token"));
 
 const copyCookies = (from: NextResponse, to: NextResponse) => {
   from.cookies.getAll().forEach((cookie) => {
@@ -56,11 +80,36 @@ const redirectWithCookies = (
   return copyCookies(sessionResponse, NextResponse.redirect(url));
 };
 
+const getUserWithTimeout = async (
+  supabase: ReturnType<typeof createServerClient>,
+): Promise<{ user: { id: string } | null; timedOut: boolean }> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), AUTH_TIMEOUT_MS);
+  });
+
+  try {
+    const result = await Promise.race([supabase.auth.getUser(), timeout]);
+    if (result === "timeout") {
+      return { user: null, timedOut: true };
+    }
+    return { user: result.data.user, timedOut: false };
+  } catch {
+    return { user: null, timedOut: true };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
+
 export const updateSession = async (request: NextRequest) => {
-  let sessionResponse = NextResponse.next({ request });
+  const sessionResponse = NextResponse.next({ request });
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   const { pathname } = request.nextUrl;
+
+  if (shouldSkipAuth(pathname)) {
+    return sessionResponse;
+  }
 
   if (!supabaseUrl || !supabaseAnonKey) {
     if (!isPublicPath(pathname)) {
@@ -72,6 +121,11 @@ export const updateSession = async (request: NextRequest) => {
     return sessionResponse;
   }
 
+  if (!hasSupabaseAuthCookie(request) && !isPublicPath(pathname)) {
+    return redirectWithCookies(request, sessionResponse, "/login");
+  }
+
+  let response = sessionResponse;
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll: () => request.cookies.getAll(),
@@ -79,47 +133,35 @@ export const updateSession = async (request: NextRequest) => {
         cookiesToSet.forEach(({ name, value }) => {
           request.cookies.set(name, value);
         });
-        sessionResponse = NextResponse.next({ request });
+        response = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) => {
-          sessionResponse.cookies.set(name, value, options);
+          response.cookies.set(name, value, options);
         });
       },
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, timedOut } = await getUserWithTimeout(supabase);
 
-  if (user) {
-    const { data: membership } = await supabase
-      .from("organization_members")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .eq("status", "active")
-      .limit(1)
-      .maybeSingle();
+  if (timedOut) {
+    return response;
+  }
 
-    if (!membership?.organization_id && !pathname.startsWith("/onboarding")) {
-      return redirectWithCookies(request, sessionResponse, "/onboarding/organization");
+  if (user && (pathname === "/login" || pathname === "/")) {
+    const nextPath = request.nextUrl.searchParams.get("next");
+    if (pathname === "/login" && nextPath && isSafeWhatsAppOAuthReturnPath(nextPath)) {
+      const resumeUrl = request.nextUrl.clone();
+      resumeUrl.pathname = "/api/auth/whatsapp/callback";
+      resumeUrl.search = new URL(nextPath, request.nextUrl.origin).search;
+      return copyCookies(response, NextResponse.redirect(resumeUrl));
     }
 
-    if (membership?.organization_id && (pathname === "/login" || pathname === "/")) {
-      const nextPath = request.nextUrl.searchParams.get("next");
-      if (pathname === "/login" && nextPath && isSafeWhatsAppOAuthReturnPath(nextPath)) {
-        const resumeUrl = request.nextUrl.clone();
-        resumeUrl.pathname = "/api/auth/whatsapp/callback";
-        resumeUrl.search = new URL(nextPath, request.nextUrl.origin).search;
-        return copyCookies(sessionResponse, NextResponse.redirect(resumeUrl));
-      }
-
-      return redirectWithCookies(request, sessionResponse, "/home");
-    }
+    return redirectWithCookies(request, response, "/home");
   }
 
   if (!user && !isPublicPath(pathname)) {
-    return redirectWithCookies(request, sessionResponse, "/login");
+    return redirectWithCookies(request, response, "/login");
   }
 
-  return sessionResponse;
+  return response;
 };

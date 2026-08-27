@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   CalendarDays,
   ClipboardList,
@@ -13,20 +14,19 @@ import {
   Sparkles,
 } from "lucide-react";
 import { signOut } from "@/lib/auth/actions";
-import { DEFAULT_MODULES } from "@/lib/modules/constants";
 import { loadOrganizationModules } from "@/lib/modules/settings";
 import { loadNotifications } from "@/lib/notifications/board";
 import {
   canManageCatalog,
   canManageOrders,
   canUseInbox,
-  getCurrentMembership,
+  loadCurrentMemberSession,
   ROLE_LABELS,
   type OrganizationRole,
 } from "@/lib/organizations/membership";
 import { MobileChromeProvider, MobileNav, SidebarNav, type MobileNavIcon } from "@/components/suite/mobile-nav";
 import { ThemeToggle } from "@/components/suite/theme-toggle";
-import { NotificationBell } from "@/components/suite/notification-bell";
+import { NotificationBellHost } from "@/components/suite/notification-bell-host";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -42,17 +42,21 @@ type NavItem = {
 
 const SuiteLayout = async ({ children }: { children: ReactNode }) => {
   const supabase = await createSupabaseServerClient();
-  const membership = await getCurrentMembership();
-  const modules = membership
-    ? await loadOrganizationModules(supabase, membership.organizationId)
-    : DEFAULT_MODULES;
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, membership } = await loadCurrentMemberSession(supabase);
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  if (!membership) {
+    redirect("/onboarding/organization");
+  }
+
+  const [modules, notifications] = await Promise.all([
+    loadOrganizationModules(supabase, membership.organizationId),
+    loadNotifications(supabase, membership.organizationId, user.id),
+  ]);
   const initials = user?.email?.slice(0, 2).toUpperCase() ?? "IS";
-  const notifications = membership
-    ? await loadNotifications(supabase, membership.organizationId, user?.id ?? null)
-    : [];
 
   const navItems: NavItem[] = [
     { href: "/home", label: "Inicio", icon: Home, iconKey: "home", show: true },
@@ -119,25 +123,19 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
           />
           <Separator className="mt-6" />
           <div className="mt-auto space-y-4 pt-6">
-            {membership ? (
-              <div className="flex justify-center group-hover/sidebar:justify-end">
-                <NotificationBell organizationId={membership.organizationId} initialNotifications={notifications} />
-              </div>
-            ) : null}
+            <div id="suite-notification-slot-desktop" className="flex justify-center group-hover/sidebar:justify-end" />
             <div className="flex items-center justify-center gap-3 group-hover/sidebar:justify-start group-hover/sidebar:rounded-2xl group-hover/sidebar:bg-muted/50 group-hover/sidebar:p-3">
               <Avatar>
                 <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
               <div className="hidden min-w-0 group-hover/sidebar:block">
                 <p className="text-sm font-medium whitespace-nowrap">
-                  {membership ? ROLE_LABELS[membership.role as OrganizationRole] : "Asesor CRM"}
+                  {ROLE_LABELS[membership.role as OrganizationRole]}
                 </p>
-                {user?.email ? (
+                {user.email ? (
                   <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                 ) : null}
-                {membership ? (
-                  <p className="truncate text-xs text-muted-foreground">{membership.organizationName}</p>
-                ) : null}
+                <p className="truncate text-xs text-muted-foreground">{membership.organizationName}</p>
               </div>
             </div>
             <ThemeToggle labelClassName="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover/sidebar:max-w-28 group-hover/sidebar:opacity-100" />
@@ -152,6 +150,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
           </div>
         </aside>
         <main className="min-w-0 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0 md:pl-[94px]">
+          <div id="suite-notification-slot-mobile" className="mb-3 flex justify-end md:hidden" />
           {children}
         </main>
         <MobileNav
@@ -161,6 +160,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
             icon: item.iconKey,
           }))}
         />
+        <NotificationBellHost organizationId={membership.organizationId} initialNotifications={notifications} />
       </div>
     </div>
     </MobileChromeProvider>

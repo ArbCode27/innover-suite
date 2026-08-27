@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
+import { BrowserNotificationsControls } from "@/components/suite/browser-notifications-controls";
 import { markNotificationsReadAction } from "@/lib/notifications/actions";
 import type { NotificationRecord } from "@/lib/notifications/board";
+import { useBrowserNotifications } from "@/lib/notifications/use-browser-notifications";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +26,9 @@ type NotificationBellProps = {
 export const NotificationBell = ({ organizationId, initialNotifications }: NotificationBellProps) => {
   const [items, setItems] = useState(initialNotifications);
   const [isPending, startTransition] = useTransition();
+  const { notifyFromRecord } = useBrowserNotifications();
+  const notifyFromRecordRef = useRef(notifyFromRecord);
+  notifyFromRecordRef.current = notifyFromRecord;
   const unread = items.filter((item) => !item.readAt).length;
 
   useEffect(() => {
@@ -47,18 +52,17 @@ export const NotificationBell = ({ organizationId, initialNotifications }: Notif
             read_at: string | null;
             created_at: string;
           };
-          setItems((current) => [
-            {
-              id: row.id,
-              kind: row.kind,
-              title: row.title,
-              body: row.body,
-              href: row.href,
-              readAt: row.read_at,
-              createdAt: row.created_at,
-            },
-            ...current,
-          ].slice(0, 30));
+          const incoming = {
+            id: row.id,
+            kind: row.kind,
+            title: row.title,
+            body: row.body,
+            href: row.href,
+            readAt: row.read_at,
+            createdAt: row.created_at,
+          };
+          setItems((current) => [incoming, ...current].slice(0, 30));
+          notifyFromRecordRef.current(incoming);
         },
       )
       .subscribe();
@@ -109,6 +113,13 @@ export const NotificationBell = ({ organizationId, initialNotifications }: Notif
         ) : (
           <DropdownMenuItem disabled>Sin avisos</DropdownMenuItem>
         )}
+        <DropdownMenuSeparator />
+        <div
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <BrowserNotificationsControls compact />
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

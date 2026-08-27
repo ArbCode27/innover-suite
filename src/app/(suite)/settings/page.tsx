@@ -4,6 +4,7 @@ import { AgentSettingsForm } from "./agent-settings-form";
 import { OfficeHoursForm } from "./office-hours-form";
 import { ModulesSettingsForm } from "./modules-settings-form";
 import { CurrencySettingsForm } from "./currency-settings-form";
+import { BrowserNotificationsCard } from "./browser-notifications-card";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ModuleShell } from "@/components/suite/module-shell";
@@ -116,6 +117,7 @@ export default async function SettingsPage() {
             whatsappOAuthRedirectUri={getWhatsAppOAuthRedirectUri()}
           />
         </Suspense>
+        <BrowserNotificationsCard />
         <ModulesSettingsForm canManageOrganization={canManageOrganization} modules={modules} />
         <CurrencySettingsForm canManageOrganization={canManageOrganization} currencies={currencies} />
         <AgentSettingsForm
