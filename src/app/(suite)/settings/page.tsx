@@ -5,56 +5,79 @@ import { OfficeHoursForm } from "./office-hours-form";
 import { ModulesSettingsForm } from "./modules-settings-form";
 import { CurrencySettingsForm } from "./currency-settings-form";
 import { BrowserNotificationsCard } from "./browser-notifications-card";
-import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
+import { loadCurrentMemberSession, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ModuleShell } from "@/components/suite/module-shell";
 import { Skeleton } from "@/components/ui/skeleton";
-import { loadAgentSettings, getDefaultAgentSettings, loadKnowledgeArticles } from "@/lib/agent/settings";
+import { loadAgentSettings, loadKnowledgeArticles } from "@/lib/agent/settings";
 import { env } from "@/lib/config/env";
-import { DEFAULT_MODULES } from "@/lib/modules/constants";
-import { loadOrganizationModules } from "@/lib/modules/settings";
-import { DEFAULT_CURRENCY_SETTINGS, loadOrganizationCurrencies } from "@/lib/organizations/currencies";
+import { loadCachedOrganizationModules } from "@/lib/modules/settings";
+import { loadOrganizationCurrencies } from "@/lib/organizations/currencies";
 import { getWhatsAppOAuthRedirectUri } from "@/lib/integrations/whatsapp";
 
 export default async function SettingsPage() {
-  const membership = await getCurrentMembership();
+  const { membership } = await loadCurrentMemberSession();
   const canManageOrganization = hasOrganizationRole(membership, ["owner", "admin"]);
   const supabase = await createSupabaseServerClient();
-  const instagramConnection = membership
-    ? await supabase
-        .from("instagram_connections")
-        .select("instagram_user_id, instagram_username, token_expires_at")
-        .eq("organization_id", membership.organizationId)
-        .is("revoked_at", null)
-        .order("connected_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    : { data: null, error: null };
-  const messengerConnections = membership
-    ? await supabase
-        .from("channel_accounts")
-        .select("external_account_id, display_name, updated_at")
-        .eq("organization_id", membership.organizationId)
-        .eq("channel", "messenger")
-        .order("updated_at", { ascending: false })
-    : { data: null, error: null };
-  const whatsappConnections = membership
-    ? await supabase
-        .from("channel_accounts")
-        .select("external_account_id, display_name, updated_at, metadata")
-        .eq("organization_id", membership.organizationId)
-        .eq("channel", "whatsapp")
-        .order("updated_at", { ascending: false })
-    : { data: null, error: null };
-  const googleCalendarConnection = membership
-    ? await supabase
-        .from("calendar_connections")
-        .select("email, google_calendar_id, token_expires_at, connected_at")
-        .eq("organization_id", membership.organizationId)
-        .eq("provider", "google")
-        .is("revoked_at", null)
-        .maybeSingle()
-    : { data: null, error: null };
+
+  if (!membership) {
+    return (
+      <ModuleShell title="Configuración del CRM" description="Crea una organización para conectar canales." eyebrow="Integraciones">
+        <p className="text-sm text-muted-foreground">No hay organización activa.</p>
+      </ModuleShell>
+    );
+  }
+
+  const [
+    instagramConnection,
+    messengerConnections,
+    whatsappConnections,
+    googleCalendarConnection,
+    agentSettings,
+    modules,
+    currencies,
+    articles,
+    orgBillingResult,
+  ] = await Promise.all([
+    supabase
+      .from("instagram_connections")
+      .select("instagram_user_id, instagram_username, token_expires_at")
+      .eq("organization_id", membership.organizationId)
+      .is("revoked_at", null)
+      .order("connected_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("channel_accounts")
+      .select("external_account_id, display_name, updated_at")
+      .eq("organization_id", membership.organizationId)
+      .eq("channel", "messenger")
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("channel_accounts")
+      .select("external_account_id, display_name, updated_at, metadata")
+      .eq("organization_id", membership.organizationId)
+      .eq("channel", "whatsapp")
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("calendar_connections")
+      .select("email, google_calendar_id, token_expires_at, connected_at")
+      .eq("organization_id", membership.organizationId)
+      .eq("provider", "google")
+      .is("revoked_at", null)
+      .maybeSingle(),
+    loadAgentSettings(membership.organizationId),
+    loadCachedOrganizationModules(membership.organizationId),
+    loadOrganizationCurrencies(supabase, membership.organizationId),
+    loadKnowledgeArticles(membership.organizationId, false),
+    supabase
+      .from("organizations")
+      .select("plan, tax_rate")
+      .eq("id", membership.organizationId)
+      .maybeSingle(),
+  ]);
+
+  const orgBilling = orgBillingResult.data;
 
   const connectedCount = [
     Boolean(instagramConnection.data),
@@ -62,24 +85,6 @@ export default async function SettingsPage() {
     Boolean(whatsappConnections.data?.length),
     Boolean(googleCalendarConnection.data),
   ].filter(Boolean).length;
-
-  const agentSettings = membership
-    ? await loadAgentSettings(membership.organizationId)
-    : getDefaultAgentSettings(0);
-  const modules = membership
-    ? await loadOrganizationModules(supabase, membership.organizationId)
-    : DEFAULT_MODULES;
-  const currencies = membership
-    ? await loadOrganizationCurrencies(supabase, membership.organizationId)
-    : DEFAULT_CURRENCY_SETTINGS;
-  const articles = membership ? await loadKnowledgeArticles(membership.organizationId, false) : [];
-  const { data: orgBilling } = membership
-    ? await supabase
-        .from("organizations")
-        .select("plan, tax_rate")
-        .eq("id", membership.organizationId)
-        .maybeSingle()
-    : { data: null };
 
   return (
     <ModuleShell

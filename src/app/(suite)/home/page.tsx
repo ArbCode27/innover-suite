@@ -4,27 +4,29 @@ import { HomeDashboard } from "./home-dashboard";
 import { ModuleShell } from "@/components/suite/module-shell";
 import { Button } from "@/components/ui/button";
 import { loadDashboardBoard } from "@/lib/dashboard/board";
-import { loadOrganizationModules } from "@/lib/modules/settings";
+import { loadCachedOrganizationModules } from "@/lib/modules/settings";
 import {
   canUseInbox,
   canViewReports,
-  getCurrentMembership,
+  loadCurrentMemberSession,
 } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function HomePage() {
-  const membership = await getCurrentMembership();
+  const { membership } = await loadCurrentMemberSession();
   if (!membership) redirect("/onboarding/organization");
 
   const supabase = await createSupabaseServerClient();
-  const modules = await loadOrganizationModules(supabase, membership.organizationId);
-  const board = await loadDashboardBoard(supabase, membership.organizationId, modules);
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("onboarding_completed_at, plan")
-    .eq("id", membership.organizationId)
-    .maybeSingle();
-
+  const modules = await loadCachedOrganizationModules(membership.organizationId);
+  const [board, orgResult] = await Promise.all([
+    loadDashboardBoard(supabase, membership.organizationId, modules),
+    supabase
+      .from("organizations")
+      .select("onboarding_completed_at, plan")
+      .eq("id", membership.organizationId)
+      .maybeSingle(),
+  ]);
+  const org = orgResult.data;
   const showOnboarding = !org?.onboarding_completed_at;
 
   return (
@@ -35,7 +37,9 @@ export default async function HomePage() {
       actions={
         canUseInbox(membership) ? (
           <Button asChild>
-            <Link href="/inbox">Ir al inbox</Link>
+            <Link href="/inbox" prefetch={false}>
+              Ir al inbox
+            </Link>
           </Button>
         ) : null
       }
@@ -47,7 +51,9 @@ export default async function HomePage() {
             Módulos, catálogo, agente e integración de un canal. Toma unos minutos.
           </p>
           <Button asChild className="mt-3" size="sm">
-            <Link href="/onboarding/setup">Continuar onboarding</Link>
+            <Link href="/onboarding/setup" prefetch={false}>
+              Continuar onboarding
+            </Link>
           </Button>
         </div>
       ) : null}

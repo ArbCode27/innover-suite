@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
@@ -14,8 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { signOut } from "@/lib/auth/actions";
-import { loadOrganizationModules } from "@/lib/modules/settings";
-import { loadNotifications } from "@/lib/notifications/board";
+import { loadCachedOrganizationModules } from "@/lib/modules/settings";
 import {
   canManageCatalog,
   canManageOrders,
@@ -26,8 +26,7 @@ import {
 } from "@/lib/organizations/membership";
 import { MobileChromeProvider, MobileNav, SidebarNav, type MobileNavIcon } from "@/components/suite/mobile-nav";
 import { ThemeToggle } from "@/components/suite/theme-toggle";
-import { NotificationBellHost } from "@/components/suite/notification-bell-host";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { NotificationBellLoader } from "@/components/suite/notification-bell-loader";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -41,8 +40,7 @@ type NavItem = {
 };
 
 const SuiteLayout = async ({ children }: { children: ReactNode }) => {
-  const supabase = await createSupabaseServerClient();
-  const { user, membership } = await loadCurrentMemberSession(supabase);
+  const { user, membership } = await loadCurrentMemberSession();
 
   if (!user) {
     redirect("/login");
@@ -52,11 +50,8 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
     redirect("/onboarding/organization");
   }
 
-  const [modules, notifications] = await Promise.all([
-    loadOrganizationModules(supabase, membership.organizationId),
-    loadNotifications(supabase, membership.organizationId, user.id),
-  ]);
-  const initials = user?.email?.slice(0, 2).toUpperCase() ?? "IS";
+  const modules = await loadCachedOrganizationModules(membership.organizationId);
+  const initials = user.email?.slice(0, 2).toUpperCase() ?? "IS";
 
   const navItems: NavItem[] = [
     { href: "/home", label: "Inicio", icon: Home, iconKey: "home", show: true },
@@ -102,6 +97,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
         <aside className="group/sidebar fixed top-3 left-3 z-50 hidden h-[calc(100vh-1.5rem)] w-[78px] min-w-0 overflow-x-hidden overflow-y-auto rounded-3xl border border-primary/20 bg-card/80 p-3 shadow-2xl shadow-blue-950/25 backdrop-blur transition-all duration-300 hover:w-72 md:flex md:flex-col md:top-5 md:left-5 md:h-[calc(100vh-2.5rem)]">
           <Link
             href="/home"
+            prefetch={false}
             className="hidden items-center gap-3 rounded-2xl border border-primary/35 bg-primary/15 p-3 group-hover/sidebar:flex"
           >
             <span className="flex size-10 min-w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
@@ -160,7 +156,9 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
             icon: item.iconKey,
           }))}
         />
-        <NotificationBellHost organizationId={membership.organizationId} initialNotifications={notifications} />
+        <Suspense fallback={null}>
+          <NotificationBellLoader organizationId={membership.organizationId} userId={user.id} />
+        </Suspense>
       </div>
     </div>
     </MobileChromeProvider>

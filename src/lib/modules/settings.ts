@@ -1,3 +1,4 @@
+import { cache } from "react";
 import {
   DEFAULT_MODULES,
   isModuleKey,
@@ -6,6 +7,7 @@ import {
   type OrganizationModules,
 } from "@/lib/modules/constants";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type ModuleRow = {
@@ -38,6 +40,11 @@ export const loadOrganizationModules = async (
 
   return fromRows(data as ModuleRow[] | null);
 };
+
+export const loadCachedOrganizationModules = cache(async (organizationId: number): Promise<OrganizationModules> => {
+  const supabase = await createSupabaseServerClient();
+  return loadOrganizationModules(supabase, organizationId);
+});
 
 export const loadOrganizationModulesAdmin = async (organizationId: number): Promise<OrganizationModules> => {
   try {

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { AGENT_MODEL, DEFAULT_AGENT_PROMPT, RETIRED_AGENT_MODELS } from "@/lib/agent/constants";
 import { DEFAULT_BUSINESS_HOURS, DEFAULT_CLOSED_MESSAGE, parseBusinessHours, type BusinessHours } from "@/lib/agent/hours";
 import type { AgentSettings } from "@/lib/agent/types";
@@ -45,7 +46,7 @@ export const getDefaultAgentSettings = (organizationId: number): AgentSettings =
   closedMessage: DEFAULT_CLOSED_MESSAGE,
 });
 
-export const loadAgentSettings = async (organizationId: number): Promise<AgentSettings> => {
+export const loadAgentSettings = cache(async (organizationId: number): Promise<AgentSettings> => {
   const admin = getSupabaseAdminClient();
   const { data, error } = await admin
     .from("organization_agent_settings")
@@ -74,7 +75,7 @@ export const loadAgentSettings = async (organizationId: number): Promise<AgentSe
   }
 
   return mapSettings(data);
-};
+});
 
 export const upsertAgentSettings = async (
   organizationId: number,

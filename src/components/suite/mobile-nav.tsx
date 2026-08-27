@@ -62,6 +62,38 @@ const isActivePath = (pathname: string, href: string) => {
   return pathname === href || pathname.startsWith(`${href}/`);
 };
 
+const SuiteNavLink = ({
+  href,
+  className,
+  children,
+  ...props
+}: {
+  href: string;
+  className: string;
+  children: ReactNode;
+  "aria-current"?: "page";
+}) => {
+  const [prefetch, setPrefetch] = useState(false);
+
+  const handleEnablePrefetch = () => {
+    setPrefetch(true);
+  };
+
+  return (
+    <Link
+      href={href}
+      prefetch={prefetch}
+      onMouseEnter={handleEnablePrefetch}
+      onFocus={handleEnablePrefetch}
+      onTouchStart={handleEnablePrefetch}
+      className={className}
+      {...props}
+    >
+      {children}
+    </Link>
+  );
+};
+
 export const SidebarNav = ({ items }: MobileNavProps) => {
   const pathname = usePathname();
 
@@ -72,7 +104,7 @@ export const SidebarNav = ({ items }: MobileNavProps) => {
         const isActive = isActivePath(pathname, item.href);
 
         return (
-          <Link
+          <SuiteNavLink
             key={item.href}
             href={item.href}
             aria-current={isActive ? "page" : undefined}
@@ -87,7 +119,7 @@ export const SidebarNav = ({ items }: MobileNavProps) => {
             <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover/sidebar:max-w-40 group-hover/sidebar:opacity-100">
               {item.label}
             </span>
-          </Link>
+          </SuiteNavLink>
         );
       })}
     </nav>
@@ -112,7 +144,7 @@ export const MobileNav = ({ items }: MobileNavProps) => {
           const isActive = isActivePath(pathname, item.href);
           return (
             <li key={item.href} className="min-w-0 flex-1">
-              <Link
+              <SuiteNavLink
                 href={item.href}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
@@ -124,7 +156,7 @@ export const MobileNav = ({ items }: MobileNavProps) => {
               >
                 <Icon className="size-5" aria-hidden />
                 <span className="max-w-full truncate">{item.label}</span>
-              </Link>
+              </SuiteNavLink>
             </li>
           );
         })}

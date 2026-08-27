@@ -616,9 +616,9 @@ export const loadDashboardBoard = async (
   const since14 = startOfRangeIso(14);
   const since365 = startOfRangeIso(365);
   const since730 = startOfRangeIso(730);
+  const todayStart = startOfTodayIso();
   const [
 
-    today,
     conversationsResult,
     messagesResult,
     ordersResult,
@@ -632,8 +632,12 @@ export const loadDashboardBoard = async (
     calendarResult,
     handoffResult,
     tagsResult,
+    openChatsResult,
+    unpaidOrdersResult,
+    contactsResult,
+    inventoryResult,
+    appointmentsTodayResult,
   ] = await Promise.all([
-    loadDashboardSnapshot(supabase, organizationId, modules),
     supabase
       .from("conversations")
       .select("id, contact_id, channel, mode, status, assigned_user_id, last_message_at, created_at, updated_at, metadata")
@@ -682,7 +686,7 @@ export const loadDashboardBoard = async (
           .from("funnel_cards")
           .select("id, stage_id, contact_id, value_amount, created_at, updated_at")
           .eq("organization_id", organizationId)
-          .limit(500)
+          .limit(250)
       : Promise.resolve(emptyList()),
     modules.calendar
       ? supabase
@@ -690,7 +694,7 @@ export const loadDashboardBoard = async (
           .select("id, title, status, purpose, starts_at")
           .eq("organization_id", organizationId)
           .gte("starts_at", since730)
-          .limit(1500)
+          .limit(600)
       : Promise.resolve(emptyList()),
     supabase
       .from("channel_accounts")
@@ -719,7 +723,7 @@ export const loadDashboardBoard = async (
       .eq("organization_id", organizationId)
       .eq("tool_name", "handoff_to_human")
       .eq("ok", true)
-      .limit(500),
+      .limit(200),
     modules.funnels
       ? supabase
           .from("contact_tags")
@@ -727,12 +731,71 @@ export const loadDashboardBoard = async (
           .eq("organization_id", organizationId)
           .limit(80)
       : Promise.resolve(emptyList()),
+    supabase
+      .from("conversations")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .neq("status", "resolved"),
+    modules.orders
+      ? supabase
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", organizationId)
+          .eq("payment_status", "unpaid")
+          .neq("status", "cancelled")
+      : Promise.resolve(emptyList()),
+    supabase
+      .from("contacts")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId),
+    modules.catalog
+      ? supabase
+          .from("inventory_items")
+          .select("on_hand, reorder_point, track_stock")
+          .eq("organization_id", organizationId)
+          .eq("track_stock", true)
+      : Promise.resolve(emptyList()),
+    modules.calendar
+      ? supabase
+          .from("appointments")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", organizationId)
+          .neq("status", "cancelled")
+          .gte("starts_at", todayStart)
+      : Promise.resolve(emptyList()),
   ]);
 
   const conversationRows = (conversationsResult.data ?? []) as ConversationRow[];
   const messageRows = (messagesResult.data ?? []) as MessageRow[];
   const orderRows = (ordersResult.data ?? []) as OrderRow[];
   const memberRows = (membersResult.data ?? []) as Array<{ user_id: string; role: string }>;
+  const unreadChats = conversationRows.filter((row) => {
+    const unread = asMetadata(row.metadata)["unread_count"];
+    return row.status !== "resolved" && typeof unread === "number" && unread > 0;
+  }).length;
+  const humanQueue = conversationRows.filter(
+    (row) => row.status !== "resolved" && row.mode === "human" && !row.assigned_user_id,
+  ).length;
+  const ordersToday = orderRows.filter(
+    (row) => row.status !== "cancelled" && new Date(row.created_at).getTime() >= new Date(todayStart).getTime(),
+  );
+  const today: DashboardSnapshot = {
+    openChats: openChatsResult.count ?? conversationRows.filter((row) => row.status !== "resolved").length,
+    unreadChats,
+    humanQueue,
+    ordersToday: ordersToday.length,
+    revenueToday: ordersToday.reduce((sum, row) => sum + toNumber(row.total), 0),
+    unpaidOrders: unpaidOrdersResult.count ?? 0,
+    appointmentsToday: appointmentsTodayResult.count ?? 0,
+    lowStock: (
+      (inventoryResult.data ?? []) as Array<{ on_hand: unknown; reorder_point: unknown; track_stock: boolean }>
+    ).filter((row) => {
+      const onHand = toNumber(row.on_hand);
+      const reorder = toNumber(row.reorder_point);
+      return row.track_stock !== false && onHand <= reorder;
+    }).length,
+    contacts: contactsResult.count ?? 0,
+  };
   const conversationById = new Map(conversationRows.map((row) => [row.id, row]));
   const roleByUser = new Map(memberRows.map((row) => [row.user_id, row.role]));
 

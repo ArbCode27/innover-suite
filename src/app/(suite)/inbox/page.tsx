@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { canUseInbox, getCurrentMembership } from "@/lib/organizations/membership";
+import { canUseInbox, loadCurrentMemberSession } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { areAdvisorsAvailable, isScheduleEnabled } from "@/lib/agent/hours";
 import { loadAgentSettings } from "@/lib/agent/settings";
@@ -47,7 +47,7 @@ export default async function InboxPage({
 }: {
   searchParams: Promise<{ conversation?: string }>;
 }) {
-  const membership = await getCurrentMembership();
+  const { user, membership } = await loadCurrentMemberSession();
   if (!membership) {
     redirect("/onboarding/organization");
   }
@@ -59,43 +59,54 @@ export default async function InboxPage({
   const requestedConversationId = Number(params.conversation);
 
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [conversationsResult, agentSettings] = await Promise.all([
+    supabase
+      .from("conversations")
+      .select(
+        "id, contact_id, channel, status, mode, assigned_user_id, updated_at, last_message_at, metadata, contacts(full_name, phone, metadata)",
+      )
+      .eq("organization_id", membership.organizationId)
+      .order("updated_at", { ascending: false })
+      .limit(50),
+    loadAgentSettings(membership.organizationId),
+  ]);
 
-  const { data: conversationsData, error } = await supabase
-    .from("conversations")
-    .select(
-      "id, contact_id, channel, status, mode, assigned_user_id, updated_at, last_message_at, metadata, contacts(full_name, phone, metadata)",
-    )
-    .eq("organization_id", membership.organizationId)
-    .order("updated_at", { ascending: false })
-    .limit(50);
-
-  if (error) {
-    throw new Error(`No se pudo cargar el inbox: ${error.message}`);
+  if (conversationsResult.error) {
+    throw new Error(`No se pudo cargar el inbox: ${conversationsResult.error.message}`);
   }
 
-  const conversationRows = (conversationsData ?? []) as unknown as ConversationRow[];
-
+  const conversationRows = (conversationsResult.data ?? []) as unknown as ConversationRow[];
   const conversationIds = conversationRows.map((item) => item.id);
+  const requestedId =
+    Number.isInteger(requestedConversationId) && requestedConversationId > 0 ? requestedConversationId : null;
+  const firstConversationId = requestedId ?? conversationRows[0]?.id ?? null;
+
+  const [latestMessagesResult, initialMessagesResult] = await Promise.all([
+    conversationIds.length
+      ? supabase
+          .from("messages")
+          .select("conversation_id, content, media_url, metadata, created_at")
+          .in("conversation_id", conversationIds)
+          .order("created_at", { ascending: false })
+          .limit(500)
+      : Promise.resolve({ data: [] as LatestMessageRow[] }),
+    firstConversationId
+      ? supabase
+          .from("messages")
+          .select("id, conversation_id, direction, sender_type, content, media_url, metadata, created_at")
+          .eq("conversation_id", firstConversationId)
+          .order("created_at", { ascending: true })
+          .limit(250)
+      : Promise.resolve({ data: [] as MessageRow[] }),
+  ]);
+
   const latestMessagesByConversation = new Map<number, LatestMessageRow>();
-
-  if (conversationIds.length) {
-    const { data: latestMessages } = await supabase
-      .from("messages")
-      .select("conversation_id, content, media_url, metadata, created_at")
-      .in("conversation_id", conversationIds)
-      .order("created_at", { ascending: false })
-      .limit(500);
-
-    (latestMessages ?? []).forEach((row) => {
-      const typedRow = row as LatestMessageRow;
-      if (!latestMessagesByConversation.has(typedRow.conversation_id)) {
-        latestMessagesByConversation.set(typedRow.conversation_id, typedRow);
-      }
-    });
-  }
+  (latestMessagesResult.data ?? []).forEach((row) => {
+    const typedRow = row as LatestMessageRow;
+    if (!latestMessagesByConversation.has(typedRow.conversation_id)) {
+      latestMessagesByConversation.set(typedRow.conversation_id, typedRow);
+    }
+  });
 
   const conversations: InboxConversation[] = conversationRows.flatMap((conversation) => {
     const latest = latestMessagesByConversation.get(conversation.id);
@@ -103,25 +114,13 @@ export default async function InboxPage({
     return mapped ? [mapped] : [];
   });
 
-  const requestedId =
-    Number.isInteger(requestedConversationId) && requestedConversationId > 0 ? requestedConversationId : null;
-  const firstConversationId = requestedId ?? conversations[0]?.id ?? null;
   const initialMessagesByConversation: Record<number, InboxMessage[]> = {};
-
   if (firstConversationId) {
-    const { data: initialMessages } = await supabase
-      .from("messages")
-      .select("id, conversation_id, direction, sender_type, content, media_url, metadata, created_at")
-      .eq("conversation_id", firstConversationId)
-      .order("created_at", { ascending: true })
-      .limit(250);
-
-    initialMessagesByConversation[firstConversationId] = (initialMessages ?? []).map((row) =>
+    initialMessagesByConversation[firstConversationId] = (initialMessagesResult.data ?? []).map((row) =>
       normalizeInboxMessage(row as MessageRow),
     );
   }
 
-  const agentSettings = await loadAgentSettings(membership.organizationId);
   const officeClosed =
     isScheduleEnabled(agentSettings.businessHours) && !areAdvisorsAvailable(agentSettings.businessHours);
 

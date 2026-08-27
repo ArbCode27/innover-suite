@@ -5,9 +5,9 @@ export const TOKEN_EXPIRING_MS = 3 * 24 * 60 * 60 * 1000;
 export const CHURN_INACTIVE_DAYS = 45;
 export const AI_MINUTES_PER_OUTBOUND = 3;
 export const AGENT_HOURLY_COST_DOP = 400;
-export const DASHBOARD_MESSAGE_LIMIT = 2500;
-export const DASHBOARD_CONVERSATION_LIMIT = 1000;
-export const DASHBOARD_ORDER_LIMIT = 2500;
+export const DASHBOARD_MESSAGE_LIMIT = 1200;
+export const DASHBOARD_CONVERSATION_LIMIT = 500;
+export const DASHBOARD_ORDER_LIMIT = 1200;
 
 export const WEEKDAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"] as const;
 

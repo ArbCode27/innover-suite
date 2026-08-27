@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -51,23 +52,23 @@ export const loadMembershipForUser = async (
   };
 };
 
-export const loadCurrentMemberSession = async (
-  supabase?: SupabaseClient,
-): Promise<{ user: User | null; membership: OrganizationMembership | null }> => {
-  const client = supabase ?? (await createSupabaseServerClient());
-  const {
-    data: { user },
-  } = await client.auth.getUser();
+export const loadCurrentMemberSession = cache(
+  async (): Promise<{ user: User | null; membership: OrganizationMembership | null }> => {
+    const client = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await client.auth.getUser();
 
-  if (!user) {
-    return { user: null, membership: null };
-  }
+    if (!user) {
+      return { user: null, membership: null };
+    }
 
-  return {
-    user,
-    membership: await loadMembershipForUser(client, user.id),
-  };
-};
+    return {
+      user,
+      membership: await loadMembershipForUser(client, user.id),
+    };
+  },
+);
 
 export const getCurrentMembership = async (): Promise<OrganizationMembership | null> => {
   const { membership } = await loadCurrentMemberSession();
