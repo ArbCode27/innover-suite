@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Bell } from "lucide-react";
+import { Bell, X } from "lucide-react";
+import { toast } from "sonner";
 import { BrowserNotificationsControls } from "@/components/suite/browser-notifications-controls";
-import { markNotificationsReadAction } from "@/lib/notifications/actions";
+import { deleteNotificationAction, markNotificationsReadAction } from "@/lib/notifications/actions";
 import type { NotificationRecord } from "@/lib/notifications/board";
 import { useBrowserNotifications } from "@/lib/notifications/use-browser-notifications";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -65,6 +66,15 @@ export const NotificationBell = ({ organizationId, initialNotifications }: Notif
           notifyFromRecordRef.current(incoming);
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "notifications" },
+        (payload) => {
+          const id = (payload.old as { id?: number } | null)?.id;
+          if (!id) return;
+          setItems((current) => current.filter((item) => item.id !== id));
+        },
+      )
       .subscribe();
 
     return () => {
@@ -76,6 +86,18 @@ export const NotificationBell = ({ organizationId, initialNotifications }: Notif
     startTransition(async () => {
       await markNotificationsReadAction();
       setItems((current) => current.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })));
+    });
+  };
+
+  const handleDeleteNotification = (notificationId: number) => {
+    const previous = items;
+    setItems((current) => current.filter((item) => item.id !== notificationId));
+    startTransition(async () => {
+      const result = await deleteNotificationAction(notificationId);
+      if (result.error) {
+        setItems(previous);
+        toast.error(result.error);
+      }
     });
   };
 
@@ -101,14 +123,34 @@ export const NotificationBell = ({ organizationId, initialNotifications }: Notif
         <DropdownMenuSeparator />
         {items.length ? (
           items.slice(0, 12).map((item) => (
-            <DropdownMenuItem key={item.id} asChild>
-              <Link href={item.href || "/home"} className={!item.readAt ? "font-medium" : ""}>
-                <span>
-                  <span className="block">{item.title}</span>
-                  {item.body ? <span className="block text-xs text-muted-foreground">{item.body}</span> : null}
-                </span>
+            <div
+              key={item.id}
+              className="flex items-start gap-1 rounded-md px-1.5 py-1.5 hover:bg-accent"
+            >
+              <Link
+                href={item.href || "/home"}
+                className={`min-w-0 flex-1 outline-none ${!item.readAt ? "font-medium" : ""}`}
+              >
+                <span className="block text-sm">{item.title}</span>
+                {item.body ? <span className="block text-xs text-muted-foreground">{item.body}</span> : null}
               </Link>
-            </DropdownMenuItem>
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                className="mt-0.5 shrink-0 text-muted-foreground hover:text-destructive"
+                aria-label={`Eliminar aviso: ${item.title}`}
+                disabled={isPending}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleDeleteNotification(item.id);
+                }}
+              >
+                <X />
+              </Button>
+            </div>
           ))
         ) : (
           <DropdownMenuItem disabled>Sin avisos</DropdownMenuItem>

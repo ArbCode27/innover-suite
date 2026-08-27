@@ -1,7 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { getCurrentMembership } from "@/lib/organizations/membership";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const markNotificationsReadAction = async () => {
@@ -24,6 +24,37 @@ export const markNotificationsReadAction = async () => {
     return { error: error.message || "No se pudieron marcar las notificaciones." };
   }
 
-  revalidatePath("/home");
   return { success: "Notificaciones leídas." };
+};
+
+export const deleteNotificationAction = async (notificationId: number) => {
+  if (!Number.isInteger(notificationId) || notificationId <= 0) {
+    return { error: "Notificación no válida." };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership) return { error: "Sin organización." };
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Sin sesión." };
+  }
+
+  const admin = getSupabaseAdminClient();
+  const { error } = await admin
+    .from("notifications")
+    .delete()
+    .eq("id", notificationId)
+    .eq("organization_id", membership.organizationId)
+    .or(`user_id.is.null,user_id.eq.${user.id}`);
+
+  if (error) {
+    return { error: error.message || "No se pudo eliminar el aviso." };
+  }
+
+  return { success: "Aviso eliminado." };
 };
