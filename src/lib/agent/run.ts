@@ -248,7 +248,7 @@ const buildSystemInstruction = (params: {
   const commerceBlock = params.commerceContext
     ? `
 ${params.commerceContext}
-- Confirmación de pedido: resume el ticket (ítems, ITBIS, envío y total) y espera un sí o CONFIRMAR antes de create_order.`
+- Confirmación de pedido: resume el ticket (ítems, IVA, envío y total) y espera un sí o CONFIRMAR antes de create_order.`
     : "";
   const knowledgeBlock = params.knowledgeContext ? `\n${params.knowledgeContext}` : "";
 

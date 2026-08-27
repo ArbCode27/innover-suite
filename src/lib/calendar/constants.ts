@@ -1,4 +1,5 @@
-export const CALENDAR_TIME_ZONE = "America/Santo_Domingo";
+export const APP_LOCALE = "es-VE";
+export const CALENDAR_TIME_ZONE = "America/Caracas";
 export const CALENDAR_UTC_OFFSET = "-04:00";
 
 export type CalendarViewMode = "day" | "threeDay" | "week";

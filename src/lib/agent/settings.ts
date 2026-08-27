@@ -21,13 +21,16 @@ type SettingsRow = {
 const mapSettings = (row: SettingsRow): AgentSettings => ({
   organizationId: row.organization_id,
   enabled: row.enabled,
-  systemPrompt: row.system_prompt || DEFAULT_AGENT_PROMPT,
+  systemPrompt:
+    !row.system_prompt?.trim() || row.system_prompt.includes("español dominicano")
+      ? DEFAULT_AGENT_PROMPT
+      : row.system_prompt,
   model: row.model && !RETIRED_AGENT_MODELS.has(row.model) ? row.model : AGENT_MODEL,
   toolsCalendar: row.tools_calendar,
   toolsFunnel: row.tools_funnel,
   toolsHandoff: row.tools_handoff,
   requireBookingConfirmation: row.require_booking_confirmation,
-  language: row.language || "es-DO",
+  language: row.language || "es-VE",
   businessHours: parseBusinessHours(row.business_hours),
   closedMessage: row.closed_message?.trim() || DEFAULT_CLOSED_MESSAGE,
 });
@@ -41,7 +44,7 @@ export const getDefaultAgentSettings = (organizationId: number): AgentSettings =
   toolsFunnel: true,
   toolsHandoff: true,
   requireBookingConfirmation: true,
-  language: "es-DO",
+  language: "es-VE",
   businessHours: DEFAULT_BUSINESS_HOURS,
   closedMessage: DEFAULT_CLOSED_MESSAGE,
 });

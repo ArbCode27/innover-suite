@@ -17,7 +17,7 @@ type ContactDetailCardProps = {
 };
 
 const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("es-DO", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  new Intl.DateTimeFormat("es-VE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 
 export const ContactDetailCard = ({ contact }: ContactDetailCardProps) => {
   const [tagName, setTagName] = useState("");

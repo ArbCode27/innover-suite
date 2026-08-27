@@ -47,7 +47,7 @@ export const InventoryOps = ({ zones, currencies, canManage }: InventoryOpsProps
     <Card className="border-primary/15 bg-card/80">
       <CardHeader>
         <CardTitle>Zonas de delivery</CardTitle>
-        <CardDescription>La IA usa el nombre y el servidor aplica el fee e ITBIS.</CardDescription>
+        <CardDescription>La IA usa el nombre y el servidor aplica el fee e IVA.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {canManage ? (

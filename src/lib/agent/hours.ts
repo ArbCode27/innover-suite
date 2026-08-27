@@ -29,8 +29,8 @@ export const WEEKDAY_LABELS: Record<(typeof WEEKDAY_KEYS)[number], string> = {
 export const DEFAULT_DAY_HOURS: BusinessHoursDay = { open: "08:00", close: "22:00" };
 
 export const OFFICE_TIMEZONES = [
-  { value: "America/Santo_Domingo", label: "Santo Domingo (AST)" },
   { value: "America/Caracas", label: "Caracas" },
+  { value: "America/Santo_Domingo", label: "Santo Domingo (AST)" },
   { value: "America/Puerto_Rico", label: "Puerto Rico (AST)" },
   { value: "America/New_York", label: "Nueva York (ET)" },
   { value: "America/Bogota", label: "Bogotá" },

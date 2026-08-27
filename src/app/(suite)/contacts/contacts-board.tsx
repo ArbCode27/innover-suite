@@ -26,7 +26,7 @@ type ContactsBoardProps = {
 };
 
 const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("es-DO", { dateStyle: "medium" }).format(new Date(value));
+  new Intl.DateTimeFormat("es-VE", { dateStyle: "medium" }).format(new Date(value));
 
 export const ContactsBoard = ({ contacts, initialQuery }: ContactsBoardProps) => {
   const router = useRouter();

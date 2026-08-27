@@ -106,7 +106,7 @@ const attachmentAccept: Record<FileAttachmentKind, string> = {
 const previewCharLimit = 72;
 
 const formatTime = (value: string) =>
-  new Intl.DateTimeFormat("es-DO", {
+  new Intl.DateTimeFormat("es-VE", {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));

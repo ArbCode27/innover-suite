@@ -40,7 +40,7 @@ create table if not exists public.products (
   category text,
   kind text not null default 'physical',
   price numeric(12, 2) not null default 0,
-  currency text not null default 'DOP',
+  currency text not null default 'VES',
   active boolean not null default true,
   track_stock boolean not null default true,
   created_at timestamptz not null default now(),

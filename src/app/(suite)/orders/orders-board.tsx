@@ -39,7 +39,7 @@ const statusLabel = (status: OrderStatus, kitchenMode: boolean) =>
   kitchenMode ? KITCHEN_STATUS_LABELS[status] : ORDER_STATUS_LABELS[status];
 
 const formatTime = (value: string) =>
-  new Intl.DateTimeFormat("es-DO", {
+  new Intl.DateTimeFormat("es-VE", {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
@@ -190,7 +190,7 @@ export const OrdersBoard = ({ organizationId, kitchenMode, initialOrders, canMan
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         {PAYMENT_STATUS_LABELS[order.paymentStatus]}
-        {order.taxAmount ? ` · ITBIS ${formatMoney(order.taxAmount)}` : ""}
+        {order.taxAmount ? ` · IVA ${formatMoney(order.taxAmount)}` : ""}
         {order.deliveryFee ? ` · envío ${formatMoney(order.deliveryFee)}` : ""}
       </p>
       {order.deliveryAddress ? (

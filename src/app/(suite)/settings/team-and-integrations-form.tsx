@@ -137,7 +137,7 @@ const readWhatsAppMetadata = (value: unknown) => {
 };
 
 const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("es-DO", {
+  new Intl.DateTimeFormat("es-VE", {
     dateStyle: "medium",
   }).format(new Date(value));
 

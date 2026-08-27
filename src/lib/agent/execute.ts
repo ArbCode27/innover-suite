@@ -242,7 +242,7 @@ export const executeAgentTool = async (
     await insertSystemMessage({
       organizationId: context.organizationId,
       conversationId: context.conversationId,
-      content: `Pedido #${created.orderId}: ${created.summary}. Subtotal ${formatMoney(created.subtotal)}${created.discount ? ` · desc. ${formatMoney(created.discount)}` : ""} · ITBIS ${formatMoney(created.tax)}${created.deliveryFee ? ` · envío ${formatMoney(created.deliveryFee)}` : ""}. Total ${formatMoney(created.total)}. Stock descontado.`,
+      content: `Pedido #${created.orderId}: ${created.summary}. Subtotal ${formatMoney(created.subtotal)}${created.discount ? ` · desc. ${formatMoney(created.discount)}` : ""} · IVA ${formatMoney(created.tax)}${created.deliveryFee ? ` · envío ${formatMoney(created.deliveryFee)}` : ""}. Total ${formatMoney(created.total)}. Stock descontado.`,
     });
 
     const result = {

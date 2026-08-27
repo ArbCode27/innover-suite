@@ -128,12 +128,12 @@ export const completeOnboardingAction = async () => {
 export const updateOrganizationTaxAction = async (rawValues: unknown) => {
   const parsed = z.object({ taxRate: z.number().min(0).max(1) }).safeParse(rawValues);
   if (!parsed.success) {
-    return { error: "El ITBIS debe estar entre 0 y 1 (ej. 0.18)." };
+    return { error: "El IVA debe estar entre 0 y 1 (ej. 0.16)." };
   }
 
   const membership = await getCurrentMembership();
   if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
-    return { error: "Solo owner o admin pueden cambiar el ITBIS." };
+    return { error: "Solo owner o admin pueden cambiar el IVA." };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -143,11 +143,11 @@ export const updateOrganizationTaxAction = async (rawValues: unknown) => {
     .eq("id", membership.organizationId);
 
   if (error) {
-    return { error: error.message || "No se pudo guardar el ITBIS." };
+    return { error: error.message || "No se pudo guardar el IVA." };
   }
 
   revalidatePath("/settings");
-  return { success: "ITBIS actualizado. Se aplicará en el próximo pedido." };
+  return { success: "IVA actualizado. Se aplicará en el próximo pedido." };
 };
 
 export const updateOrganizationCurrenciesAction = async (rawValues: unknown) => {

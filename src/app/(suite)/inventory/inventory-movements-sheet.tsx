@@ -47,7 +47,7 @@ const localDateKey = (iso: string) =>
   }).format(new Date(iso));
 
 const formatDisplayDate = (iso: string) =>
-  new Intl.DateTimeFormat("es-DO", {
+  new Intl.DateTimeFormat("es-VE", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: CALENDAR_TIME_ZONE,
@@ -84,13 +84,13 @@ const weekLabel = (mondayKey: string) => {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
   const format = (value: Date) =>
-    new Intl.DateTimeFormat("es-DO", { day: "numeric", month: "short" }).format(value);
+    new Intl.DateTimeFormat("es-VE", { day: "numeric", month: "short" }).format(value);
   return `${format(monday)} – ${format(sunday)}`;
 };
 
 const monthLabel = (monthKey: string) => {
   const [year, month] = monthKey.split("-").map(Number);
-  return new Intl.DateTimeFormat("es-DO", { month: "long", year: "numeric" }).format(
+  return new Intl.DateTimeFormat("es-VE", { month: "long", year: "numeric" }).format(
     new Date(year, (month ?? 1) - 1, 1),
   );
 };
@@ -127,7 +127,7 @@ export const InventoryMovementsSheet = ({ open, movements, onOpenChange }: Inven
         range === "daily" ? dateKey : range === "weekly" ? mondayOf(dateKey) : dateKey.slice(0, 7);
       const label =
         range === "daily"
-          ? new Intl.DateTimeFormat("es-DO", { dateStyle: "medium", timeZone: CALENDAR_TIME_ZONE }).format(
+          ? new Intl.DateTimeFormat("es-VE", { dateStyle: "medium", timeZone: CALENDAR_TIME_ZONE }).format(
               new Date(movement.createdAt),
             )
           : range === "weekly"

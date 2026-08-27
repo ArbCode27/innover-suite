@@ -77,7 +77,7 @@ export const saveAgentSettingsAction = async (rawValues: unknown): Promise<Actio
     toolsFunnel: parsed.data.toolsFunnel,
     toolsHandoff: parsed.data.toolsHandoff,
     requireBookingConfirmation: parsed.data.requireBookingConfirmation,
-    language: "es-DO",
+    language: "es-VE",
     businessHours: parsed.data.businessHours
       ? parseBusinessHours(parsed.data.businessHours)
       : current.businessHours,

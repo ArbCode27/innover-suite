@@ -1,5 +1,6 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { formatMoney, toNumber, type FulfillmentType, type ProductKind } from "@/lib/commerce/types";
+import { DEFAULT_TAX_RATE, formatMoney, toNumber, type FulfillmentType, type ProductKind } from "@/lib/commerce/types";
+import { DEFAULT_CURRENCY } from "@/lib/organizations/currencies";
 
 const CATALOG_LIMIT = 80;
 
@@ -60,7 +61,7 @@ export const loadAgentCommerceSnapshot = async (organizationId: number) => {
       name: row.name as string,
       kind: (row.kind as ProductKind) || "physical",
       price: toNumber(row.price),
-      currency: (row.currency as string) || "DOP",
+      currency: (row.currency as string) || DEFAULT_CURRENCY,
       category: (row.category as string | null) ?? null,
       available: tracks ? onHand : null,
       soldOut,
@@ -104,7 +105,7 @@ export const loadAgentCommerceSnapshot = async (organizationId: number) => {
     .eq("id", organizationId)
     .maybeSingle();
 
-  const taxRate = org?.tax_rate == null ? 0.18 : toNumber(org.tax_rate);
+  const taxRate = org?.tax_rate == null ? DEFAULT_TAX_RATE : toNumber(org.tax_rate);
 
   return { products, promotions, zones, taxRate };
 };
@@ -140,9 +141,9 @@ export const formatCommerceContext = (snapshot: {
     ? snapshot.zones.map((item) => `- ${item}`).join("\n")
     : "- (sin zonas; si es delivery pregunta la dirección)";
 
-  const taxPercent = Math.round((snapshot.taxRate ?? 0.18) * 100);
+  const taxPercent = Math.round((snapshot.taxRate ?? DEFAULT_TAX_RATE) * 100);
 
-  return `Catálogo y precios (usa solo estos productId; el servidor aplica precio, promo e ITBIS ${taxPercent}%, no los inventes):
+  return `Catálogo y precios (usa solo estos productId; el servidor aplica precio, promo e IVA ${taxPercent}%, no los inventes):
 ${productLines}
 Agotados (no los vendas):
 ${soldOutLines}

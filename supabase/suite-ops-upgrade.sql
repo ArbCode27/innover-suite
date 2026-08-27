@@ -3,7 +3,7 @@
 
 alter table public.organizations add column if not exists plan text default 'starter';
 alter table public.organizations add column if not exists onboarding_completed_at timestamptz;
-alter table public.organizations add column if not exists tax_rate numeric(6, 4) default 0.18;
+alter table public.organizations add column if not exists tax_rate numeric(6, 4) default 0.16;
 
 alter table public.organization_members drop constraint if exists organization_members_role_check;
 alter table public.organization_members
@@ -270,7 +270,7 @@ begin
     v_fulfillment := 'unspecified';
   end if;
 
-  select coalesce(tax_rate, 0.18) into v_tax_rate
+  select coalesce(tax_rate, 0.16) into v_tax_rate
   from public.organizations
   where id = p_organization_id;
 

@@ -37,7 +37,7 @@ import {
 import { InventoryMovementsButton, InventoryMovementsSheet } from "./inventory-movements-sheet";
 import { AppSelect } from "@/components/ui/app-select";
 import { PriceCurrencyField } from "@/components/ui/price-currency-field";
-import type { OrganizationCurrencySettings } from "@/lib/organizations/currencies";
+import { DEFAULT_CURRENCY, type OrganizationCurrencySettings } from "@/lib/organizations/currencies";
 
 type InventoryBoardProps = {
   products: ProductRecord[];
@@ -59,7 +59,7 @@ const emptyProductForm = {
   reorderPoint: "",
   description: "",
   trackStock: true,
-  currency: "DOP",
+  currency: DEFAULT_CURRENCY,
 };
 
 const productInitials = (name: string) =>

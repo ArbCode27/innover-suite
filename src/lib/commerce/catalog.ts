@@ -8,6 +8,7 @@ import {
   type ProductRecord,
   type PromotionRecord,
 } from "@/lib/commerce/types";
+import { DEFAULT_CURRENCY } from "@/lib/organizations/currencies";
 
 type ProductRow = {
   id: number;
@@ -40,7 +41,7 @@ export const mapProductRow = (row: ProductRow): ProductRecord => {
     category: row.category,
     kind: isProductKind(row.kind) ? row.kind : "physical",
     price: toNumber(row.price),
-    currency: row.currency || "DOP",
+    currency: row.currency || DEFAULT_CURRENCY,
     active: row.active,
     trackStock: row.track_stock,
     parentId: row.parent_id ?? null,
@@ -154,7 +155,7 @@ export const loadDeliveryZones = async (supabase: SupabaseClient, organizationId
       id: row.id as number,
       name: row.name as string,
       fee: toNumber(row.fee),
-      currency: ((row as { currency?: string }).currency as string | undefined) || "DOP",
+      currency: ((row as { currency?: string }).currency as string | undefined) || DEFAULT_CURRENCY,
       etaMinutes: (row.eta_minutes as number | null) ?? null,
       active: row.active === true,
     }),

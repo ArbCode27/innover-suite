@@ -1,3 +1,8 @@
+import { APP_LOCALE } from "@/lib/calendar/constants";
+import { DEFAULT_CURRENCY } from "@/lib/organizations/currencies";
+
+export const DEFAULT_TAX_RATE = 0.16;
+
 export const PRODUCT_KINDS = ["physical", "food", "service"] as const;
 export const ORDER_STATUSES = ["received", "preparing", "ready", "completed", "cancelled"] as const;
 export const FULFILLMENT_TYPES = ["pickup", "delivery", "dine_in", "unspecified"] as const;
@@ -132,8 +137,8 @@ export const NEXT_ORDER_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   ready: "completed",
 };
 
-export const formatMoney = (value: number, currency = "DOP") =>
-  new Intl.NumberFormat("es-DO", {
+export const formatMoney = (value: number, currency = DEFAULT_CURRENCY) =>
+  new Intl.NumberFormat(APP_LOCALE, {
     style: "currency",
     currency,
     maximumFractionDigits: 2,

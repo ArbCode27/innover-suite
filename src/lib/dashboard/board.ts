@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { CALENDAR_TIME_ZONE } from "@/lib/calendar/constants";
 import { toNumber } from "@/lib/commerce/types";
 import {
-  AGENT_HOURLY_COST_DOP,
+  AGENT_HOURLY_COST,
   AI_MINUTES_PER_OUTBOUND,
   CHURN_INACTIVE_DAYS,
   DASHBOARD_CONVERSATION_LIMIT,
@@ -1043,7 +1043,7 @@ export const loadDashboardBoard = async (
     conversationsWithAi: conversationsWithAi.size,
     handoffRate: percentOrNull(handoffConversations.size, conversationsWithAi.size),
     hoursSaved: Number(hoursSaved.toFixed(1)),
-    estimatedSavingDop: Math.round(hoursSaved * AGENT_HOURLY_COST_DOP),
+    estimatedSavingDop: Math.round(hoursSaved * AGENT_HOURLY_COST),
   };
 
   let stageFunnel: DashboardStageFunnel | null = null;

@@ -2,8 +2,9 @@
 
 import { useId, useMemo, useState, type PointerEvent } from "react";
 import { CalendarDays, ShoppingBag, TrendingUp, Wallet } from "lucide-react";
-import { CALENDAR_TIME_ZONE } from "@/lib/calendar/constants";
+import { APP_LOCALE, CALENDAR_TIME_ZONE } from "@/lib/calendar/constants";
 import { formatMoney } from "@/lib/commerce/types";
+import { DEFAULT_CURRENCY } from "@/lib/organizations/currencies";
 import type { DashboardFinance } from "@/lib/dashboard/board";
 import {
   Card,
@@ -61,15 +62,15 @@ const CHANNEL_TONES = [
 ];
 
 const compactMoney = (value: number) =>
-  new Intl.NumberFormat("es-DO", {
+  new Intl.NumberFormat(APP_LOCALE, {
     style: "currency",
-    currency: "DOP",
+    currency: DEFAULT_CURRENCY,
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(Number.isFinite(value) ? value : 0);
 
 const formatChartDate = (isoDate: string) =>
-  new Intl.DateTimeFormat("es-DO", {
+  new Intl.DateTimeFormat(APP_LOCALE, {
     day: "numeric",
     month: "short",
     timeZone: CALENDAR_TIME_ZONE,

@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/sheet";
 import { formatMoney } from "@/lib/commerce/types";
 import { PriceCurrencyField } from "@/components/ui/price-currency-field";
-import type { OrganizationCurrencySettings } from "@/lib/organizations/currencies";
+import { DEFAULT_CURRENCY, type OrganizationCurrencySettings } from "@/lib/organizations/currencies";
 import { createFunnelCardAction, moveFunnelCardAction } from "./actions";
 import type { FunnelBoardView, FunnelCardView, FunnelContactOption, FunnelMetrics, FunnelStageView } from "./types";
 
@@ -119,7 +119,7 @@ const FunnelCardBody = ({ card, isOverlay = false }: { card: FunnelCardView; isO
           <Badge variant="outline">Manual</Badge>
         )}
         {card.valueAmount ? (
-          <Badge variant="outline">{formatMoney(card.valueAmount, card.currency ?? "DOP")}</Badge>
+          <Badge variant="outline">{formatMoney(card.valueAmount, card.currency ?? DEFAULT_CURRENCY)}</Badge>
         ) : null}
       </div>
     </div>

@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export const DEFAULT_CURRENCY = "DOP";
+export const DEFAULT_CURRENCY = "VES";
 
 export const CURRENCY_CATALOG = [
-  { code: "DOP", label: "Peso dominicano", hint: "RD$" },
+  { code: "VES", label: "Bolívar venezolano", hint: "Bs." },
   { code: "USD", label: "Dólar estadounidense", hint: "US$" },
   { code: "EUR", label: "Euro", hint: "€" },
-  { code: "VES", label: "Bolívar venezolano", hint: "Bs." },
+  { code: "DOP", label: "Peso dominicano", hint: "RD$" },
   { code: "CAD", label: "Dólar canadiense", hint: "CA$" },
   { code: "MXN", label: "Peso mexicano", hint: "MX$" },
   { code: "COP", label: "Peso colombiano", hint: "COL$" },

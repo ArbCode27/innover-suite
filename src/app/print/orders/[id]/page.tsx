@@ -26,7 +26,7 @@ export default async function OrderPrintPage({ params }: PrintPageProps) {
       <h1 className="text-center text-lg font-bold">{membership.organizationName}</h1>
       <p className="mt-1 text-center">Ticket #{order.id}</p>
       <p className="mt-1 text-center text-xs">
-        {new Intl.DateTimeFormat("es-DO", { dateStyle: "short", timeStyle: "short" }).format(new Date(order.createdAt))}
+        {new Intl.DateTimeFormat("es-VE", { dateStyle: "short", timeStyle: "short" }).format(new Date(order.createdAt))}
       </p>
       <p className="mt-3">{order.contactName}</p>
       {order.deliveryAddress ? <p className="text-xs">Entrega: {order.deliveryAddress}</p> : null}
@@ -51,7 +51,7 @@ export default async function OrderPrintPage({ params }: PrintPageProps) {
         </p>
       ) : null}
       <p className="flex justify-between">
-        <span>ITBIS</span>
+        <span>IVA</span>
         <span>{formatMoney(order.taxAmount)}</span>
       </p>
       {order.deliveryFee ? (

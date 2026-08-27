@@ -27,7 +27,7 @@ type HomeDashboardProps = {
 
 const formatTime = (value: string | null) => {
   if (!value) return "Sin actividad";
-  return new Intl.DateTimeFormat("es-DO", {
+  return new Intl.DateTimeFormat("es-VE", {
     dateStyle: "short",
     timeStyle: "short",
     timeZone: CALENDAR_TIME_ZONE,

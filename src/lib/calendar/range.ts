@@ -1,5 +1,4 @@
-import type { CalendarViewMode } from "@/lib/calendar/constants";
-import { CALENDAR_UTC_OFFSET } from "@/lib/calendar/constants";
+import { APP_LOCALE, CALENDAR_TIME_ZONE, CALENDAR_UTC_OFFSET, type CalendarViewMode } from "@/lib/calendar/constants";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -85,29 +84,29 @@ export const dateAndMinutesToIso = (dateKey: string, totalMinutes: number) =>
   toZonedIso(dateKey, minutesToTime(totalMinutes));
 
 export const formatDayHeading = (dateKey: string) =>
-  new Intl.DateTimeFormat("es-DO", {
+  new Intl.DateTimeFormat(APP_LOCALE, {
     weekday: "short",
     day: "numeric",
     month: "short",
-    timeZone: "America/Santo_Domingo",
+    timeZone: CALENDAR_TIME_ZONE,
   }).format(dateKeyToUtc(dateKey));
 
 export const formatTime = (iso: string) =>
-  new Intl.DateTimeFormat("es-DO", {
+  new Intl.DateTimeFormat(APP_LOCALE, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: "America/Santo_Domingo",
+    timeZone: CALENDAR_TIME_ZONE,
   }).format(new Date(iso));
 
 export const formatRangeLabel = (days: string[]) => {
   const first = dateKeyToUtc(days[0]!);
   const last = dateKeyToUtc(days[days.length - 1]!);
-  const formatter = new Intl.DateTimeFormat("es-DO", {
+  const formatter = new Intl.DateTimeFormat(APP_LOCALE, {
     day: "numeric",
     month: "short",
     year: "numeric",
-    timeZone: "America/Santo_Domingo",
+    timeZone: CALENDAR_TIME_ZONE,
   });
   if (days.length === 1) {
     return formatter.format(first);
@@ -117,7 +116,7 @@ export const formatRangeLabel = (days: string[]) => {
 
 export const getZonedTimeParts = (iso: string) => {
   const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "America/Santo_Domingo",
+    timeZone: CALENDAR_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

@@ -13,6 +13,7 @@ import { loadAgentSettings, loadKnowledgeArticles } from "@/lib/agent/settings";
 import { env } from "@/lib/config/env";
 import { loadCachedOrganizationModules } from "@/lib/modules/settings";
 import { loadOrganizationCurrencies } from "@/lib/organizations/currencies";
+import { DEFAULT_TAX_RATE } from "@/lib/commerce/types";
 import { getWhatsAppOAuthRedirectUri } from "@/lib/integrations/whatsapp";
 
 export default async function SettingsPage() {
@@ -139,8 +140,8 @@ export default async function SettingsPage() {
         />
         {orgBilling ? (
           <p className="text-sm text-muted-foreground">
-            Plan {orgBilling.plan || "starter"} · ITBIS {Math.round(Number(orgBilling.tax_rate ?? 0.18) * 100)}%. El cobro de
-            suscripción no está conectado; el ITBIS se aplica solo en el ticket.
+            Plan {orgBilling.plan || "starter"} · IVA {Math.round(Number(orgBilling.tax_rate ?? DEFAULT_TAX_RATE) * 100)}%. El cobro de
+            suscripción no está conectado; el IVA se aplica solo en el ticket.
           </p>
         ) : null}
       </div>

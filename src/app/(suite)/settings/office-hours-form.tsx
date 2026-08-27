@@ -85,7 +85,7 @@ export const OfficeHoursForm = ({
   const initial = parseBusinessHours(businessHours);
   const [scheduleEnabled, setScheduleEnabled] = useState(initial.enabled !== false);
   const [afterHoursAiCoverage, setAfterHoursAiCoverage] = useState(initial.afterHoursAiCoverage !== false);
-  const [timezone, setTimezone] = useState(initial.timezone ?? DEFAULT_BUSINESS_HOURS.timezone ?? "America/Santo_Domingo");
+  const [timezone, setTimezone] = useState(initial.timezone ?? DEFAULT_BUSINESS_HOURS.timezone ?? "America/Caracas");
   const [message, setMessage] = useState(closedMessage);
   const [draftDays, setDraftDays] = useState(() => toDraftDays(initial));
   const [openDays, setOpenDays] = useState(() => toOpenDays(initial));
@@ -134,7 +134,7 @@ export const OfficeHoursForm = ({
     const defaults = parseBusinessHours(DEFAULT_BUSINESS_HOURS);
     setScheduleEnabled(true);
     setAfterHoursAiCoverage(true);
-    setTimezone(defaults.timezone ?? "America/Santo_Domingo");
+    setTimezone(defaults.timezone ?? "America/Caracas");
     setMessage(DEFAULT_CLOSED_MESSAGE);
     setDraftDays(toDraftDays(defaults));
     setOpenDays(toOpenDays(defaults));

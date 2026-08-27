@@ -157,7 +157,7 @@ export const AgentSettingsForm = ({
           ) : null}
           {modules.orders ? (
             <p className="text-xs leading-5 text-muted-foreground">
-              Pedidos e inventario están activos: la IA confirmará ventas con precios reales, ITBIS y stock. El cliente puede responder CONFIRMAR.
+              Pedidos e inventario están activos: la IA confirmará ventas con precios reales, IVA y stock. El cliente puede responder CONFIRMAR.
             </p>
           ) : null}
         </fieldset>

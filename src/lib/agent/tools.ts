@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { APPOINTMENT_PURPOSES } from "@/lib/calendar/constants";
+import { APPOINTMENT_PURPOSES, CALENDAR_TIME_ZONE } from "@/lib/calendar/constants";
 import type { AgentSettings } from "@/lib/agent/types";
 import { FULFILLMENT_TYPES } from "@/lib/commerce/types";
 import type { OrganizationModules } from "@/lib/modules/constants";
@@ -78,7 +78,7 @@ export const buildAgentToolDeclarations = (
       parameters: {
         type: "OBJECT",
         properties: {
-          date: { type: "STRING", description: "Fecha local YYYY-MM-DD en America/Santo_Domingo." },
+          date: { type: "STRING", description: `Fecha local YYYY-MM-DD en ${CALENDAR_TIME_ZONE}.` },
           startTime: { type: "STRING", description: "Hora de inicio HH:mm (24h)." },
           endTime: { type: "STRING", description: "Hora de fin HH:mm. Si omites, se usa +30 minutos." },
           purpose: {

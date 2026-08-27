@@ -95,7 +95,7 @@ const sections = [
   {
     title: "11. Ley aplicable",
     body: [
-      "Estas condiciones se rigen por las leyes de la República Dominicana. Cualquier disputa se someterá a los tribunales competentes de Santo Domingo, salvo norma imperativa en contrario.",
+      "Estas condiciones se rigen por las leyes de la República Bolivariana de Venezuela. Cualquier disputa se someterá a los tribunales competentes de Caracas, salvo norma imperativa en contrario.",
     ],
   },
   {
