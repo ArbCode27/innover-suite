@@ -3,10 +3,11 @@ import {
   fallbackContactName,
   isPlaceholderContactName,
   parseContactUsername,
+  CHANNEL_LABELS,
 } from "@/lib/contacts/display";
 import { resolveInstagramCredentials } from "@/lib/integrations/instagram-credentials";
 import { fetchSocialUserProfile, resolveProfileDisplayName } from "@/lib/integrations/meta-profile";
-import { mergeAttachmentMetadata } from "@/lib/media/parse";
+import { mergeAttachmentMetadata, resolveMessagePreview } from "@/lib/media/parse";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logMetaWebhook, maskIdentifier } from "@/lib/webhooks/meta/logger";
 import type { InboundMessageEvent, PersistResult } from "@/lib/webhooks/meta/types";
@@ -45,6 +46,33 @@ const isUniqueViolation = (error: { code?: string } | null) =>
 
 const asMetadata = (value: unknown) =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+const notifyInboundMessage = async (
+  supabase: AdminClient,
+  params: {
+    organizationId: number;
+    conversationId: number;
+    channel: MetaChannel;
+    contactName: string;
+    preview: string;
+  },
+) => {
+  const { error } = await supabase.from("notifications").insert({
+    organization_id: params.organizationId,
+    kind: "inbox",
+    title: `Nuevo mensaje de ${params.contactName}`,
+    body: params.preview.slice(0, 180),
+    href: `/inbox?conversation=${params.conversationId}`,
+  });
+
+  if (error) {
+    logMetaWebhook("warn", "persist.notification_failed", {
+      conversationId: params.conversationId,
+      channel: params.channel,
+      error: error.message,
+    });
+  }
+};
 
 const resolveOrganizationContext = async (
   supabase: AdminClient,
@@ -406,9 +434,30 @@ const persistInboundMessage = async (
     throw messageError;
   }
 
+  const { data: conversationRow } = await supabase
+    .from("conversations")
+    .select("metadata")
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  const currentMetadata = asMetadata(conversationRow?.metadata);
+  const unreadRaw = currentMetadata.unread_count;
+  const unreadCount =
+    typeof unreadRaw === "number" && Number.isFinite(unreadRaw) ? Math.max(0, Math.floor(unreadRaw)) : 0;
+  const preview = resolveMessagePreview({
+    content: event.text ?? null,
+    mediaUrl: event.mediaUrl,
+    metadata: messageMetadata,
+  });
+
   const conversationUpdate: Record<string, unknown> = {
     updated_at: now,
     last_message_at: event.timestamp || now,
+    metadata: {
+      ...currentMetadata,
+      unread_count: unreadCount + 1,
+      last_message_preview: preview.slice(0, 180),
+    },
   };
   if (event.phone) {
     conversationUpdate.customer_phone = event.phone;
@@ -446,6 +495,24 @@ const persistInboundMessage = async (
   if (messageError || !insertedMessage?.id) {
     return { status: "duplicate" };
   }
+
+  const { data: contactRow } = await supabase
+    .from("contacts")
+    .select("full_name")
+    .eq("id", contactId)
+    .maybeSingle();
+
+  const contactName =
+    (typeof contactRow?.full_name === "string" && contactRow.full_name.trim()) ||
+    fallbackContactName(event.channel, event.displayName);
+
+  await notifyInboundMessage(supabase, {
+    organizationId: organizationContext.organizationId,
+    conversationId,
+    channel: event.channel,
+    contactName,
+    preview: preview === "Sin mensajes recientes" ? CHANNEL_LABELS[event.channel] : preview,
+  });
 
   return {
     status: "processed",

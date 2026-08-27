@@ -438,3 +438,44 @@ export const assignConversationAction = async (rawValues: unknown): Promise<Acti
   return { success: parsed.data.assignToMe ? "Conversación asignada a ti." : "Conversación liberada." };
 };
 
+export const markConversationReadAction = async (conversationId: number): Promise<ActionResult> => {
+  if (!Number.isInteger(conversationId) || conversationId <= 0) {
+    return { error: "La conversación no es válida." };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin", "agent"])) {
+    return { error: "No tienes permisos para actualizar conversaciones." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: conversation, error: fetchError } = await supabase
+    .from("conversations")
+    .select("metadata")
+    .eq("id", conversationId)
+    .eq("organization_id", membership.organizationId)
+    .maybeSingle();
+
+  if (fetchError || !conversation) {
+    return { error: fetchError?.message || "La conversación no existe." };
+  }
+
+  const metadata =
+    conversation.metadata && typeof conversation.metadata === "object"
+      ? { ...(conversation.metadata as Record<string, unknown>), unread_count: 0 }
+      : { unread_count: 0 };
+
+  const { error } = await supabase
+    .from("conversations")
+    .update({ metadata })
+    .eq("id", conversationId)
+    .eq("organization_id", membership.organizationId);
+
+  if (error) {
+    return { error: error.message || "No se pudo marcar la conversación como leída." };
+  }
+
+  return { success: "Conversación leída." };
+};
+
+

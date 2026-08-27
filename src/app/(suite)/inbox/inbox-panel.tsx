@@ -62,13 +62,15 @@ import { MESSAGE_ATTACHMENTS_BUCKET } from "@/lib/media/types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { createFunnelCardFromConversationAction } from "../funnels/actions";
-import { sendConversationMessageAction, setConversationModeAction, assignConversationAction } from "./actions";
+import { sendConversationMessageAction, setConversationModeAction, assignConversationAction, markConversationReadAction } from "./actions";
 import { suggestReplyAction } from "@/lib/inbox/suggest";
+import { mapConversationListRow, mergeInboxConversations, previewFromMessageRow, type ConversationListRow } from "@/lib/inbox/board";
 import { MessageMedia } from "./message-media";
 import type { FileAttachmentKind, InboxConversation, InboxFilter, InboxMessage } from "./types";
 import { normalizeInboxMessage } from "./types";
 
 type InboxPanelProps = {
+  organizationId: number;
   organizationName: string;
   currentUserId: string | null;
   initialConversationId: number | null;
@@ -179,6 +181,7 @@ const resolveConversationSubtitle = (conversation: InboxConversation) => {
 };
 
 export const InboxPanel = ({
+  organizationId,
   organizationName,
   currentUserId,
   initialConversationId,
@@ -211,6 +214,8 @@ export const InboxPanel = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingStreamRef = useRef<MediaStream | null>(null);
+  const activeConversationIdRef = useRef<number | null>(null);
+  const markReadInFlightRef = useRef<Set<number>>(new Set());
 
   const filteredConversations = useMemo(() => {
     const loweredTerm = searchTerm.trim().toLowerCase();
@@ -244,6 +249,76 @@ export const InboxPanel = ({
   );
 
   const selectedMessages = activeConversationId ? messagesByConversation[activeConversationId] ?? [] : [];
+
+  activeConversationIdRef.current = activeConversationId;
+
+  const markConversationRead = useCallback((conversationId: number) => {
+    if (markReadInFlightRef.current.has(conversationId)) {
+      return;
+    }
+
+    markReadInFlightRef.current.add(conversationId);
+    setConversations((current) =>
+      current.map((conversation) =>
+        conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation,
+      ),
+    );
+
+    void markConversationReadAction(conversationId).finally(() => {
+      markReadInFlightRef.current.delete(conversationId);
+    });
+  }, []);
+
+  const loadInboxConversations = useCallback(async () => {
+    const supabase = createSupabaseBrowserClient();
+    const { data, error } = await supabase
+      .from("conversations")
+      .select(
+        "id, contact_id, channel, status, mode, assigned_user_id, updated_at, last_message_at, metadata, customer_phone, contacts(full_name, phone, metadata)",
+      )
+      .eq("organization_id", organizationId)
+      .order("updated_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      return;
+    }
+
+    const mapped = ((data ?? []) as unknown as ConversationListRow[])
+      .map((row) => mapConversationListRow(row))
+      .filter((row): row is InboxConversation => Boolean(row));
+
+    setConversations(mapped);
+  }, [organizationId]);
+
+  const applyConversationChange = useCallback(
+    async (row: ConversationListRow) => {
+      const supabase = createSupabaseBrowserClient();
+      let contacts = row.contacts ?? null;
+      if (row.contact_id && !contacts) {
+        const { data } = await supabase
+          .from("contacts")
+          .select("full_name, phone, metadata")
+          .eq("id", row.contact_id)
+          .maybeSingle();
+        contacts = data;
+      }
+
+      const mapped = mapConversationListRow({ ...row, contacts });
+      if (!mapped) {
+        return;
+      }
+
+      const isActive = mapped.id === activeConversationIdRef.current;
+      if (isActive && mapped.unreadCount > 0) {
+        mapped.unreadCount = 0;
+        markConversationRead(mapped.id);
+      }
+
+      setConversations((current) => mergeInboxConversations(current, mapped, activeConversationIdRef.current));
+    },
+    [markConversationRead],
+  );
 
   const loadMessages = useCallback(async (conversationId: number) => {
     setIsLoadingMessages(true);
@@ -315,7 +390,8 @@ export const InboxPanel = ({
             return { ...current, [activeConversationId]: next };
           });
 
-          const preview = message.content?.trim() || attachmentPreviewLabel(message.attachmentKind ?? "document", message.isVoice);
+          const preview =
+            message.content?.trim() || attachmentPreviewLabel(message.attachmentKind ?? "document", message.isVoice);
           setConversations((current) =>
             current.map((conversation) =>
               conversation.id === activeConversationId
@@ -324,6 +400,7 @@ export const InboxPanel = ({
                     lastMessageAt: message.createdAt,
                     updatedAt: message.createdAt,
                     lastMessagePreview: preview,
+                    unreadCount: 0,
                   }
                 : conversation,
             ),
@@ -338,15 +415,100 @@ export const InboxPanel = ({
   }, [activeConversationId]);
 
   useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    const channel = supabase
+      .channel(`inbox-org-${organizationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "conversations",
+          filter: `organization_id=eq.${organizationId}`,
+        },
+        (payload) => {
+          const row = payload.new;
+          if (!row || typeof row !== "object" || !("id" in row)) return;
+          void applyConversationChange(row as ConversationListRow);
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `organization_id=eq.${organizationId}`,
+        },
+        (payload) => {
+          const row = payload.new as
+            | {
+                conversation_id?: number;
+                content?: string | null;
+                media_url?: string | null;
+                metadata?: unknown;
+                created_at?: string;
+              }
+            | undefined;
+          if (!row?.conversation_id || row.conversation_id === activeConversationIdRef.current) {
+            return;
+          }
+
+          const preview = previewFromMessageRow({
+            content: row.content ?? null,
+            media_url: row.media_url ?? null,
+            metadata: row.metadata,
+          });
+          const createdAt = row.created_at || new Date().toISOString();
+
+          setConversations((current) =>
+            current.map((conversation) =>
+              conversation.id === row.conversation_id
+                ? {
+                    ...conversation,
+                    lastMessageAt: createdAt,
+                    updatedAt: createdAt,
+                    lastMessagePreview: preview,
+                  }
+                : conversation,
+            ),
+          );
+        },
+      )
+      .subscribe();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadInboxConversations();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      void supabase.removeChannel(channel);
+    };
+  }, [applyConversationChange, loadInboxConversations, organizationId]);
+
+  useEffect(() => {
     return () => {
       mediaRecorderRef.current?.stop();
       recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);
 
+  useEffect(() => {
+    if (!initialConversationId) {
+      return;
+    }
+    markConversationRead(initialConversationId);
+  }, [initialConversationId, markConversationRead]);
+
   const handleSelectConversation = (conversationId: number) => {
     setSelectedConversationId(conversationId);
     setIsMobileThreadOpen(true);
+    markConversationRead(conversationId);
     if (!messagesByConversation[conversationId]) {
       void loadMessages(conversationId);
     }

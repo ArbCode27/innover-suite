@@ -1,10 +1,9 @@
 import { redirect } from "next/navigation";
-import { parseContactUsername } from "@/lib/contacts/display";
-import { resolveMessagePreview } from "@/lib/media/parse";
 import { canUseInbox, getCurrentMembership } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { areAdvisorsAvailable, isScheduleEnabled } from "@/lib/agent/hours";
 import { loadAgentSettings } from "@/lib/agent/settings";
+import { mapConversationListRow, previewFromMessageRow } from "@/lib/inbox/board";
 import { InboxPanel } from "./inbox-panel";
 import { normalizeInboxMessage, type InboxConversation, type InboxMessage } from "./types";
 
@@ -98,37 +97,10 @@ export default async function InboxPage({
     });
   }
 
-  const conversations: InboxConversation[] = conversationRows.map((conversation) => {
+  const conversations: InboxConversation[] = conversationRows.flatMap((conversation) => {
     const latest = latestMessagesByConversation.get(conversation.id);
-    const metadata =
-      conversation.metadata && typeof conversation.metadata === "object"
-        ? (conversation.metadata as Record<string, unknown>)
-        : {};
-
-    const unreadRaw = metadata["unread_count"];
-    const unreadCount = typeof unreadRaw === "number" ? unreadRaw : 0;
-
-    const latestPreview = resolveMessagePreview({
-      content: latest?.content ?? null,
-      mediaUrl: latest?.media_url ?? null,
-      metadata: latest?.metadata,
-    });
-
-    return {
-      id: conversation.id,
-      channel: conversation.channel,
-      status: conversation.status,
-      mode: conversation.mode,
-      assignedUserId: conversation.assigned_user_id,
-      updatedAt: conversation.updated_at,
-      lastMessageAt: conversation.last_message_at,
-      contactId: conversation.contact_id,
-      contactName: conversation.contacts?.full_name || "Contacto sin nombre",
-      contactUsername: parseContactUsername(conversation.contacts?.metadata),
-      contactPhone: conversation.contacts?.phone || null,
-      lastMessagePreview: latestPreview,
-      unreadCount,
-    };
+    const mapped = mapConversationListRow(conversation, latest ? previewFromMessageRow(latest) : undefined);
+    return mapped ? [mapped] : [];
   });
 
   const requestedId =
@@ -156,6 +128,7 @@ export default async function InboxPage({
   return (
     <section>
       <InboxPanel
+        organizationId={membership.organizationId}
         organizationName={membership.organizationName}
         currentUserId={user?.id ?? null}
         initialConversationId={firstConversationId}
