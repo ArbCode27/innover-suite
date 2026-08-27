@@ -192,9 +192,7 @@ export const InboxPanel = ({
   const [conversations, setConversations] = useState(initialConversations);
   const [activeFilter, setActiveFilter] = useState<InboxFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedConversationId, setSelectedConversationId] = useState<number | null>(
-    initialConversationId ?? initialConversations[0]?.id ?? null,
-  );
+  const [selectedConversationId, setSelectedConversationId] = useState<number | null>(initialConversationId);
   const [isMobileThreadOpen, setIsMobileThreadOpen] = useState(Boolean(initialConversationId));
   const { setHideMobileNav } = useMobileChrome();
   const [messagesByConversation, setMessagesByConversation] = useState<Record<number, InboxMessage[]>>(
@@ -236,11 +234,11 @@ export const InboxPanel = ({
   }, [activeFilter, conversations, currentUserId, searchTerm]);
 
   const activeConversationId = useMemo(() => {
-    if (!filteredConversations.length) return null;
-    if (selectedConversationId && filteredConversations.some((item) => item.id === selectedConversationId)) {
+    if (!selectedConversationId) return null;
+    if (filteredConversations.some((item) => item.id === selectedConversationId)) {
       return selectedConversationId;
     }
-    return filteredConversations[0]!.id;
+    return null;
   }, [filteredConversations, selectedConversationId]);
 
   const selectedConversation = useMemo(
@@ -499,6 +497,11 @@ export const InboxPanel = ({
   }, []);
 
   useEffect(() => {
+    setSelectedConversationId(initialConversationId);
+    setIsMobileThreadOpen(Boolean(initialConversationId));
+  }, [initialConversationId]);
+
+  useEffect(() => {
     if (!initialConversationId) {
       return;
     }
@@ -525,6 +528,7 @@ export const InboxPanel = ({
       window.history.back();
       return;
     }
+    setSelectedConversationId(null);
     setIsMobileThreadOpen(false);
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -542,6 +546,7 @@ export const InboxPanel = ({
         setIsMobileThreadOpen(true);
         return;
       }
+      setSelectedConversationId(null);
       setIsMobileThreadOpen(false);
     };
 

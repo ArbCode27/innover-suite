@@ -79,7 +79,6 @@ export default async function InboxPage({
   const conversationIds = conversationRows.map((item) => item.id);
   const requestedId =
     Number.isInteger(requestedConversationId) && requestedConversationId > 0 ? requestedConversationId : null;
-  const firstConversationId = requestedId ?? conversationRows[0]?.id ?? null;
 
   const [latestMessagesResult, initialMessagesResult] = await Promise.all([
     conversationIds.length
@@ -90,11 +89,11 @@ export default async function InboxPage({
           .order("created_at", { ascending: false })
           .limit(500)
       : Promise.resolve({ data: [] as LatestMessageRow[] }),
-    firstConversationId
+    requestedId
       ? supabase
           .from("messages")
           .select("id, conversation_id, direction, sender_type, content, media_url, metadata, created_at")
-          .eq("conversation_id", firstConversationId)
+          .eq("conversation_id", requestedId)
           .order("created_at", { ascending: true })
           .limit(250)
       : Promise.resolve({ data: [] as MessageRow[] }),
@@ -115,8 +114,8 @@ export default async function InboxPage({
   });
 
   const initialMessagesByConversation: Record<number, InboxMessage[]> = {};
-  if (firstConversationId) {
-    initialMessagesByConversation[firstConversationId] = (initialMessagesResult.data ?? []).map((row) =>
+  if (requestedId) {
+    initialMessagesByConversation[requestedId] = (initialMessagesResult.data ?? []).map((row) =>
       normalizeInboxMessage(row as MessageRow),
     );
   }
@@ -130,7 +129,7 @@ export default async function InboxPage({
         organizationId={membership.organizationId}
         organizationName={membership.organizationName}
         currentUserId={user?.id ?? null}
-        initialConversationId={firstConversationId}
+        initialConversationId={requestedId}
         initialConversations={conversations}
         initialMessagesByConversation={initialMessagesByConversation}
         officeClosed={officeClosed}
