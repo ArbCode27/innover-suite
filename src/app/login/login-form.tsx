@@ -31,7 +31,8 @@ export const LoginForm = () => {
 
   const handleLogin = handleSubmit(async (values) => {
     setAuthError(null);
-    const result = await signIn(values);
+    const nextPath = new URLSearchParams(window.location.search).get("next");
+    const result = await signIn(values, nextPath);
 
     if (result?.error) {
       setAuthError(result.error);

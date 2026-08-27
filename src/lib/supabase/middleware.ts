@@ -4,10 +4,12 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC_PATHS = [
   "/login",
   "/privacy",
+  "/terms",
   "/invite",
   "/api/health",
   "/api/auth/instagram/callback",
   "/api/auth/messenger/callback",
+  "/api/auth/whatsapp/callback",
   "/api/auth/google/callback",
   "/api/cron/instagram/refresh",
   "/api/cron/google/refresh",
@@ -17,6 +19,22 @@ const PUBLIC_PATHS = [
 
 const isPublicPath = (pathname: string) =>
   PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+
+const isSafeWhatsAppOAuthReturnPath = (value: string | null) => {
+  if (!value || !value.startsWith("/api/auth/whatsapp/callback")) {
+    return false;
+  }
+
+  if (value.includes("://") || value.includes("//") || value.includes("\\")) {
+    return false;
+  }
+
+  try {
+    return new URL(value, "http://innover.local").pathname === "/api/auth/whatsapp/callback";
+  } catch {
+    return false;
+  }
+};
 
 const copyCookies = (from: NextResponse, to: NextResponse) => {
   from.cookies.getAll().forEach((cookie) => {
@@ -87,6 +105,14 @@ export const updateSession = async (request: NextRequest) => {
     }
 
     if (membership?.organization_id && (pathname === "/login" || pathname === "/")) {
+      const nextPath = request.nextUrl.searchParams.get("next");
+      if (pathname === "/login" && nextPath && isSafeWhatsAppOAuthReturnPath(nextPath)) {
+        const resumeUrl = request.nextUrl.clone();
+        resumeUrl.pathname = "/api/auth/whatsapp/callback";
+        resumeUrl.search = new URL(nextPath, request.nextUrl.origin).search;
+        return copyCookies(sessionResponse, NextResponse.redirect(resumeUrl));
+      }
+
       return redirectWithCookies(request, sessionResponse, "/home");
     }
   }

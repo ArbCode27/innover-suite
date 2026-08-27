@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  exchangeWhatsAppAuthorizationCode,
+  completeWhatsAppEmbeddedSignup,
+  getWhatsAppSettingsRedirectUrl,
+  isSafeWhatsAppOAuthReturnPath,
   isWhatsAppEmbeddedSignupConfigured,
-  resolveAccessToken,
-  resolveWhatsAppPhoneNumbers,
-  subscribeWabaToAppWebhooks,
+  isWhatsAppOAuthConfigured,
 } from "@/lib/integrations/whatsapp";
 import { consumeWhatsAppOAuthState } from "@/lib/integrations/whatsapp-state";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +24,99 @@ const callbackSchema = z.object({
 
 const jsonStatus = (status: string, httpStatus: number) =>
   NextResponse.json({ status }, { status: httpStatus });
+
+const redirectToSettings = (status: string) =>
+  NextResponse.redirect(getWhatsAppSettingsRedirectUrl(status));
+
+const readQueryValue = (search: URLSearchParams, keys: string[]) => {
+  for (const key of keys) {
+    const value = search.get(key)?.trim();
+    if (value) return value;
+  }
+  return undefined;
+};
+
+const resolveConnectActor = async (stateToken?: string) => {
+  const stateContext = stateToken ? await consumeWhatsAppOAuthState(stateToken) : null;
+  if (stateContext) {
+    return { status: "ok" as const, ...stateContext };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: "unauthenticated" as const };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
+    return { status: "forbidden" as const };
+  }
+
+  return {
+    status: "ok" as const,
+    organizationId: membership.organizationId,
+    userId: user.id,
+  };
+};
+
+const redirectToLoginToResume = (request: NextRequest) => {
+  const returnPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+  const loginUrl = request.nextUrl.clone();
+  loginUrl.pathname = "/login";
+  loginUrl.search = "";
+  loginUrl.hash = "";
+
+  if (isSafeWhatsAppOAuthReturnPath(returnPath)) {
+    loginUrl.searchParams.set("next", returnPath);
+  }
+
+  return NextResponse.redirect(loginUrl);
+};
+
+export async function GET(request: NextRequest) {
+  if (!isWhatsAppOAuthConfigured()) {
+    return redirectToSettings("missing_env");
+  }
+
+  const search = request.nextUrl.searchParams;
+  const oauthError = search.get("error");
+
+  if (oauthError) {
+    return redirectToSettings(oauthError === "access_denied" ? "cancelled" : "signup_failed");
+  }
+
+  const code = search.get("code")?.trim();
+  if (!code) {
+    return redirectToSettings("invalid_callback");
+  }
+
+  const actor = await resolveConnectActor(search.get("state")?.trim() || undefined);
+  if (actor.status === "unauthenticated") {
+    return redirectToLoginToResume(request);
+  }
+
+  if (actor.status !== "ok") {
+    return redirectToSettings("forbidden");
+  }
+
+  const status = await completeWhatsAppEmbeddedSignup({
+    organizationId: actor.organizationId,
+    userId: actor.userId,
+    code,
+    session: {
+      wabaId: readQueryValue(search, ["waba_id", "wabaId"]),
+      phoneNumberId: readQueryValue(search, ["phone_number_id", "phoneNumberId"]),
+      businessId: readQueryValue(search, ["business_id", "businessId"]),
+    },
+    redirectUri: `${request.nextUrl.origin}${request.nextUrl.pathname}`,
+  });
+
+  return redirectToSettings(status);
+}
 
 export async function POST(request: NextRequest) {
   if (!isWhatsAppEmbeddedSignupConfigured()) {
@@ -41,102 +134,21 @@ export async function POST(request: NextRequest) {
   }
 
   const stateContext = await consumeWhatsAppOAuthState(parsed.data.state);
-  if (!stateContext) {
+  if (!stateContext || stateContext.organizationId !== membership.organizationId) {
     return jsonStatus("invalid_state", 400);
   }
 
-  if (stateContext.organizationId !== membership.organizationId) {
-    return jsonStatus("forbidden", 403);
-  }
-
-  const shortToken = await exchangeWhatsAppAuthorizationCode(parsed.data.code);
-  if (!shortToken.ok) {
-    console.error("[WA_EMBEDDED] code exchange failed", {
-      status: shortToken.status,
-      body: shortToken.errorBody,
-    });
-    return jsonStatus("token_exchange_failed", 502);
-  }
-
-  const accessToken = await resolveAccessToken(shortToken.data.access_token);
-  const numbers = await resolveWhatsAppPhoneNumbers(
-    {
+  const status = await completeWhatsAppEmbeddedSignup({
+    organizationId: stateContext.organizationId,
+    userId: stateContext.userId,
+    code: parsed.data.code,
+    session: {
       wabaId: parsed.data.wabaId,
       phoneNumberId: parsed.data.phoneNumberId,
       businessId: parsed.data.businessId,
     },
-    accessToken,
-  );
+  });
 
-  if (!numbers.ok) {
-    console.error("[WA_EMBEDDED] phone discovery failed", {
-      status: numbers.status,
-      body: numbers.errorBody,
-    });
-    return jsonStatus("no_numbers", 422);
-  }
-
-  const admin = getSupabaseAdminClient();
-  const connectedAt = new Date().toISOString();
-  let persistedCount = 0;
-
-  for (const phone of numbers.data.phones) {
-    const wabaId = numbers.data.wabaIdByPhoneId.get(phone.id) ?? parsed.data.wabaId ?? null;
-    const displayName = phone.verifiedName || phone.displayPhoneNumber || "WhatsApp";
-    const { error: channelAccountError } = await admin.from("channel_accounts").upsert(
-      {
-        organization_id: stateContext.organizationId,
-        channel: "whatsapp",
-        external_account_id: phone.id,
-        display_name: displayName,
-        access_token: accessToken,
-        connected_by_user_id: stateContext.userId,
-        metadata: {
-          provider: "whatsapp_embedded_signup",
-          wabaId,
-          businessId: parsed.data.businessId ?? null,
-          displayPhoneNumber: phone.displayPhoneNumber,
-          verifiedName: phone.verifiedName,
-          qualityRating: phone.qualityRating,
-          connectedAt,
-        },
-      },
-      { onConflict: "channel,external_account_id" },
-    );
-
-    if (channelAccountError) {
-      console.error("[WA_EMBEDDED] upsert channel account failed", {
-        phoneNumberId: phone.id,
-        error: channelAccountError,
-      });
-      continue;
-    }
-
-    persistedCount += 1;
-  }
-
-  if (persistedCount === 0) {
-    return jsonStatus("persist_failed", 500);
-  }
-
-  const uniqueWabaIds = [...new Set(numbers.data.wabaIds.filter(Boolean))];
-  let subscribedCount = 0;
-  for (const wabaId of uniqueWabaIds) {
-    const subscription = await subscribeWabaToAppWebhooks(wabaId, accessToken);
-    if (!subscription.ok) {
-      console.error("[WA_EMBEDDED] waba webhook subscription failed", {
-        wabaId,
-        status: subscription.status,
-        body: subscription.errorBody,
-      });
-      continue;
-    }
-    subscribedCount += 1;
-  }
-
-  if (uniqueWabaIds.length > 0 && subscribedCount === 0) {
-    return jsonStatus("subscription_failed", 502);
-  }
-
-  return NextResponse.json({ status: "connected" });
+  const httpStatus = status === "connected" ? 200 : status === "no_numbers" ? 422 : 502;
+  return jsonStatus(status, httpStatus);
 }

@@ -1,4 +1,5 @@
 import { env } from "@/lib/config/env";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const WHATSAPP_GRAPH_VERSION = "v26.0";
 const FACEBOOK_GRAPH_BASE = `https://graph.facebook.com/${WHATSAPP_GRAPH_VERSION}`;
@@ -89,21 +90,49 @@ const graphRequest = async <T>(
   return { ok: true, data: (await response.json()) as T };
 };
 
+export const isWhatsAppOAuthConfigured = () => Boolean(env.facebookAppId && env.metaAppSecret);
+
 export const isWhatsAppEmbeddedSignupConfigured = () =>
-  Boolean(env.facebookAppId && env.metaAppSecret && env.whatsappEmbeddedConfigId);
+  Boolean(isWhatsAppOAuthConfigured() && env.whatsappEmbeddedConfigId);
+
+export const getWhatsAppOAuthRedirectUri = () => {
+  const originSource = env.facebookRedirectUri || env.instagramRedirectUri || "http://localhost:3000";
+  return new URL("/api/auth/whatsapp/callback", originSource).toString();
+};
 
 export const getWhatsAppSettingsRedirectUrl = (status: string) => {
   const originSource = env.facebookRedirectUri || env.instagramRedirectUri || "http://localhost:3000";
   const redirectUrl = new URL("/settings", originSource);
   redirectUrl.searchParams.set("wa", status);
+  redirectUrl.hash = "whatsapp";
   return redirectUrl;
 };
 
-export const exchangeWhatsAppAuthorizationCode = async (code: string) => {
+export const isSafeWhatsAppOAuthReturnPath = (value: string | null | undefined): value is string => {
+  if (!value || !value.startsWith("/api/auth/whatsapp/callback")) {
+    return false;
+  }
+
+  if (value.includes("://") || value.includes("//") || value.includes("\\")) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value, "http://innover.local");
+    return parsed.pathname === "/api/auth/whatsapp/callback";
+  } catch {
+    return false;
+  }
+};
+
+export const exchangeWhatsAppAuthorizationCode = async (code: string, redirectUri?: string) => {
   const url = new URL(`${FACEBOOK_GRAPH_BASE}/oauth/access_token`);
   url.searchParams.set("client_id", env.facebookAppId);
   url.searchParams.set("client_secret", env.metaAppSecret);
   url.searchParams.set("code", code);
+  if (redirectUri) {
+    url.searchParams.set("redirect_uri", redirectUri);
+  }
 
   const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) {
@@ -292,3 +321,108 @@ export const parseWhatsAppAccountMetadata = (value: unknown) => {
     qualityRating: asString(record?.qualityRating),
   };
 };
+
+export type WhatsAppConnectStatus =
+  | "connected"
+  | "token_exchange_failed"
+  | "no_numbers"
+  | "persist_failed"
+  | "subscription_failed";
+
+export const completeWhatsAppEmbeddedSignup = async (input: {
+  organizationId: number;
+  userId: string;
+  code: string;
+  session?: WhatsAppSessionInfo;
+  redirectUri?: string;
+}): Promise<WhatsAppConnectStatus> => {
+  let shortToken = await exchangeWhatsAppAuthorizationCode(input.code, input.redirectUri);
+  if (!shortToken.ok && input.redirectUri) {
+    shortToken = await exchangeWhatsAppAuthorizationCode(input.code);
+  }
+
+  if (!shortToken.ok) {
+    console.error("[WA_EMBEDDED] code exchange failed", {
+      status: shortToken.status,
+      body: shortToken.errorBody,
+    });
+    return "token_exchange_failed";
+  }
+
+  const accessToken = await resolveAccessToken(shortToken.data.access_token);
+  const session = input.session ?? {};
+  const numbers = await resolveWhatsAppPhoneNumbers(session, accessToken);
+
+  if (!numbers.ok) {
+    console.error("[WA_EMBEDDED] phone discovery failed", {
+      status: numbers.status,
+      body: numbers.errorBody,
+    });
+    return "no_numbers";
+  }
+
+  const admin = getSupabaseAdminClient();
+  const connectedAt = new Date().toISOString();
+  let persistedCount = 0;
+
+  for (const phone of numbers.data.phones) {
+    const wabaId = numbers.data.wabaIdByPhoneId.get(phone.id) ?? session.wabaId ?? null;
+    const displayName = phone.verifiedName || phone.displayPhoneNumber || "WhatsApp";
+    const { error: channelAccountError } = await admin.from("channel_accounts").upsert(
+      {
+        organization_id: input.organizationId,
+        channel: "whatsapp",
+        external_account_id: phone.id,
+        display_name: displayName,
+        access_token: accessToken,
+        connected_by_user_id: input.userId,
+        metadata: {
+          provider: "whatsapp_embedded_signup",
+          wabaId,
+          businessId: session.businessId ?? null,
+          displayPhoneNumber: phone.displayPhoneNumber,
+          verifiedName: phone.verifiedName,
+          qualityRating: phone.qualityRating,
+          connectedAt,
+        },
+      },
+      { onConflict: "channel,external_account_id" },
+    );
+
+    if (channelAccountError) {
+      console.error("[WA_EMBEDDED] upsert channel account failed", {
+        phoneNumberId: phone.id,
+        error: channelAccountError,
+      });
+      continue;
+    }
+
+    persistedCount += 1;
+  }
+
+  if (persistedCount === 0) {
+    return "persist_failed";
+  }
+
+  const uniqueWabaIds = [...new Set(numbers.data.wabaIds.filter(Boolean))];
+  let subscribedCount = 0;
+  for (const wabaId of uniqueWabaIds) {
+    const subscription = await subscribeWabaToAppWebhooks(wabaId, accessToken);
+    if (!subscription.ok) {
+      console.error("[WA_EMBEDDED] waba webhook subscription failed", {
+        wabaId,
+        status: subscription.status,
+        body: subscription.errorBody,
+      });
+      continue;
+    }
+    subscribedCount += 1;
+  }
+
+  if (uniqueWabaIds.length > 0 && subscribedCount === 0) {
+    return "subscription_failed";
+  }
+
+  return "connected";
+};
+

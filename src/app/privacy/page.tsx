@@ -114,6 +114,11 @@ const PrivacyPage = () => {
               <a className="font-medium text-primary underline-offset-4 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
                 {CONTACT_EMAIL}
               </a>
+              . Las reglas de uso están en las{" "}
+              <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/terms">
+                Condiciones del servicio
+              </Link>
+              .
             </p>
           </CardContent>
         </Card>
@@ -138,7 +143,10 @@ const PrivacyPage = () => {
           </section>
         ))}
 
-        <div className="pt-2">
+        <div className="flex flex-wrap gap-3 pt-2">
+          <Button asChild variant="outline">
+            <Link href="/terms">Condiciones del servicio</Link>
+          </Button>
           <Button asChild variant="outline">
             <Link href="/login">Volver al inicio de sesión</Link>
           </Button>

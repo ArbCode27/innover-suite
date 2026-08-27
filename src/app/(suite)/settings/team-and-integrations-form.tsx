@@ -49,6 +49,7 @@ type TeamAndIntegrationsFormProps = {
     token_expires_at: string | null;
     connected_at: string;
   } | null;
+  whatsappOAuthRedirectUri: string;
 };
 
 const INSTAGRAM_STATUS_LABELS: Record<string, string> = {
@@ -199,6 +200,7 @@ export const TeamAndIntegrationsForm = ({
   googleCalendarConnection,
   organizationName,
   canManageOrganization,
+  whatsappOAuthRedirectUri,
 }: TeamAndIntegrationsFormProps) => {
   const searchParams = useSearchParams();
   const igStatus = searchParams.get("ig");
@@ -484,7 +486,8 @@ export const TeamAndIntegrationsForm = ({
           <CardHeader>
             <CardTitle>Webhooks de Meta</CardTitle>
             <CardDescription>
-              Úsalos en Meta Developers para recibir mensajes de Instagram, Messenger y WhatsApp.
+              Úsalos en Meta Developers para recibir mensajes y, en el registro insertado de WhatsApp, como URI de
+              redirección.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -495,6 +498,10 @@ export const TeamAndIntegrationsForm = ({
             <div className="rounded-xl border border-primary/15 bg-muted/40 p-3">
               <p className="text-xs font-medium text-muted-foreground">WhatsApp Cloud API</p>
               <code className="mt-1 block break-all text-xs">/api/webhooks/meta/whatsapp</code>
+            </div>
+            <div className="rounded-xl border border-primary/15 bg-muted/40 p-3">
+              <p className="text-xs font-medium text-muted-foreground">Registro insertado de WhatsApp (URI de redirección)</p>
+              <code className="mt-1 block break-all text-xs">{whatsappOAuthRedirectUri}</code>
             </div>
           </CardContent>
         </Card>

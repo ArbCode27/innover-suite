@@ -62,6 +62,38 @@ const isActivePath = (pathname: string, href: string) => {
   return pathname === href || pathname.startsWith(`${href}/`);
 };
 
+export const SidebarNav = ({ items }: MobileNavProps) => {
+  const pathname = usePathname();
+
+  return (
+    <nav aria-label="Navegación principal" className="space-y-2 group-hover/sidebar:mt-6">
+      {items.map((item) => {
+        const Icon = NAV_ICONS[item.icon];
+        const isActive = isActivePath(pathname, item.href);
+
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={isActive ? "page" : undefined}
+            className={cn(
+              "flex items-center justify-center gap-0 rounded-2xl px-3 py-3 text-sm transition group-hover/sidebar:justify-start group-hover/sidebar:gap-3",
+              isActive
+                ? "bg-primary text-primary-foreground shadow-[0_0_22px_rgba(56,189,248,0.55)]"
+                : "text-muted-foreground hover:bg-primary/12 hover:text-foreground",
+            )}
+          >
+            <Icon className="size-4" aria-hidden />
+            <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover/sidebar:max-w-40 group-hover/sidebar:opacity-100">
+              {item.label}
+            </span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+};
+
 export const MobileNav = ({ items }: MobileNavProps) => {
   const pathname = usePathname();
   const { hideMobileNav } = useMobileChrome();
@@ -86,7 +118,7 @@ export const MobileNav = ({ items }: MobileNavProps) => {
                 className={cn(
                   "flex h-14 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 text-[10px] font-medium transition-all",
                   isActive
-                    ? "bg-primary text-primary-foreground shadow-sm"
+                ? "bg-primary text-primary-foreground shadow-sm shadow-primary/40"
                     : "text-muted-foreground hover:bg-primary/8 hover:text-foreground",
                 )}
               >

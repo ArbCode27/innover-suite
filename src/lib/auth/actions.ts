@@ -3,9 +3,10 @@
 import { redirect } from "next/navigation";
 import { getAuthErrorMessage } from "@/lib/auth/errors";
 import { loginSchema } from "@/lib/auth/schema";
+import { isSafeWhatsAppOAuthReturnPath } from "@/lib/integrations/whatsapp";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export const signIn = async (rawValues: unknown) => {
+export const signIn = async (rawValues: unknown, nextPath?: string | null) => {
   const parsed = loginSchema.safeParse(rawValues);
 
   if (!parsed.success) {
@@ -24,7 +25,7 @@ export const signIn = async (rawValues: unknown) => {
     return { error: getAuthErrorMessage(error.message) };
   }
 
-  redirect("/home");
+  redirect(isSafeWhatsAppOAuthReturnPath(nextPath) ? nextPath : "/home");
 };
 
 export const signOut = async () => {

@@ -13,6 +13,7 @@ import { env } from "@/lib/config/env";
 import { DEFAULT_MODULES } from "@/lib/modules/constants";
 import { loadOrganizationModules } from "@/lib/modules/settings";
 import { DEFAULT_CURRENCY_SETTINGS, loadOrganizationCurrencies } from "@/lib/organizations/currencies";
+import { getWhatsAppOAuthRedirectUri } from "@/lib/integrations/whatsapp";
 
 export default async function SettingsPage() {
   const membership = await getCurrentMembership();
@@ -112,6 +113,7 @@ export default async function SettingsPage() {
                 : null
             }
             organizationName={membership?.organizationName || "Organización"}
+            whatsappOAuthRedirectUri={getWhatsAppOAuthRedirectUri()}
           />
         </Suspense>
         <ModulesSettingsForm canManageOrganization={canManageOrganization} modules={modules} />

@@ -24,7 +24,7 @@ import {
   ROLE_LABELS,
   type OrganizationRole,
 } from "@/lib/organizations/membership";
-import { MobileChromeProvider, MobileNav, type MobileNavIcon } from "@/components/suite/mobile-nav";
+import { MobileChromeProvider, MobileNav, SidebarNav, type MobileNavIcon } from "@/components/suite/mobile-nav";
 import { ThemeToggle } from "@/components/suite/theme-toggle";
 import { NotificationBell } from "@/components/suite/notification-bell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -110,20 +110,13 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
               <span className="block text-sm font-semibold whitespace-nowrap">Suite CRM</span>
             </span>
           </Link>
-          <nav className="space-y-2 group-hover/sidebar:mt-6">
-            {items.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex items-center justify-center gap-0 rounded-2xl px-3 py-3 text-sm text-muted-foreground transition hover:bg-primary/12 hover:text-foreground group-hover/sidebar:justify-start group-hover/sidebar:gap-3"
-              >
-                <item.icon className="size-4" />
-                <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover/sidebar:max-w-40 group-hover/sidebar:opacity-100">
-                  {item.label}
-                </span>
-              </Link>
-            ))}
-          </nav>
+          <SidebarNav
+            items={items.map((item) => ({
+              href: item.href,
+              label: item.label,
+              icon: item.iconKey,
+            }))}
+          />
           <Separator className="mt-6" />
           <div className="mt-auto space-y-4 pt-6">
             {membership ? (

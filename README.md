@@ -59,7 +59,7 @@ npm run dev
 - `GET /api/auth/instagram/callback` (callback OAuth)
 - `POST /api/auth/instagram/disconnect` (desconectar cuenta vinculada)
 - `GET /api/auth/whatsapp/start` (inicia WhatsApp Embedded Signup por organización)
-- `POST /api/auth/whatsapp/callback` (intercambia el `code` y guarda `phone_number_id`)
+- `GET|POST /api/auth/whatsapp/callback` (callback OAuth / registro insertado de Meta y SDK)
 - `POST /api/auth/whatsapp/disconnect` (desconectar números de WhatsApp)
 - `GET /api/cron/instagram/refresh` (renovar tokens próximos a expirar)
 - `GET /api/auth/google/start` (inicia OAuth de Google Calendar por organización)
@@ -75,6 +75,9 @@ En Meta Developers configura:
 
 - Messenger/Instagram: `https://tu-dominio/api/webhooks/meta/social`
 - WhatsApp: `https://tu-dominio/api/webhooks/meta/whatsapp`
+- Registro insertado de WhatsApp (URI de redirección): `https://tu-dominio/api/auth/whatsapp/callback`
+
+En el flujo alojado por Meta (Login for Business / “Generar enlace”), esa URI de redirección debe apuntar al callback de WhatsApp, no al de Messenger. El owner o admin debe tener sesión en el CRM (o iniciar sesión al volver) para guardar el número.
 
 Variables necesarias:
 
