@@ -1,5 +1,6 @@
 import { cache } from "react";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { getAuthUserWithTimeout } from "@/lib/supabase/auth-user";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type OrganizationRole = "owner" | "admin" | "agent" | "viewer" | "kitchen" | "cashier";
@@ -53,19 +54,22 @@ export const loadMembershipForUser = async (
 };
 
 export const loadCurrentMemberSession = cache(
-  async (): Promise<{ user: User | null; membership: OrganizationMembership | null }> => {
+  async (): Promise<{
+    user: User | null;
+    membership: OrganizationMembership | null;
+    timedOut: boolean;
+  }> => {
     const client = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await client.auth.getUser();
+    const { user, timedOut } = await getAuthUserWithTimeout(client);
 
-    if (!user) {
-      return { user: null, membership: null };
+    if (timedOut || !user) {
+      return { user: null, membership: null, timedOut };
     }
 
     return {
       user,
       membership: await loadMembershipForUser(client, user.id),
+      timedOut: false,
     };
   },
 );

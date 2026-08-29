@@ -1,7 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-
-const AUTH_TIMEOUT_MS = 8000;
+import { getAuthUserWithTimeout } from "@/lib/supabase/auth-user";
 
 const PUBLIC_PATHS = [
   "/login",
@@ -80,27 +79,6 @@ const redirectWithCookies = (
   return copyCookies(sessionResponse, NextResponse.redirect(url));
 };
 
-const getUserWithTimeout = async (
-  supabase: ReturnType<typeof createServerClient>,
-): Promise<{ user: { id: string } | null; timedOut: boolean }> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<"timeout">((resolve) => {
-    timer = setTimeout(() => resolve("timeout"), AUTH_TIMEOUT_MS);
-  });
-
-  try {
-    const result = await Promise.race([supabase.auth.getUser(), timeout]);
-    if (result === "timeout") {
-      return { user: null, timedOut: true };
-    }
-    return { user: result.data.user, timedOut: false };
-  } catch {
-    return { user: null, timedOut: true };
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-};
-
 export const updateSession = async (request: NextRequest) => {
   const sessionResponse = NextResponse.next({ request });
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
@@ -125,6 +103,16 @@ export const updateSession = async (request: NextRequest) => {
     return redirectWithCookies(request, sessionResponse, "/login");
   }
 
+  // Cookie presence is enough to leave `/`; suite layout validates the session.
+  if (pathname === "/") {
+    return redirectWithCookies(request, sessionResponse, "/home");
+  }
+
+  // Protected routes: do not block on getUser. /login still confirms the session.
+  if (pathname !== "/login" || !hasSupabaseAuthCookie(request)) {
+    return sessionResponse;
+  }
+
   let response = sessionResponse;
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
@@ -141,13 +129,13 @@ export const updateSession = async (request: NextRequest) => {
     },
   });
 
-  const { user, timedOut } = await getUserWithTimeout(supabase);
+  const { user, timedOut } = await getAuthUserWithTimeout(supabase);
 
   if (timedOut) {
     return response;
   }
 
-  if (user && (pathname === "/login" || pathname === "/")) {
+  if (user && pathname === "/login") {
     const nextPath = request.nextUrl.searchParams.get("next");
     if (pathname === "/login" && nextPath && isSafeWhatsAppOAuthReturnPath(nextPath)) {
       const resumeUrl = request.nextUrl.clone();
@@ -157,10 +145,6 @@ export const updateSession = async (request: NextRequest) => {
     }
 
     return redirectWithCookies(request, response, "/home");
-  }
-
-  if (!user && !isPublicPath(pathname)) {
-    return redirectWithCookies(request, response, "/login");
   }
 
   return response;

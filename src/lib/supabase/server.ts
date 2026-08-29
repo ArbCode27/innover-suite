@@ -15,7 +15,7 @@ export const createSupabaseServerClient = cache(async () => {
             cookieStore.set(name, value, options);
           });
         } catch {
-          // Called from a Server Component; proxy refreshes the session.
+          // Called from a Server Component; cookies cannot be set here.
         }
       },
     },

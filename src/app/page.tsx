@@ -1,13 +1,12 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+const hasSupabaseAuthCookie = (store: Awaited<ReturnType<typeof cookies>>) =>
+  store.getAll().some((cookie) => cookie.name.includes("-auth-token"));
 
 const Home = async () => {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  redirect(user ? "/home" : "/login");
+  const store = await cookies();
+  redirect(hasSupabaseAuthCookie(store) ? "/home" : "/login");
 };
 
 export default Home;

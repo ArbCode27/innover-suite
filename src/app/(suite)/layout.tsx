@@ -45,9 +45,9 @@ type NavItem = {
 };
 
 const SuiteLayout = async ({ children }: { children: ReactNode }) => {
-  const { user, membership } = await loadCurrentMemberSession();
+  const { user, membership, timedOut } = await loadCurrentMemberSession();
 
-  if (!user) {
+  if (timedOut || !user) {
     redirect("/login");
   }
 
