@@ -12,6 +12,10 @@ export const AGENT_PRIMARY_ATTEMPTS = 1;
 export const AGENT_FALLBACK_ATTEMPTS = 1;
 export const AGENT_RETRY_BASE_MS = 60_000;
 export const AGENT_STALE_RUNNING_MS = 90_000;
+export const AGENT_INBOUND_DEBOUNCE_MS = 3_000;
+export const AGENT_INBOUND_DEBOUNCE_MAX_MS = 12_000;
+export const AGENT_COURTESY_COOLDOWN_MS = 10 * 60 * 1_000;
+export const AGENT_MAX_SUPERSEDE_FOLLOWUPS = 2;
 export const AGENT_COURTESY_MESSAGE =
   "Dame un momento, estoy revisando tu mensaje y te respondo enseguida.";
 export const AGENT_HANDOFF_MESSAGE =

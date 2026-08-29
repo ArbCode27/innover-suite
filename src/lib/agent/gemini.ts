@@ -7,16 +7,19 @@ import {
   RETIRED_AGENT_MODELS,
 } from "@/lib/agent/constants";
 
+type WithThoughtSignature<T> = T & { thoughtSignature?: string };
+
 export type GeminiContent = {
   role: "user" | "model";
   parts: GeminiPart[];
 };
 
-export type GeminiPart =
+export type GeminiPart = WithThoughtSignature<
   | { text: string }
   | { inlineData: { mimeType: string; data: string } }
   | { functionCall: { name: string; args: Record<string, unknown> } }
-  | { functionResponse: { name: string; response: Record<string, unknown> } };
+  | { functionResponse: { name: string; response: Record<string, unknown> } }
+>;
 
 export type GeminiFunctionCall = { name: string; args: Record<string, unknown> };
 
@@ -25,6 +28,7 @@ export type GeminiTurnSuccess = {
   model: string;
   text: string;
   functionCalls: GeminiFunctionCall[];
+  modelParts: GeminiPart[];
 };
 
 export type GeminiTurnFailure = {
@@ -37,14 +41,20 @@ export type GeminiTurnFailure = {
 
 export type GeminiTurnOutcome = GeminiTurnSuccess | GeminiTurnFailure;
 
+type GeminiApiPart = {
+  text?: string;
+  thoughtSignature?: string;
+  thought_signature?: string;
+  inlineData?: { mimeType?: string; data?: string };
+  functionCall?: { name?: string; args?: Record<string, unknown> };
+  functionResponse?: { name?: string; response?: Record<string, unknown> };
+};
+
 type GeminiGenerateResponse = {
   candidates?: Array<{
     content?: {
       role?: string;
-      parts?: Array<{
-        text?: string;
-        functionCall?: { name?: string; args?: Record<string, unknown> };
-      }>;
+      parts?: GeminiApiPart[];
     };
   }>;
   error?: { message?: string; status?: string; code?: number };
@@ -113,6 +123,78 @@ const isRetiredModelError = (message: string) => {
   );
 };
 
+const readThoughtSignature = (part: GeminiApiPart) => {
+  if (typeof part.thoughtSignature === "string" && part.thoughtSignature.trim()) {
+    return part.thoughtSignature;
+  }
+  if (typeof part.thought_signature === "string" && part.thought_signature.trim()) {
+    return part.thought_signature;
+  }
+  return undefined;
+};
+
+const withThoughtSignature = <T extends object>(part: T, signature?: string): WithThoughtSignature<T> =>
+  signature ? { ...part, thoughtSignature: signature } : part;
+
+export const mapGeminiApiParts = (parts: GeminiApiPart[]): GeminiPart[] => {
+  const mapped: GeminiPart[] = [];
+
+  for (const part of parts) {
+    const thoughtSignature = readThoughtSignature(part);
+    if (part.functionCall?.name) {
+      mapped.push(
+        withThoughtSignature(
+          {
+            functionCall: {
+              name: part.functionCall.name,
+              args: part.functionCall.args ?? {},
+            },
+          },
+          thoughtSignature,
+        ),
+      );
+      continue;
+    }
+
+    if (part.functionResponse?.name) {
+      mapped.push(
+        withThoughtSignature(
+          {
+            functionResponse: {
+              name: part.functionResponse.name,
+              response: part.functionResponse.response ?? {},
+            },
+          },
+          thoughtSignature,
+        ),
+      );
+      continue;
+    }
+
+    if (part.inlineData?.mimeType && part.inlineData.data) {
+      mapped.push(
+        withThoughtSignature(
+          {
+            inlineData: {
+              mimeType: part.inlineData.mimeType,
+              data: part.inlineData.data,
+            },
+          },
+          thoughtSignature,
+        ),
+      );
+      continue;
+    }
+
+    const text = part.text?.trim() ?? "";
+    if (text || thoughtSignature) {
+      mapped.push(withThoughtSignature({ text }, thoughtSignature));
+    }
+  }
+
+  return mapped;
+};
+
 const generateGeminiTurnOnce = async (params: {
   model: string;
   systemInstruction: string;
@@ -165,20 +247,19 @@ const generateGeminiTurnOnce = async (params: {
       };
     }
 
-    const parts = json.candidates?.[0]?.content?.parts ?? [];
-    const functionCalls = parts
-      .filter((part) => part.functionCall?.name)
-      .map((part) => ({
-        name: part.functionCall!.name as string,
-        args: part.functionCall?.args ?? {},
-      }));
-    const text = parts
-      .map((part) => part.text?.trim())
-      .filter((value): value is string => Boolean(value))
+    const modelParts = mapGeminiApiParts(json.candidates?.[0]?.content?.parts ?? []);
+    const functionCalls = modelParts.flatMap((part) =>
+      "functionCall" in part && part.functionCall.name
+        ? [{ name: part.functionCall.name, args: part.functionCall.args ?? {} }]
+        : [],
+    );
+    const text = modelParts
+      .filter((part): part is GeminiPart & { text: string } => "text" in part && Boolean(part.text.trim()))
+      .map((part) => part.text.trim())
       .join("\n")
       .trim();
 
-    return { ok: true, model: params.model, text, functionCalls };
+    return { ok: true, model: params.model, text, functionCalls, modelParts };
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo contactar a Gemini.";
     return {
@@ -228,10 +309,7 @@ export const generateGeminiTurn = async (params: {
       }
 
       if (!outcome.retryable) {
-        if (outcome.status === 401 || outcome.status === 403) {
-          return outcome;
-        }
-        break;
+        return outcome;
       }
 
       if (attempt < attempts - 1) {

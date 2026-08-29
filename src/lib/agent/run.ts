@@ -1,9 +1,13 @@
 import {
+  AGENT_COURTESY_COOLDOWN_MS,
   AGENT_COURTESY_MESSAGE,
   AGENT_GUARDRAILS,
   AGENT_HANDOFF_MESSAGE,
   AGENT_HISTORY_LIMIT,
+  AGENT_INBOUND_DEBOUNCE_MAX_MS,
+  AGENT_INBOUND_DEBOUNCE_MS,
   AGENT_MAX_RETRIES,
+  AGENT_MAX_SUPERSEDE_FOLLOWUPS,
   AGENT_MAX_TOOL_TURNS,
   AGENT_RETRY_BASE_MS,
   AGENT_STALE_RUNNING_MS,
@@ -15,6 +19,7 @@ import {
   type GeminiContent,
   type GeminiTurnFailure,
 } from "@/lib/agent/gemini";
+import { buildCoalescedGeminiContents, trailingInboundIds, trailingInboundText } from "@/lib/agent/history";
 import { areAdvisorsAvailable, isAfterHoursAiCoverage } from "@/lib/agent/hours";
 import { formatKnowledgeContext, loadAgentSettings, loadKnowledgeArticles } from "@/lib/agent/settings";
 import { buildAgentToolDeclarations } from "@/lib/agent/tools";
@@ -30,7 +35,6 @@ import {
   sendAiOutboundMessage,
 } from "@/lib/inbox/agent-outbound";
 import { loadOrganizationModulesAdmin } from "@/lib/modules/settings";
-import { buildGeminiMessageParts } from "@/lib/media/agent";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logMetaWebhook } from "@/lib/webhooks/meta/logger";
 import { CALENDAR_TIME_ZONE } from "@/lib/calendar/constants";
@@ -56,6 +60,7 @@ type TurnFinishPatch = {
 
 type ExistingTurnRow = {
   id: number;
+  inbound_message_id?: number | null;
   status?: string | null;
   retry_count?: number | null;
   retryable?: boolean | null;
@@ -64,6 +69,17 @@ type ExistingTurnRow = {
   updated_at?: string | null;
   created_at?: string | null;
 };
+
+type LatestInbound = {
+  id: number;
+  created_at: string;
+};
+
+type RunAgentOptions = {
+  followUpsRemaining?: number;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const toTimestamp = (value?: string | null) => {
   if (!value) return 0;
@@ -75,6 +91,82 @@ const isStaleRunningTurn = (row: ExistingTurnRow) => {
   if (row.status !== "running") return false;
   const startedAt = toTimestamp(row.updated_at) || toTimestamp(row.created_at);
   return startedAt > 0 && Date.now() - startedAt >= AGENT_STALE_RUNNING_MS;
+};
+
+const getLatestInboundMessage = async (
+  organizationId: number,
+  conversationId: number,
+): Promise<LatestInbound | null> => {
+  const admin = getSupabaseAdminClient();
+  const { data } = await admin
+    .from("messages")
+    .select("id, created_at")
+    .eq("organization_id", organizationId)
+    .eq("conversation_id", conversationId)
+    .eq("direction", "inbound")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data?.id || typeof data.created_at !== "string") {
+    return null;
+  }
+
+  return { id: data.id as number, created_at: data.created_at };
+};
+
+const waitForInboundQuiet = async (organizationId: number, conversationId: number) => {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < AGENT_INBOUND_DEBOUNCE_MAX_MS) {
+    const latest = await getLatestInboundMessage(organizationId, conversationId);
+    if (!latest) return;
+    const ageMs = Date.now() - new Date(latest.created_at).getTime();
+    if (!Number.isFinite(ageMs) || ageMs >= AGENT_INBOUND_DEBOUNCE_MS) {
+      return;
+    }
+    const waitMs = Math.min(
+      AGENT_INBOUND_DEBOUNCE_MS - ageMs + 25,
+      AGENT_INBOUND_DEBOUNCE_MAX_MS - (Date.now() - startedAt),
+    );
+    if (waitMs <= 0) return;
+    await sleep(waitMs);
+  }
+};
+
+const findRunningTurn = async (organizationId: number, conversationId: number) => {
+  const admin = getSupabaseAdminClient();
+  const { data } = await admin
+    .from("agent_turns")
+    .select("id, status, retry_count, retryable, next_retry_at, courtesy_sent, updated_at, created_at, inbound_message_id")
+    .eq("organization_id", organizationId)
+    .eq("conversation_id", conversationId)
+    .eq("status", "running")
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  const row = Array.isArray(data) ? data[0] : data;
+  return (row as ExistingTurnRow | undefined) ?? null;
+};
+
+const asMetadata = (value: unknown) =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+const hasRecentCourtesyMessage = async (organizationId: number, conversationId: number) => {
+  const admin = getSupabaseAdminClient();
+  const since = new Date(Date.now() - AGENT_COURTESY_COOLDOWN_MS).toISOString();
+  const { data } = await admin
+    .from("messages")
+    .select("metadata")
+    .eq("organization_id", organizationId)
+    .eq("conversation_id", conversationId)
+    .eq("direction", "outbound")
+    .eq("sender_type", "ai")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  return (data ?? []).some((row) => asMetadata(row.metadata).kind === "courtesy");
 };
 
 const reopenTurn = async (turnId: number, fromStatus: "failed" | "running") => {
@@ -106,6 +198,26 @@ const reopenTurn = async (turnId: number, fromStatus: "failed" | "running") => {
 const claimAgentTurn = async (job: AgentJob): Promise<ClaimedTurn | null> => {
   const admin = getSupabaseAdminClient();
   const now = new Date().toISOString();
+  const running = await findRunningTurn(job.organizationId, job.conversationId);
+
+  if (running?.id && running.inbound_message_id !== job.inboundMessageId) {
+    if (isStaleRunningTurn(running)) {
+      await admin
+        .from("agent_turns")
+        .update({
+          status: "skipped",
+          error: "stale_running_superseded",
+          retryable: false,
+          next_retry_at: null,
+          updated_at: now,
+        })
+        .eq("id", running.id)
+        .eq("status", "running");
+    } else {
+      return null;
+    }
+  }
+
   const baseInsert = {
     organization_id: job.organizationId,
     conversation_id: job.conversationId,
@@ -172,6 +284,10 @@ const claimAgentTurn = async (job: AgentJob): Promise<ClaimedTurn | null> => {
   }
 
   if (!existingRow?.id) {
+    const runningAfterConflict = await findRunningTurn(job.organizationId, job.conversationId);
+    if (runningAfterConflict?.id && runningAfterConflict.inbound_message_id !== job.inboundMessageId) {
+      return null;
+    }
     throw new Error("No se pudo leer el turno existente del agente.");
   }
 
@@ -285,6 +401,28 @@ const handleUnrecoverableTurn = async (params: {
 }) => {
   const nextRetryCount = params.retryCount + 1;
   const reachedLimit = nextRetryCount >= AGENT_MAX_RETRIES || !params.failure.retryable;
+  const latestInbound = await getLatestInboundMessage(params.job.organizationId, params.job.conversationId);
+  const superseded = Boolean(latestInbound && latestInbound.id !== params.job.inboundMessageId);
+
+  if (superseded) {
+    await finishTurn(params.turnId, {
+      status: "skipped",
+      error: "superseded_by_newer_inbound",
+      retryCount: nextRetryCount,
+      lastModel: params.failure.model,
+      retryable: false,
+      nextRetryAt: null,
+      courtesySent: params.courtesySent,
+    });
+    logMetaWebhook("info", "agent.turn_superseded", {
+      organizationId: params.job.organizationId,
+      conversationId: params.job.conversationId,
+      inboundMessageId: params.job.inboundMessageId,
+      latestInboundId: latestInbound?.id,
+      error: params.failure.error,
+    });
+    return true;
+  }
 
   if (reachedLimit) {
     if (params.advisorsAvailable) {
@@ -323,11 +461,15 @@ const handleUnrecoverableTurn = async (params: {
       error: params.failure.error,
       lastModel: params.failure.model,
     });
-    return;
+    return false;
   }
 
   let courtesySent = params.courtesySent;
-  if (!courtesySent) {
+  const courtesyOnCooldown = await hasRecentCourtesyMessage(
+    params.job.organizationId,
+    params.job.conversationId,
+  );
+  if (!courtesySent && !courtesyOnCooldown) {
     const courtesy = await sendAiOutboundMessage({
       organizationId: params.job.organizationId,
       conversationId: params.job.conversationId,
@@ -357,9 +499,12 @@ const handleUnrecoverableTurn = async (params: {
     retryCount: nextRetryCount,
     nextRetryAt,
   });
+  return false;
 };
 
-export const runConversationAgent = async (job: AgentJob) => {
+export const runConversationAgent = async (job: AgentJob, options: RunAgentOptions = {}) => {
+  const followUpsRemaining = options.followUpsRemaining ?? AGENT_MAX_SUPERSEDE_FOLLOWUPS;
+
   if (!isGeminiConfigured()) {
     logMetaWebhook("warn", "agent.skipped_missing_gemini_key", {
       organizationId: job.organizationId,
@@ -383,6 +528,17 @@ export const runConversationAgent = async (job: AgentJob) => {
   let lastModel: string | null = null;
   const modules = await loadOrganizationModulesAdmin(job.organizationId);
   const advisorsAvailable = areAdvisorsAvailable(settings.businessHours);
+
+  const followUpIfNeeded = async () => {
+    if (followUpsRemaining <= 0) return;
+    await waitForInboundQuiet(job.organizationId, job.conversationId);
+    const latest = await getLatestInboundMessage(job.organizationId, job.conversationId);
+    if (!latest || latest.id === job.inboundMessageId) return;
+    await runConversationAgent(
+      { ...job, inboundMessageId: latest.id },
+      { followUpsRemaining: followUpsRemaining - 1 },
+    );
+  };
 
   try {
     const { data: conversation } = await admin
@@ -440,26 +596,9 @@ export const runConversationAgent = async (job: AgentJob) => {
       .limit(AGENT_HISTORY_LIMIT);
 
     const history = [...(messageRows ?? [])].reverse().filter((row) => row.sender_type !== "system");
-    const contents: GeminiContent[] = [];
-
-    for (const row of history) {
-      const includeBinary = row.id === job.inboundMessageId && row.direction === "inbound";
-      const parts = await buildGeminiMessageParts({
-        content: typeof row.content === "string" ? row.content : null,
-        metadata: row.metadata,
-        includeBinary,
-      });
-      if (!parts.length) continue;
-
-      contents.push({
-        role: row.direction === "inbound" ? "user" : "model",
-        parts,
-      });
-    }
-
-    const lastInbound =
-      [...history].reverse().find((row) => row.direction === "inbound");
-    const lastInboundText = typeof lastInbound?.content === "string" ? lastInbound.content : "";
+    const burstIds = trailingInboundIds(history);
+    const contents: GeminiContent[] = await buildCoalescedGeminiContents(history, burstIds);
+    const lastInboundText = trailingInboundText(history);
 
     if (!contents.length) {
       await finishTurn(turnId, { status: "skipped", error: "Sin contenido para responder." });
@@ -561,9 +700,29 @@ export const runConversationAgent = async (job: AgentJob) => {
     };
 
     for (let turn = 0; turn < AGENT_MAX_TOOL_TURNS + 1 && functionCallsPending; turn += 1) {
+      const latestDuringTurn = await getLatestInboundMessage(job.organizationId, job.conversationId);
+      if (latestDuringTurn && latestDuringTurn.id !== job.inboundMessageId) {
+        await finishTurn(turnId, {
+          status: "skipped",
+          error: "superseded_by_newer_inbound",
+          lastModel,
+          retryable: false,
+          retryCount: claimed.retryCount,
+          nextRetryAt: null,
+        });
+        logMetaWebhook("info", "agent.turn_superseded", {
+          organizationId: job.organizationId,
+          conversationId: job.conversationId,
+          inboundMessageId: job.inboundMessageId,
+          latestInboundId: latestDuringTurn.id,
+        });
+        await followUpIfNeeded();
+        return;
+      }
+
       const generation = await generate(toolDeclarations);
       if (!generation.ok) {
-        await handleUnrecoverableTurn({
+        const superseded = await handleUnrecoverableTurn({
           job,
           turnId,
           retryCount: claimed.retryCount,
@@ -572,6 +731,7 @@ export const runConversationAgent = async (job: AgentJob) => {
           closedMessage: settings.closedMessage,
           failure: generation,
         });
+        if (superseded) await followUpIfNeeded();
         return;
       }
 
@@ -583,9 +743,11 @@ export const runConversationAgent = async (job: AgentJob) => {
 
       contents.push({
         role: "model",
-        parts: generation.functionCalls.map((call) => ({
-          functionCall: { name: call.name, args: call.args },
-        })),
+        parts: generation.modelParts.length
+          ? generation.modelParts
+          : generation.functionCalls.map((call) => ({
+              functionCall: { name: call.name, args: call.args },
+            })),
       });
 
       const responseParts = [];
@@ -619,7 +781,7 @@ export const runConversationAgent = async (job: AgentJob) => {
       if (handoff) {
         const closing = await generate([]);
         if (!closing.ok) {
-          await handleUnrecoverableTurn({
+          const superseded = await handleUnrecoverableTurn({
             job,
             turnId,
             retryCount: claimed.retryCount,
@@ -628,6 +790,7 @@ export const runConversationAgent = async (job: AgentJob) => {
             closedMessage: settings.closedMessage,
             failure: closing,
           });
+          if (superseded) await followUpIfNeeded();
           return;
         }
         finalText = closing.text;
@@ -642,6 +805,27 @@ export const runConversationAgent = async (job: AgentJob) => {
         retryable: false,
         retryCount: claimed.retryCount,
       });
+      await followUpIfNeeded();
+      return;
+    }
+
+    const latestInbound = await getLatestInboundMessage(job.organizationId, job.conversationId);
+    if (latestInbound && latestInbound.id !== job.inboundMessageId) {
+      await finishTurn(turnId, {
+        status: "skipped",
+        error: "superseded_by_newer_inbound",
+        lastModel,
+        retryable: false,
+        retryCount: claimed.retryCount,
+        nextRetryAt: null,
+      });
+      logMetaWebhook("info", "agent.turn_superseded", {
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        inboundMessageId: job.inboundMessageId,
+        latestInboundId: latestInbound.id,
+      });
+      await followUpIfNeeded();
       return;
     }
 
@@ -653,7 +837,7 @@ export const runConversationAgent = async (job: AgentJob) => {
     });
 
     if (!sent.ok) {
-      await handleUnrecoverableTurn({
+      const superseded = await handleUnrecoverableTurn({
         job,
         turnId,
         retryCount: claimed.retryCount,
@@ -674,6 +858,7 @@ export const runConversationAgent = async (job: AgentJob) => {
         error: sent.error,
         lastModel,
       });
+      if (superseded) await followUpIfNeeded();
       return;
     }
 
@@ -684,9 +869,10 @@ export const runConversationAgent = async (job: AgentJob) => {
       retryCount: claimed.retryCount,
       nextRetryAt: null,
     });
+    await followUpIfNeeded();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    await handleUnrecoverableTurn({
+    const superseded = await handleUnrecoverableTurn({
       job,
       turnId,
       retryCount: claimed.retryCount,
@@ -708,6 +894,7 @@ export const runConversationAgent = async (job: AgentJob) => {
       error: message,
       lastModel,
     });
+    if (superseded) await followUpIfNeeded();
   }
 };
 
@@ -718,7 +905,13 @@ export const runConversationAgentJobs = async (jobs: AgentJob[]) => {
   }
 
   for (const job of latestByConversation.values()) {
-    await runConversationAgent(job);
+    await waitForInboundQuiet(job.organizationId, job.conversationId);
+    const latestInbound = await getLatestInboundMessage(job.organizationId, job.conversationId);
+    if (!latestInbound) continue;
+    await runConversationAgent({
+      ...job,
+      inboundMessageId: latestInbound.id,
+    });
   }
 };
 
