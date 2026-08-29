@@ -229,6 +229,14 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
       return;
     }
 
+    const stockRaw = form.initialStock.trim();
+    const stock = Number(stockRaw);
+    const needsStock = !editingId && form.kind !== "service";
+    if (needsStock && (stockRaw === "" || !Number.isFinite(stock) || stock < 0)) {
+      toast.error("Indica el stock inicial del producto.");
+      return;
+    }
+
     startTransition(async () => {
       const payload = new FormData();
       payload.set("name", form.name);
@@ -241,7 +249,7 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
       payload.set("currency", form.currency);
       payload.set("imageSendAlways", String(form.imageSendAlways));
       if (form.reorderPoint) payload.set("reorderPoint", form.reorderPoint);
-      if (form.initialStock) payload.set("initialStock", form.initialStock);
+      if (needsStock) payload.set("initialStock", String(stock));
       if (editingId) payload.set("id", String(editingId));
       if (imageFile) payload.set("image", imageFile);
       if (removeExistingImage) payload.set("removeImage", "true");
@@ -967,14 +975,25 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
             </div>
             {editingId ? null : (
               <div className="space-y-1.5">
-                <Label htmlFor="product-stock">Stock inicial</Label>
+                <Label htmlFor="product-stock">
+                  Stock inicial
+                  {form.kind === "service" ? null : (
+                    <span className="text-destructive" aria-hidden>
+                      {" "}
+                      *
+                    </span>
+                  )}
+                </Label>
                 <Input
                   id="product-stock"
                   type="number"
                   min={0}
+                  required={form.kind !== "service"}
+                  aria-required={form.kind !== "service"}
                   value={form.initialStock}
                   onChange={(event) => setForm((current) => ({ ...current, initialStock: event.target.value }))}
                   disabled={form.kind === "service"}
+                  placeholder={form.kind === "service" ? "No aplica a servicios" : "Ej. 10"}
                 />
               </div>
             )}

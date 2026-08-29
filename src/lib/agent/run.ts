@@ -20,6 +20,7 @@ import {
   type GeminiTurnFailure,
 } from "@/lib/agent/gemini";
 import { buildCoalescedGeminiContents, trailingInboundIds, trailingInboundText } from "@/lib/agent/history";
+import { isIncompleteAgentReply, resolveAgentReplyText } from "@/lib/agent/reply-text";
 import { areAdvisorsAvailable, isAfterHoursAiCoverage } from "@/lib/agent/hours";
 import { formatKnowledgeContext, loadAgentSettings, loadKnowledgeArticles } from "@/lib/agent/settings";
 import { buildAgentToolDeclarations } from "@/lib/agent/tools";
@@ -78,6 +79,12 @@ type LatestInbound = {
 type RunAgentOptions = {
   followUpsRemaining?: number;
 };
+
+const IMAGE_FAILED_HINT =
+  "La imagen no se pudo enviar. Responde solo en texto: planes, precios y la siguiente pregunta. Frases completas. No vuelvas a llamar send_image.";
+
+const INCOMPLETE_REPLY_HINT =
+  "Tu mensaje al cliente está incompleto (frase cortada). Reescribe el mensaje entero en español, 3 o 4 frases cerradas, con planes o precios si aplica. No menciones tools ni IDs. No llames send_image.";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -679,8 +686,10 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
 
     const toolDeclarations = buildAgentToolDeclarations(settings, modules);
     let functionCallsPending = true;
+    let draftText = "";
     let finalText = "";
     let handoff = false;
+    let imageFailed = false;
     let pinnedModel: string | null = settings.model;
     let pendingImage: { mediaUrl: string; caption: string | null } | null = null;
     const imagesSentThisTurn = { count: 0 };
@@ -699,6 +708,18 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
         lastModel = outcome.model;
       }
       return outcome;
+    };
+
+    const rememberDraft = (text: string) => {
+      const trimmed = text.trim();
+      if (trimmed) {
+        draftText = trimmed;
+      }
+    };
+
+    const generateTextOnly = async (hint: string) => {
+      contents.push({ role: "user", parts: [{ text: hint }] });
+      return generate([]);
     };
 
     for (let turn = 0; turn < AGENT_MAX_TOOL_TURNS + 1 && functionCallsPending; turn += 1) {
@@ -736,6 +757,8 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
         if (superseded) await followUpIfNeeded();
         return;
       }
+
+      rememberDraft(generation.text);
 
       if (!generation.functionCalls.length) {
         finalText = generation.text;
@@ -780,10 +803,35 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
         }
         if (executed.image && !pendingImage) {
           pendingImage = executed.image;
+          imageFailed = false;
+        } else if (call.name === "send_image" && !executed.ok && !pendingImage) {
+          imageFailed = true;
         }
       }
 
       contents.push({ role: "user", parts: responseParts });
+
+      if (imageFailed && !pendingImage) {
+        const fallback = await generateTextOnly(IMAGE_FAILED_HINT);
+        if (!fallback.ok) {
+          const superseded = await handleUnrecoverableTurn({
+            job,
+            turnId,
+            retryCount: claimed.retryCount,
+            courtesySent: claimed.courtesySent,
+            advisorsAvailable,
+            closedMessage: settings.closedMessage,
+            failure: fallback,
+          });
+          if (superseded) await followUpIfNeeded();
+          return;
+        }
+        rememberDraft(fallback.text);
+        finalText = fallback.text;
+        functionCallsPending = false;
+        break;
+      }
+
       if (handoff) {
         const closing = await generate([]);
         if (!closing.ok) {
@@ -799,9 +847,25 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
           if (superseded) await followUpIfNeeded();
           return;
         }
+        rememberDraft(closing.text);
         finalText = closing.text;
         functionCallsPending = false;
       }
+    }
+
+    finalText = resolveAgentReplyText(draftText, finalText);
+
+    if (isIncompleteAgentReply(finalText) || (!finalText && !pendingImage && draftText)) {
+      const repaired = await generateTextOnly(INCOMPLETE_REPLY_HINT);
+      if (repaired.ok) {
+        rememberDraft(repaired.text);
+        finalText = resolveAgentReplyText(draftText, repaired.text);
+      }
+    }
+
+    if (isIncompleteAgentReply(finalText)) {
+      const caption = pendingImage?.caption?.trim() ?? "";
+      finalText = caption && !isIncompleteAgentReply(caption) ? caption : "";
     }
 
     if (!finalText && !pendingImage) {
@@ -838,7 +902,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
     const sent = await sendAiOutboundMessage({
       organizationId: job.organizationId,
       conversationId: job.conversationId,
-      text: finalText || pendingImage?.caption || "",
+      text: finalText,
       mediaUrl: pendingImage?.mediaUrl,
       metadata: { source: "agent", model: lastModel },
     });

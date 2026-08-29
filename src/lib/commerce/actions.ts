@@ -42,18 +42,32 @@ const requirePaymentMembership = async () => {
   return { membership } as const;
 };
 
-const productSchema = z.object({
-  name: z.string().trim().min(2).max(120),
-  description: z.string().trim().max(500).optional(),
-  sku: z.string().trim().max(60).optional(),
-  category: z.string().trim().max(80).optional(),
-  kind: z.enum(PRODUCT_KINDS),
-  price: z.number().nonnegative().max(10_000_000),
-  trackStock: z.boolean(),
-  initialStock: z.number().nonnegative().max(1_000_000).optional(),
-  reorderPoint: z.number().nonnegative().max(1_000_000).optional(),
-  currency: z.string().trim().length(3).optional(),
-});
+const productSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    description: z.string().trim().max(500).optional(),
+    sku: z.string().trim().max(60).optional(),
+    category: z.string().trim().max(80).optional(),
+    kind: z.enum(PRODUCT_KINDS),
+    price: z.number().nonnegative().max(10_000_000),
+    trackStock: z.boolean(),
+    initialStock: z.number().nonnegative().max(1_000_000).optional(),
+    reorderPoint: z.number().nonnegative().max(1_000_000).optional(),
+    currency: z.string().trim().length(3).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.kind === "service") {
+      return;
+    }
+
+    if (data.initialStock == null || Number.isNaN(data.initialStock)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["initialStock"],
+        message: "Indica el stock inicial del producto.",
+      });
+    }
+  });
 
 const updateProductSchema = productSchema
   .omit({ initialStock: true })
@@ -585,7 +599,7 @@ export const importCatalogCsvAction = async (csvText: string): Promise<ActionRes
       kind: row.kind,
       price: row.price,
       trackStock: row.kind !== "service",
-      initialStock: row.initialStock ?? 0,
+      initialStock: row.initialStock,
     });
     if (!result.error) created += 1;
   }

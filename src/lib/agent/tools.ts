@@ -209,7 +209,7 @@ export const buildAgentToolDeclarations = (
   tools.push({
     name: "send_image",
     description:
-      "Envía una foto al cliente. Para un producto del catálogo usa productId. Para FAQ/menú de la base de conocimiento usa assetId. Máximo una imagen por respuesta. No inventes URLs.",
+      "Envía una foto al cliente. Escribe también el mensaje completo en texto en el mismo turno; la foto no reemplaza la frase. Para un producto del catálogo usa productId. Para FAQ/menú de la base de conocimiento usa assetId. Máximo una imagen por respuesta. No inventes URLs.",
     parameters: {
       type: "OBJECT",
       properties: {
