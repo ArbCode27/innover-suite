@@ -48,54 +48,56 @@ export const EmptyMetaState = ({
       )}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.2),transparent_30rem),radial-gradient(circle_at_left_bottom,rgba(37,99,235,0.16),transparent_24rem)]" />
-      <div className="relative flex min-h-0 flex-1 flex-col justify-center">
-        <CardHeader className="max-w-3xl gap-3 p-6 pb-4 md:p-8 md:pb-5">
-          <Badge className="w-fit" variant="outline">
-            Integración requerida
-          </Badge>
-          <CardTitle className="text-2xl font-semibold md:text-3xl">{title}</CardTitle>
-          <CardDescription className="text-base leading-7">{description}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid items-start gap-4 p-6 pt-0 md:grid-cols-[1fr_0.9fr] md:p-8 md:pt-0">
-          <div className="grid gap-3 sm:grid-cols-3">
-            {featureItems.map((item) => {
-              const Icon = item.icon;
+      <div className="relative flex min-h-0 flex-1 flex-col justify-center overflow-y-auto">
+        <div className="mx-auto w-full max-w-3xl">
+          <CardHeader className="gap-3 p-6 pb-4 md:p-8 md:pb-5">
+            <Badge className="w-fit" variant="outline">
+              Integración requerida
+            </Badge>
+            <CardTitle className="text-2xl font-semibold md:text-3xl">{title}</CardTitle>
+            <CardDescription className="text-base leading-7">{description}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 p-6 pt-0 md:p-8 md:pt-0">
+            <div className="grid gap-3 sm:grid-cols-3">
+              {featureItems.map((item) => {
+                const Icon = item.icon;
 
-              return (
-                <div
-                  key={item.label}
-                  className="rounded-xl border border-primary/20 bg-primary/8 px-3 py-3"
-                >
-                  <Icon className="mb-2 size-4 text-primary" />
-                  <p className="text-sm font-medium leading-5">{item.label}</p>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="rounded-xl border border-dashed border-primary/35 bg-primary/10 p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-primary">
-              <Link2 className="size-4" />
-              Próximos pasos
+                return (
+                  <div
+                    key={item.label}
+                    className="rounded-xl border border-primary/20 bg-primary/8 px-3 py-3"
+                  >
+                    <Icon className="mb-2 size-4 text-primary" />
+                    <p className="text-sm font-medium leading-5">{item.label}</p>
+                  </div>
+                );
+              })}
             </div>
-            <ol className="space-y-2.5 text-sm text-muted-foreground">
-              {steps.map((step, index) => (
-                <li key={step} className="flex gap-3">
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
-                    {index + 1}
-                  </span>
-                  <span>{step}</span>
-                </li>
-              ))}
-            </ol>
-            <Button asChild className="mt-4 w-full">
-              <Link href="/settings">
-                Ir a configuración
-                <ArrowRight />
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
+
+            <div className="rounded-xl border border-dashed border-primary/35 bg-primary/10 p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-primary">
+                <Link2 className="size-4" />
+                Próximos pasos
+              </div>
+              <ol className="space-y-2.5 text-sm text-muted-foreground">
+                {steps.map((step, index) => (
+                  <li key={step} className="flex gap-3">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
+                      {index + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+              <Button asChild className="mt-4 w-full sm:w-auto">
+                <Link href="/settings">
+                  Ir a configuración
+                  <ArrowRight />
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </div>
       </div>
     </Card>
   );

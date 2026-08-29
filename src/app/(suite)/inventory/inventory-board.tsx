@@ -809,12 +809,13 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
           if (!open) handleResetImage();
         }}
       >
-        <SheetContent>
-          <SheetHeader>
+        <SheetContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
+          <SheetHeader className="shrink-0 border-b border-primary/10">
             <SheetTitle>{editingId ? "Editar producto" : "Nuevo producto"}</SheetTitle>
             <SheetDescription>El precio y el stock que pongas aquí son los que usa la IA.</SheetDescription>
           </SheetHeader>
-          <div className="grid gap-3 px-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            <div className="grid gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="product-name">Nombre</Label>
               <Input
@@ -947,9 +948,10 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
                 className="min-h-24 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm"
               />
             </div>
+            </div>
           </div>
-          <SheetFooter>
-            <Button type="button" onClick={handleSaveProduct} disabled={isPending}>
+          <SheetFooter className="shrink-0 border-t border-primary/10 bg-popover">
+            <Button type="button" className="w-full" onClick={handleSaveProduct} disabled={isPending}>
               {isPending ? <Loader2 className="animate-spin" /> : null}
               Guardar
             </Button>
