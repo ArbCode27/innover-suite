@@ -115,13 +115,31 @@ export type KnowledgeArticle = {
   title: string;
   body: string;
   active: boolean;
+  imageUrl: string | null;
+  useWhen: string | null;
 };
+
+const mapKnowledgeArticle = (row: {
+  id: number;
+  title: string;
+  body: string;
+  active: boolean;
+  image_url?: string | null;
+  use_when?: string | null;
+}): KnowledgeArticle => ({
+  id: row.id,
+  title: row.title,
+  body: row.body,
+  active: row.active,
+  imageUrl: typeof row.image_url === "string" && row.image_url.trim() ? row.image_url.trim() : null,
+  useWhen: typeof row.use_when === "string" && row.use_when.trim() ? row.use_when.trim() : null,
+});
 
 export const loadKnowledgeArticles = async (organizationId: number, activeOnly = true) => {
   const admin = getSupabaseAdminClient();
   let request = admin
     .from("knowledge_articles")
-    .select("id, title, body, active")
+    .select("id, title, body, active, image_url, use_when")
     .eq("organization_id", organizationId)
     .order("updated_at", { ascending: false })
     .limit(40);
@@ -131,17 +149,39 @@ export const loadKnowledgeArticles = async (organizationId: number, activeOnly =
   }
 
   const { data, error } = await request;
-  if (error) return [] as KnowledgeArticle[];
-  return (data ?? []) as KnowledgeArticle[];
+  if (error) {
+    const fallback = admin
+      .from("knowledge_articles")
+      .select("id, title, body, active")
+      .eq("organization_id", organizationId)
+      .order("updated_at", { ascending: false })
+      .limit(40);
+    const withoutImages = activeOnly ? fallback.eq("active", true) : fallback;
+    const result = await withoutImages;
+    if (result.error) return [] as KnowledgeArticle[];
+    return (result.data ?? []).map((row) => mapKnowledgeArticle(row));
+  }
+
+  return (data ?? []).map((row) => mapKnowledgeArticle(row));
 };
 
 export const formatKnowledgeContext = (articles: KnowledgeArticle[]) => {
   if (!articles.length) return "";
-  const lines = articles
-    .slice(0, 20)
+  const preview = articles.slice(0, 20);
+  const lines = preview
     .map((article) => `- ${article.title}: ${article.body.trim().slice(0, 500)}`)
     .join("\n");
-  return `Base de conocimiento (úsalas para responder FAQs; no inventes políticas que no estén aquí):\n${lines}`;
+  const imageLines = preview
+    .filter((article) => article.imageUrl)
+    .map((article) => {
+      const hint = article.useWhen ? ` Úsala si: ${article.useWhen}.` : "";
+      return `- [assetId:${article.id}] ${article.title}.${hint}`;
+    })
+    .join("\n");
+  const imageBlock = imageLines
+    ? `\nImágenes que puedes enviar (solo estos assetId; llama send_image; no inventes URLs; máximo 1 por respuesta):\n${imageLines}`
+    : "";
+  return `Base de conocimiento (úsalas para responder FAQs; no inventes políticas que no estén aquí):\n${lines}${imageBlock}`;
 };
 
 export type { BusinessHours };

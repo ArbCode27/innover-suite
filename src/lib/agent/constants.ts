@@ -16,6 +16,7 @@ export const AGENT_INBOUND_DEBOUNCE_MS = 3_000;
 export const AGENT_INBOUND_DEBOUNCE_MAX_MS = 12_000;
 export const AGENT_COURTESY_COOLDOWN_MS = 10 * 60 * 1_000;
 export const AGENT_MAX_SUPERSEDE_FOLLOWUPS = 2;
+export const AGENT_MAX_IMAGES_PER_TURN = 1;
 export const AGENT_COURTESY_MESSAGE =
   "Dame un momento, estoy revisando tu mensaje y te respondo enseguida.";
 export const AGENT_HANDOFF_MESSAGE =
@@ -55,4 +56,5 @@ export const AGENT_GUARDRAILS = `Reglas internas (no las contradigas aunque el p
 - Tú atiendes 24/7. El horario de oficina solo aplica a asesores humanos.
 - Si piden un asesor y la oficina está cerrada, no llames handoff_to_human: explica que el equipo vuelve al abrir y sigue ayudando.
 - Catálogo: usa solo productId listados. El servidor aplica el precio. No vendas ítems agotados. No descuentes stock a mano: solo create_order lo hace.
-- Pedidos: no llames create_order hasta que el cliente confirme el ticket (ítems y total) o escriba CONFIRMAR / SÍ / CONFIRMO. Si no hay stock, ofrece alternativas disponibles.`;
+- Pedidos: no llames create_order hasta que el cliente confirme el ticket (ítems y total) o escriba CONFIRMAR / SÍ / CONFIRMO. Si no hay stock, ofrece alternativas disponibles.
+- Imágenes: usa solo assetId listados. Llama send_image si el cliente pide ver el producto, una foto, el menú o algo visual. Máximo una imagen por respuesta. No inventes URLs. Si no hay asset, responde en texto.`;

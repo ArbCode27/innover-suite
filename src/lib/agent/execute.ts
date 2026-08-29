@@ -5,16 +5,23 @@ import { moveContactToFunnelStage } from "@/lib/funnels/agent";
 import { insertSystemMessage } from "@/lib/inbox/agent-outbound";
 import type { OrganizationModules } from "@/lib/modules/constants";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { AGENT_MAX_IMAGES_PER_TURN } from "@/lib/agent/constants";
+import { areAdvisorsAvailable } from "@/lib/agent/hours";
+import type { AgentSettings } from "@/lib/agent/types";
 import {
   cancelOrderArgsSchema,
   createAppointmentArgsSchema,
   createOrderArgsSchema,
   handoffToHumanArgsSchema,
   moveContactToStageArgsSchema,
+  sendImageArgsSchema,
 } from "@/lib/agent/tools";
-import { areAdvisorsAvailable } from "@/lib/agent/hours";
-import type { AgentSettings } from "@/lib/agent/types";
 import { formatTime } from "@/lib/calendar/range";
+
+type AgentQueuedImage = {
+  mediaUrl: string;
+  caption: string | null;
+};
 
 type ToolContext = {
   organizationId: number;
@@ -25,6 +32,7 @@ type ToolContext = {
   lastInboundText: string;
   settings: AgentSettings;
   modules: OrganizationModules;
+  imagesSentThisTurn: { count: number };
 };
 
 export const isCustomerConfirmationText = (value: string) => {
@@ -56,7 +64,7 @@ export const executeAgentTool = async (
   context: ToolContext,
   name: string,
   rawArgs: Record<string, unknown>,
-): Promise<{ ok: boolean; result: Record<string, unknown>; handoff?: boolean }> => {
+): Promise<{ ok: boolean; result: Record<string, unknown>; handoff?: boolean; image?: AgentQueuedImage }> => {
   if (name === "create_appointment") {
     if (!context.settings.toolsCalendar || !context.modules.calendar) {
       const result = { error: "La herramienta de calendario está desactivada." };
@@ -289,6 +297,49 @@ export const executeAgentTool = async (
     const result = { ok: true, orderId: cancelled.orderId };
     await logToolRun(context, name, parsed.data, result, true);
     return { ok: true, result };
+  }
+
+  if (name === "send_image") {
+    const parsed = sendImageArgsSchema.safeParse({
+      assetId: rawArgs.assetId ?? rawArgs.asset_id,
+      caption: rawArgs.caption,
+    });
+    if (!parsed.success) {
+      const result = { error: parsed.error.issues[0]?.message ?? "Indica un assetId válido de la lista." };
+      await logToolRun(context, name, rawArgs, result, false);
+      return { ok: false, result };
+    }
+
+    if (context.imagesSentThisTurn.count >= AGENT_MAX_IMAGES_PER_TURN) {
+      const result = { error: "Ya se envió una imagen en esta respuesta. No mandes otra." };
+      await logToolRun(context, name, parsed.data, result, false);
+      return { ok: false, result };
+    }
+
+    const admin = getSupabaseAdminClient();
+    const { data: article, error } = await admin
+      .from("knowledge_articles")
+      .select("id, title, image_url, active")
+      .eq("id", parsed.data.assetId)
+      .eq("organization_id", context.organizationId)
+      .maybeSingle();
+
+    const imageUrl = typeof article?.image_url === "string" ? article.image_url.trim() : "";
+    if (error || !article?.id || article.active === false || !imageUrl) {
+      const result = { error: "Ese assetId no existe, está inactivo o no tiene imagen. Responde en texto." };
+      await logToolRun(context, name, parsed.data, result, false);
+      return { ok: false, result };
+    }
+
+    context.imagesSentThisTurn.count += 1;
+    const caption = parsed.data.caption?.trim() || null;
+    const result = { ok: true, queued: true, assetId: article.id, title: article.title };
+    await logToolRun(context, name, parsed.data, result, true);
+    return {
+      ok: true,
+      result,
+      image: { mediaUrl: imageUrl, caption },
+    };
   }
 
   const result = { error: `Herramienta desconocida: ${name}` };

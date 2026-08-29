@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Bot, Loader2, Save } from "lucide-react";
+import { Bot, ImagePlus, Loader2, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import { saveAgentSettingsAction, createKnowledgeArticleAction, toggleKnowledgeArticleAction } from "@/lib/agent/actions";
 import { AGENT_PROMPT_MAX_CHARS } from "@/lib/agent/constants";
@@ -38,9 +38,39 @@ export const AgentSettingsForm = ({
   const [requireBookingConfirmation, setRequireBookingConfirmation] = useState(
     settings.requireBookingConfirmation,
   );
-  const [articleForm, setArticleForm] = useState({ title: "", body: "" });
+  const [articleForm, setArticleForm] = useState({ title: "", body: "", useWhen: "" });
+  const [articleImage, setArticleImage] = useState<File | null>(null);
+  const [articleImagePreview, setArticleImagePreview] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const handleArticleImageChange = (file: File | null) => {
+    if (articleImagePreview) {
+      URL.revokeObjectURL(articleImagePreview);
+    }
+    setArticleImage(file);
+    setArticleImagePreview(file ? URL.createObjectURL(file) : null);
+  };
+
+  const handlePublishArticle = () => {
+    startTransition(async () => {
+      const payload = new FormData();
+      payload.set("title", articleForm.title);
+      payload.set("body", articleForm.body);
+      payload.set("useWhen", articleForm.useWhen);
+      if (articleImage) {
+        payload.set("image", articleImage);
+      }
+      const result = await createKnowledgeArticleAction(payload);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result.success);
+      setArticleForm({ title: "", body: "", useWhen: "" });
+      handleArticleImageChange(null);
+    });
+  };
 
   const handleSubmit = () => {
     setFormError(null);
@@ -168,6 +198,9 @@ export const AgentSettingsForm = ({
 
         <div className="space-y-2">
           <Label>Base de conocimiento</Label>
+          <p className="text-xs text-muted-foreground">
+            FAQs y fotos que el agente puede enviar. Adjunta una imagen si el cliente suele pedir “cómo se ve”.
+          </p>
           {canManageOrganization ? (
             <div className="space-y-2">
               <Input
@@ -182,21 +215,50 @@ export const AgentSettingsForm = ({
                 rows={3}
                 className="min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
               />
+              <Input
+                placeholder="¿Cuándo enviar la foto? Ej. si preguntan cómo se ve el kit"
+                value={articleForm.useWhen}
+                onChange={(event) => setArticleForm((current) => ({ ...current, useWhen: event.target.value }))}
+                aria-label="Cuándo usar la imagen"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-input px-3 py-2 text-sm">
+                  <ImagePlus className="size-4" aria-hidden />
+                  {articleImage ? "Cambiar imagen" : "Adjuntar imagen"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={(event) => handleArticleImageChange(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {articleImagePreview ? (
+                  <span className="relative inline-flex">
+                    <img
+                      src={articleImagePreview}
+                      alt="Vista previa de la imagen del artículo"
+                      className="size-14 rounded-lg object-cover"
+                    />
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="secondary"
+                      className="absolute -top-2 -right-2 size-6 rounded-full"
+                      aria-label="Quitar imagen"
+                      onClick={() => handleArticleImageChange(null)}
+                    >
+                      <X className="size-3" />
+                    </Button>
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">JPG, PNG o WebP. Máx. 5 MB.</span>
+                )}
+              </div>
               <Button
                 type="button"
                 variant="outline"
                 disabled={isPending}
-                onClick={() => {
-                  startTransition(async () => {
-                    const result = await createKnowledgeArticleAction(articleForm);
-                    if (result.error) {
-                      toast.error(result.error);
-                      return;
-                    }
-                    toast.success(result.success);
-                    setArticleForm({ title: "", body: "" });
-                  });
-                }}
+                onClick={handlePublishArticle}
               >
                 Publicar artículo
               </Button>
@@ -205,9 +267,21 @@ export const AgentSettingsForm = ({
           <ul className="space-y-2 text-sm">
             {articles.map((article) => (
               <li key={article.id} className="flex items-start justify-between gap-2 rounded-lg border border-primary/10 p-2">
-                <span>
-                  <span className="font-medium">{article.title}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">{article.body.slice(0, 140)}</span>
+                <span className="flex min-w-0 items-start gap-2">
+                  {article.imageUrl ? (
+                    <img
+                      src={article.imageUrl}
+                      alt=""
+                      className="mt-0.5 size-10 shrink-0 rounded-md object-cover"
+                    />
+                  ) : null}
+                  <span className="min-w-0">
+                    <span className="font-medium">{article.title}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">{article.body.slice(0, 140)}</span>
+                    {article.useWhen ? (
+                      <span className="mt-1 block text-xs text-muted-foreground">Foto si: {article.useWhen}</span>
+                    ) : null}
+                  </span>
                 </span>
                 {canManageOrganization ? (
                   <Button

@@ -31,4 +31,5 @@ export type AgentToolName =
   | "move_contact_to_stage"
   | "handoff_to_human"
   | "create_order"
-  | "cancel_order";
+  | "cancel_order"
+  | "send_image";

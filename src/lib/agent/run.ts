@@ -682,6 +682,8 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
     let finalText = "";
     let handoff = false;
     let pinnedModel: string | null = settings.model;
+    let pendingImage: { mediaUrl: string; caption: string | null } | null = null;
+    const imagesSentThisTurn = { count: 0 };
 
     const generate = async (tools: typeof toolDeclarations) => {
       const outcome = await generateGeminiTurn({
@@ -762,6 +764,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
             lastInboundText,
             settings,
             modules,
+            imagesSentThisTurn,
           },
           call.name,
           call.args,
@@ -774,6 +777,9 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
         });
         if (executed.handoff) {
           handoff = true;
+        }
+        if (executed.image && !pendingImage) {
+          pendingImage = executed.image;
         }
       }
 
@@ -798,7 +804,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
       }
     }
 
-    if (!finalText) {
+    if (!finalText && !pendingImage) {
       await finishTurn(turnId, {
         status: "completed",
         lastModel,
@@ -832,7 +838,8 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
     const sent = await sendAiOutboundMessage({
       organizationId: job.organizationId,
       conversationId: job.conversationId,
-      text: finalText,
+      text: finalText || pendingImage?.caption || "",
+      mediaUrl: pendingImage?.mediaUrl,
       metadata: { source: "agent", model: lastModel },
     });
 

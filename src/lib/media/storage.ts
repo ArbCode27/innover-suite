@@ -1,6 +1,14 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { MESSAGE_ATTACHMENTS_BUCKET } from "@/lib/media/types";
 
+export const buildKnowledgeImagePath = (params: {
+  organizationId: number;
+  fileName: string;
+}) => {
+  const safeName = params.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return `org/${params.organizationId}/knowledge/${crypto.randomUUID()}-${safeName}`;
+};
+
 export const buildMessageStoragePath = (params: {
   organizationId: number;
   conversationId: number;

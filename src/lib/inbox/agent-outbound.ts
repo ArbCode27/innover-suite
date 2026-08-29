@@ -1,5 +1,7 @@
 import { resolveInstagramCredentials } from "@/lib/integrations/instagram-credentials";
 import { sendMetaOutboundMessage } from "@/lib/integrations/meta-send";
+import { createMessageAttachment } from "@/lib/media/types";
+import { mergeAttachmentMetadata } from "@/lib/media/parse";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { MetaChannel } from "@/types/domain";
 
@@ -135,12 +137,14 @@ export const escalateConversationToHuman = async (params: {
 export const sendAiOutboundMessage = async (params: {
   organizationId: number;
   conversationId: number;
-  text: string;
+  text?: string;
+  mediaUrl?: string;
   metadata?: Record<string, unknown>;
 }) => {
-  const text = params.text.trim();
-  if (!text) {
-    return { ok: false as const, error: "El agente no generó texto para enviar." };
+  const text = params.text?.trim() ?? "";
+  const mediaUrl = params.mediaUrl?.trim() ?? "";
+  if (!text && !mediaUrl) {
+    return { ok: false as const, error: "El agente no generó texto ni imagen para enviar." };
   }
 
   const admin = getSupabaseAdminClient();
@@ -171,6 +175,24 @@ export const sendAiOutboundMessage = async (params: {
   }
 
   const now = new Date().toISOString();
+  let pendingMetadata: Record<string, unknown> = {
+    delivery_status: "pending",
+    recipient_id: recipientId,
+    channel: typedConversation.channel,
+    ...params.metadata,
+  };
+  if (mediaUrl) {
+    pendingMetadata = mergeAttachmentMetadata(
+      pendingMetadata,
+      createMessageAttachment({
+        kind: "image",
+        status: "ready",
+        sourceUrl: mediaUrl,
+        caption: text || null,
+      }),
+    );
+  }
+
   const { data: inserted, error: insertError } = await admin
     .from("messages")
     .insert({
@@ -178,13 +200,9 @@ export const sendAiOutboundMessage = async (params: {
       conversation_id: params.conversationId,
       direction: "outbound",
       sender_type: "ai",
-      content: text,
-      metadata: {
-        delivery_status: "pending",
-        recipient_id: recipientId,
-        channel: typedConversation.channel,
-        ...params.metadata,
-      },
+      content: text || null,
+      media_url: mediaUrl || null,
+      metadata: pendingMetadata,
       created_at: now,
     })
     .select("id")
@@ -199,7 +217,9 @@ export const sendAiOutboundMessage = async (params: {
     accessToken: channelCredentials.accessToken,
     accountId: channelCredentials.accountId,
     recipientId,
-    text,
+    text: text || undefined,
+    mediaUrl: mediaUrl || undefined,
+    attachmentKind: mediaUrl ? "image" : undefined,
   });
 
   await admin
@@ -207,10 +227,8 @@ export const sendAiOutboundMessage = async (params: {
     .update({
       external_message_id: outboundResult.ok ? outboundResult.externalMessageId : null,
       metadata: {
+        ...pendingMetadata,
         delivery_status: outboundResult.ok ? "sent" : "failed",
-        recipient_id: recipientId,
-        channel: typedConversation.channel,
-        ...params.metadata,
         ...(outboundResult.ok ? {} : { delivery_error: outboundResult.errorMessage }),
       },
     })

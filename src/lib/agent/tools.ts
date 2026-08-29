@@ -58,6 +58,11 @@ export const cancelOrderArgsSchema = z.object({
   reason: z.string().trim().min(4).max(240),
 });
 
+export const sendImageArgsSchema = z.object({
+  assetId: z.coerce.number().int().positive(),
+  caption: z.string().trim().max(400).optional(),
+});
+
 export type GeminiFunctionDeclaration = {
   name: string;
   description: string;
@@ -182,6 +187,20 @@ export const buildAgentToolDeclarations = (
       },
     });
   }
+
+  tools.push({
+    name: "send_image",
+    description:
+      "Envía una imagen de la base de conocimiento al cliente. Usa solo un assetId listado en el contexto. Máximo una imagen por respuesta. Úsala si piden ver el producto, una foto, el menú o algo visual.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        assetId: { type: "INTEGER", description: "ID del asset de la lista de imágenes del contexto." },
+        caption: { type: "STRING", description: "Pie de foto corto opcional." },
+      },
+      required: ["assetId"],
+    },
+  });
 
   return tools;
 };
