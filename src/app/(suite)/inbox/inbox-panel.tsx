@@ -1325,8 +1325,9 @@ export const InboxPanel = ({
           </CardContent>
         </Card>
       ) : (
-        <div className="max-lg:hidden">
+        <div className="hidden h-full min-h-0 lg:block">
           <EmptyMetaState
+            className="h-full"
             title="Selecciona una conversación para comenzar"
             description="Cuando selecciones un chat podrás ver el historial y responder como agente humano."
           />

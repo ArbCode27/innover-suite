@@ -10,11 +10,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type EmptyMetaStateProps = {
   title?: string;
   description?: string;
   steps?: string[];
+  className?: string;
 };
 
 const defaultSteps = [
@@ -36,19 +38,25 @@ export const EmptyMetaState = ({
   title = "Vincula Meta para empezar a operar",
   description = "Aún no hay datos en este módulo. Cuando conectes Meta y WhatsApp, el CRM empezará a recibir conversaciones, contactos y oportunidades automáticamente.",
   steps = defaultSteps,
+  className,
 }: EmptyMetaStateProps) => {
   return (
-    <Card className="relative overflow-hidden border-primary/25 bg-card/75">
+    <Card
+      className={cn(
+        "relative flex min-h-0 flex-col overflow-hidden border-primary/25 bg-card/75",
+        className,
+      )}
+    >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.2),transparent_30rem),radial-gradient(circle_at_left_bottom,rgba(37,99,235,0.16),transparent_24rem)]" />
-      <CardHeader className="relative max-w-3xl gap-3 p-6 md:p-8">
+      <CardHeader className="relative max-w-3xl shrink-0 gap-3 p-6 md:p-8">
         <Badge className="w-fit" variant="outline">
           Integración requerida
         </Badge>
         <CardTitle className="text-2xl font-semibold md:text-3xl">{title}</CardTitle>
         <CardDescription className="text-base leading-7">{description}</CardDescription>
       </CardHeader>
-      <CardContent className="relative grid gap-6 p-6 pt-0 md:grid-cols-[1fr_0.85fr] md:p-8 md:pt-0">
-        <div className="grid gap-3 sm:grid-cols-3">
+      <CardContent className="relative grid min-h-0 flex-1 gap-6 p-6 pt-0 md:grid-cols-[1fr_0.85fr] md:items-stretch md:p-8 md:pt-0">
+        <div className="grid gap-3 sm:grid-cols-3 md:auto-rows-fr">
           {featureItems.map((item) => {
             const Icon = item.icon;
 
@@ -64,7 +72,7 @@ export const EmptyMetaState = ({
           })}
         </div>
 
-        <div className="rounded-xl border border-dashed border-primary/35 bg-primary/10 p-4">
+        <div className="flex flex-col rounded-xl border border-dashed border-primary/35 bg-primary/10 p-4">
           <div className="mb-4 flex items-center gap-2 text-sm font-medium text-primary">
             <Link2 className="size-4" />
             Próximos pasos
@@ -79,7 +87,7 @@ export const EmptyMetaState = ({
               </li>
             ))}
           </ol>
-          <Button asChild className="mt-5 w-full">
+          <Button asChild className="mt-5 w-full md:mt-auto">
             <Link href="/settings">
               Ir a configuración
               <ArrowRight />
