@@ -8,10 +8,14 @@ import { parseCatalogCsv } from "@/lib/commerce/catalog";
 import { isOrderStatus, isPaymentStatus, PAYMENT_STATUSES, PRODUCT_KINDS } from "@/lib/commerce/types";
 import { recordAuditEvent } from "@/lib/organizations/audit";
 import { loadOrganizationCurrencies, resolveOrganizationCurrency } from "@/lib/organizations/currencies";
+import { readCatalogImageFile } from "@/lib/media/image-upload";
+import { buildProductImagePath, removeProductImage, uploadPublicMedia } from "@/lib/media/storage";
+import { PRODUCT_IMAGES_BUCKET } from "@/lib/media/types";
 
 type ActionResult = {
   success?: string;
   error?: string;
+  id?: number;
 };
 
 const requireCatalogMembership = async () => {
@@ -115,7 +119,7 @@ export const createProductAction = async (rawValues: unknown): Promise<ActionRes
   const orgCurrencies = await loadOrganizationCurrencies(supabase, access.membership.organizationId);
   const currency = resolveOrganizationCurrency(parsed.data.currency, orgCurrencies);
 
-  const { error } = await supabase.from("products").insert({
+  const { data: inserted, error } = await supabase.from("products").insert({
     organization_id: access.membership.organizationId,
     inventory_item_id: inventoryItemId,
     name: parsed.data.name,
@@ -127,17 +131,17 @@ export const createProductAction = async (rawValues: unknown): Promise<ActionRes
     currency,
     active: true,
     track_stock: trackStock,
-  });
+  }).select("id").single();
 
-  if (error) {
+  if (error || !inserted?.id) {
     if (inventoryItemId) {
       await supabase.from("inventory_items").delete().eq("id", inventoryItemId);
     }
-    return { error: error.message || "No se pudo crear el producto." };
+    return { error: error?.message || "No se pudo crear el producto." };
   }
 
   revalidatePath("/inventory");
-  return { success: "Producto agregado al catálogo." };
+  return { success: "Producto agregado al catálogo.", id: inserted.id as number };
 };
 
 export const updateProductAction = async (rawValues: unknown): Promise<ActionResult> => {
@@ -201,6 +205,130 @@ export const updateProductAction = async (rawValues: unknown): Promise<ActionRes
 
   revalidatePath("/inventory");
   return { success: "Producto actualizado." };
+};
+
+const productImageSqlHint = (message: string) => {
+  if (/bucket|not found|does not exist/i.test(message)) {
+    return "No se encontró el bucket product-images. ¿Corriste supabase/storage-image-buckets.sql?";
+  }
+  if (/image_url|image_path|image_mime|image_send_policy/i.test(message)) {
+    return "No se pudo guardar la imagen. ¿Corriste supabase/product-images.sql?";
+  }
+  return message;
+};
+
+export const saveProductAction = async (formData: FormData): Promise<ActionResult> => {
+  const editingIdRaw = formData.get("id");
+  const editingId = typeof editingIdRaw === "string" && editingIdRaw.trim() ? Number(editingIdRaw) : undefined;
+  const fields = {
+    name: formData.get("name"),
+    description: formData.get("description") || undefined,
+    sku: formData.get("sku") || undefined,
+    category: formData.get("category") || undefined,
+    kind: formData.get("kind"),
+    price: Number(formData.get("price")),
+    trackStock: formData.get("trackStock") === "true",
+    initialStock: formData.get("initialStock") ? Number(formData.get("initialStock")) : undefined,
+    reorderPoint: formData.get("reorderPoint") ? Number(formData.get("reorderPoint")) : undefined,
+    currency: formData.get("currency") || undefined,
+  };
+
+  const uploaded = await readCatalogImageFile(formData.get("image"));
+  if ("error" in uploaded) {
+    return { error: uploaded.error };
+  }
+
+  const imageSendPolicy = formData.get("imageSendAlways") === "true" ? "always" : "on_request";
+  const removeImage = formData.get("removeImage") === "true";
+
+  let productId = editingId;
+  if (editingId) {
+    const parsed = updateProductSchema.safeParse({ ...fields, id: editingId, active: true });
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0]?.message ?? "Revisa los datos del producto." };
+    }
+    const updated = await updateProductAction(parsed.data);
+    if (updated.error) return updated;
+  } else {
+    const parsed = productSchema.safeParse(fields);
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0]?.message ?? "Revisa los datos del producto." };
+    }
+    const created = await createProductAction(parsed.data);
+    if (created.error) return created;
+    productId = created.id;
+  }
+
+  if (!productId) {
+    return { error: "No se pudo guardar el producto." };
+  }
+
+  const access = await requireCatalogMembership();
+  if ("error" in access) return { error: access.error };
+
+  const supabase = await createSupabaseServerClient();
+  const { data: target, error: targetError } = await supabase
+    .from("products")
+    .select("id, image_path")
+    .eq("id", productId)
+    .eq("organization_id", access.membership.organizationId)
+    .maybeSingle();
+
+  if (targetError || !target?.id) {
+    if (targetError && /image_path|image_send_policy/i.test(targetError.message)) {
+      return { error: "El producto se guardó, pero falta supabase/product-images.sql para la foto." };
+    }
+    return editingId ? { success: "Producto actualizado." } : { success: "Producto agregado al catálogo." };
+  }
+
+  const patch: Record<string, unknown> = { image_send_policy: imageSendPolicy };
+  const previousPath = typeof target.image_path === "string" ? target.image_path : null;
+
+  if (uploaded.file) {
+    const imagePath = buildProductImagePath({
+      organizationId: access.membership.organizationId,
+      fileName: uploaded.file.fileName,
+    });
+    try {
+      const imageUrl = await uploadPublicMedia({
+        bucket: PRODUCT_IMAGES_BUCKET,
+        path: imagePath,
+        bytes: uploaded.file.bytes,
+        mimeType: uploaded.file.mimeType,
+      });
+      patch.image_url = imageUrl;
+      patch.image_path = imagePath;
+      patch.image_mime = uploaded.file.mimeType;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo subir la imagen.";
+      return { error: productImageSqlHint(message) };
+    }
+  } else if (removeImage) {
+    patch.image_url = null;
+    patch.image_path = null;
+    patch.image_mime = null;
+    patch.image_send_policy = "on_request";
+  }
+
+  const { error: imageError } = await supabase
+    .from("products")
+    .update(patch)
+    .eq("id", target.id)
+    .eq("organization_id", access.membership.organizationId);
+
+  if (imageError) {
+    return { error: productImageSqlHint(imageError.message || "No se pudo guardar la imagen.") };
+  }
+
+  if ((uploaded.file || removeImage) && previousPath && previousPath !== patch.image_path) {
+    await removeProductImage(previousPath).catch(() => undefined);
+  }
+
+  revalidatePath("/inventory");
+  if (uploaded.file) {
+    return { success: editingId ? "Producto e imagen actualizados." : "Producto agregado con imagen." };
+  }
+  return { success: editingId ? "Producto actualizado." : "Producto agregado al catálogo." };
 };
 
 export const receiveStockAction = async (rawValues: unknown): Promise<ActionResult> => {
@@ -490,4 +618,38 @@ export const toggleDeliveryZoneAction = async (zoneId: number, active: boolean):
 
   revalidatePath("/inventory");
   return { success: active ? "Zona activada." : "Zona desactivada." };
+};
+
+export const deleteDeliveryZoneAction = async (zoneId: number): Promise<ActionResult> => {
+  const access = await requireCatalogMembership();
+  if ("error" in access) return { error: access.error };
+
+  const supabase = await createSupabaseServerClient();
+  const { data: zone, error: loadError } = await supabase
+    .from("delivery_zones")
+    .select("id, active")
+    .eq("id", zoneId)
+    .eq("organization_id", access.membership.organizationId)
+    .maybeSingle();
+
+  if (loadError || !zone?.id) {
+    return { error: "La zona no existe." };
+  }
+
+  if (zone.active === true) {
+    return { error: "Desactiva la zona antes de borrarla." };
+  }
+
+  const { error } = await supabase
+    .from("delivery_zones")
+    .delete()
+    .eq("id", zoneId)
+    .eq("organization_id", access.membership.organizationId);
+
+  if (error) {
+    return { error: error.message || "No se pudo borrar la zona." };
+  }
+
+  revalidatePath("/inventory");
+  return { success: "Zona de delivery borrada." };
 };

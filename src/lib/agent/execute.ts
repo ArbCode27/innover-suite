@@ -301,11 +301,12 @@ export const executeAgentTool = async (
 
   if (name === "send_image") {
     const parsed = sendImageArgsSchema.safeParse({
+      productId: rawArgs.productId ?? rawArgs.product_id,
       assetId: rawArgs.assetId ?? rawArgs.asset_id,
       caption: rawArgs.caption,
     });
     if (!parsed.success) {
-      const result = { error: parsed.error.issues[0]?.message ?? "Indica un assetId válido de la lista." };
+      const result = { error: parsed.error.issues[0]?.message ?? "Indica un productId o assetId válido." };
       await logToolRun(context, name, rawArgs, result, false);
       return { ok: false, result };
     }
@@ -317,23 +318,60 @@ export const executeAgentTool = async (
     }
 
     const admin = getSupabaseAdminClient();
-    const { data: article, error } = await admin
-      .from("knowledge_articles")
-      .select("id, title, image_url, active")
-      .eq("id", parsed.data.assetId)
-      .eq("organization_id", context.organizationId)
-      .maybeSingle();
+    let imageUrl = "";
+    let title = "";
 
-    const imageUrl = typeof article?.image_url === "string" ? article.image_url.trim() : "";
-    if (error || !article?.id || article.active === false || !imageUrl) {
-      const result = { error: "Ese assetId no existe, está inactivo o no tiene imagen. Responde en texto." };
-      await logToolRun(context, name, parsed.data, result, false);
-      return { ok: false, result };
+    if (parsed.data.productId) {
+      const { data: product, error } = await admin
+        .from("products")
+        .select("id, name, image_url, parent_id, active")
+        .eq("id", parsed.data.productId)
+        .eq("organization_id", context.organizationId)
+        .maybeSingle();
+
+      imageUrl = typeof product?.image_url === "string" ? product.image_url.trim() : "";
+      if (!imageUrl && product?.parent_id) {
+        const { data: parent } = await admin
+          .from("products")
+          .select("image_url")
+          .eq("id", product.parent_id)
+          .eq("organization_id", context.organizationId)
+          .maybeSingle();
+        imageUrl = typeof parent?.image_url === "string" ? parent.image_url.trim() : "";
+      }
+
+      if (error || !product?.id || product.active === false || !imageUrl) {
+        const result = { error: "Ese producto no existe, está inactivo o no tiene imagen. Responde en texto." };
+        await logToolRun(context, name, parsed.data, result, false);
+        return { ok: false, result };
+      }
+      title = typeof product.name === "string" ? product.name : "Producto";
+    } else {
+      const { data: article, error } = await admin
+        .from("knowledge_articles")
+        .select("id, title, image_url, active")
+        .eq("id", parsed.data.assetId)
+        .eq("organization_id", context.organizationId)
+        .maybeSingle();
+
+      imageUrl = typeof article?.image_url === "string" ? article.image_url.trim() : "";
+      if (error || !article?.id || article.active === false || !imageUrl) {
+        const result = { error: "Ese assetId no existe, está inactivo o no tiene imagen. Responde en texto." };
+        await logToolRun(context, name, parsed.data, result, false);
+        return { ok: false, result };
+      }
+      title = typeof article.title === "string" ? article.title : "Artículo";
     }
 
     context.imagesSentThisTurn.count += 1;
     const caption = parsed.data.caption?.trim() || null;
-    const result = { ok: true, queued: true, assetId: article.id, title: article.title };
+    const result = {
+      ok: true,
+      queued: true,
+      productId: parsed.data.productId ?? null,
+      assetId: parsed.data.assetId ?? null,
+      title,
+    };
     await logToolRun(context, name, parsed.data, result, true);
     return {
       ok: true,

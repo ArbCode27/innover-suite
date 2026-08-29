@@ -7,8 +7,9 @@ import { DEFAULT_CLOSED_MESSAGE, parseBusinessHours } from "@/lib/agent/hours";
 import { loadAgentSettings, upsertAgentSettings } from "@/lib/agent/settings";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { KNOWLEDGE_IMAGE_MIME_TYPES, MAX_KNOWLEDGE_IMAGE_BYTES } from "@/lib/media/types";
-import { buildKnowledgeImagePath, uploadMessageMedia } from "@/lib/media/storage";
+import { readCatalogImageFile } from "@/lib/media/image-upload";
+import { buildKnowledgeImagePath, uploadPublicMedia } from "@/lib/media/storage";
+import { KNOWLEDGE_IMAGES_BUCKET } from "@/lib/media/types";
 
 const weekdaySchema = z
   .object({
@@ -143,9 +144,6 @@ const knowledgeSchema = z.object({
   useWhen: z.string().trim().max(240).optional(),
 });
 
-const isKnowledgeImageFile = (value: FormDataEntryValue | null): value is File =>
-  Boolean(value) && typeof value === "object" && "arrayBuffer" in value && "size" in value && "type" in value;
-
 export const createKnowledgeArticleAction = async (formData: FormData): Promise<ActionResult> => {
   const parsed = knowledgeSchema.safeParse({
     title: formData.get("title"),
@@ -161,34 +159,35 @@ export const createKnowledgeArticleAction = async (formData: FormData): Promise<
     return { error: "Solo owner o admin pueden editar la base de conocimiento." };
   }
 
-  const imageFile = formData.get("image");
+  const uploaded = await readCatalogImageFile(formData.get("image"));
+  if ("error" in uploaded) {
+    return { error: uploaded.error };
+  }
+
   let imageUrl: string | null = null;
   let imagePath: string | null = null;
   let imageMime: string | null = null;
 
-  if (isKnowledgeImageFile(imageFile) && imageFile.size > 0) {
-    if (imageFile.size > MAX_KNOWLEDGE_IMAGE_BYTES) {
-      return { error: "La imagen no puede superar 5 MB." };
-    }
-    const mimeType = imageFile.type === "image/jpg" ? "image/jpeg" : imageFile.type;
-    if (!KNOWLEDGE_IMAGE_MIME_TYPES.includes(mimeType as (typeof KNOWLEDGE_IMAGE_MIME_TYPES)[number])) {
-      return { error: "Usa JPG, PNG o WebP." };
-    }
-
-    const bytes = new Uint8Array(await imageFile.arrayBuffer());
+  if (uploaded.file) {
     imagePath = buildKnowledgeImagePath({
       organizationId: membership.organizationId,
-      fileName: imageFile.name || "imagen.jpg",
+      fileName: uploaded.file.fileName,
     });
-    imageMime = mimeType;
+    imageMime = uploaded.file.mimeType;
     try {
-      imageUrl = await uploadMessageMedia({
+      imageUrl = await uploadPublicMedia({
+        bucket: KNOWLEDGE_IMAGES_BUCKET,
         path: imagePath,
-        bytes,
+        bytes: uploaded.file.bytes,
         mimeType: imageMime,
       });
     } catch (error) {
-      return { error: error instanceof Error ? error.message : "No se pudo subir la imagen." };
+      const message = error instanceof Error ? error.message : "No se pudo subir la imagen.";
+      return {
+        error: /bucket|not found|does not exist/i.test(message)
+          ? "No se encontró el bucket knowledge-images. ¿Corriste supabase/storage-image-buckets.sql?"
+          : message,
+      };
     }
   }
 

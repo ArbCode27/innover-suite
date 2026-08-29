@@ -1,5 +1,13 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { DEFAULT_TAX_RATE, formatMoney, toNumber, type FulfillmentType, type ProductKind } from "@/lib/commerce/types";
+import {
+  DEFAULT_TAX_RATE,
+  formatMoney,
+  isImageSendPolicy,
+  toNumber,
+  type FulfillmentType,
+  type ImageSendPolicy,
+  type ProductKind,
+} from "@/lib/commerce/types";
 import { DEFAULT_CURRENCY } from "@/lib/organizations/currencies";
 
 const CATALOG_LIMIT = 80;
@@ -14,6 +22,8 @@ type AgentCatalogItem = {
   available: number | null;
   soldOut: boolean;
   parentId: number | null;
+  hasImage: boolean;
+  imageSendPolicy: ImageSendPolicy;
 };
 
 type CreateOrderItemInput = {
@@ -38,24 +48,54 @@ type RpcResult = {
 const asRpcResult = (value: unknown): RpcResult =>
   value && typeof value === "object" ? (value as RpcResult) : { ok: false, error: "Respuesta inválida del inventario." };
 
+type SnapshotProductRow = {
+  id: number;
+  name: string;
+  kind: string;
+  price: unknown;
+  currency: string;
+  category: string | null;
+  track_stock: boolean;
+  parent_id: number | null;
+  image_url?: string | null;
+  image_send_policy?: string | null;
+  inventory_items:
+    | { on_hand?: unknown; track_stock?: boolean }
+    | { on_hand?: unknown; track_stock?: boolean }[]
+    | null;
+};
+
 export const loadAgentCommerceSnapshot = async (organizationId: number) => {
   const admin = getSupabaseAdminClient();
   const now = new Date().toISOString();
 
-  const { data: productRows } = await admin
+  const withImages = await admin
     .from("products")
-    .select("id, name, kind, price, currency, category, active, track_stock, parent_id, inventory_items!inventory_item_id(on_hand, track_stock)")
+    .select("id, name, kind, price, currency, category, active, track_stock, parent_id, image_url, image_send_policy, inventory_items!inventory_item_id(on_hand, track_stock)")
     .eq("organization_id", organizationId)
     .eq("active", true)
     .order("name", { ascending: true })
     .limit(CATALOG_LIMIT);
 
-  const products: AgentCatalogItem[] = (productRows ?? []).map((row) => {
+  let productRows: SnapshotProductRow[] | null = withImages.error ? null : ((withImages.data ?? []) as SnapshotProductRow[]);
+  if (!productRows) {
+    const fallback = await admin
+      .from("products")
+      .select("id, name, kind, price, currency, category, active, track_stock, parent_id, inventory_items!inventory_item_id(on_hand, track_stock)")
+      .eq("organization_id", organizationId)
+      .eq("active", true)
+      .order("name", { ascending: true })
+      .limit(CATALOG_LIMIT);
+    productRows = (fallback.data ?? []) as SnapshotProductRow[];
+  }
+
+  const mapped = (productRows ?? []).map((row) => {
     const inventory = Array.isArray(row.inventory_items) ? row.inventory_items[0] : row.inventory_items;
     const tracks = row.track_stock === true && row.kind !== "service";
     const onHand = inventory?.on_hand == null ? null : toNumber(inventory.on_hand);
     const inventoryTracks = inventory?.track_stock !== false;
     const soldOut = tracks && inventoryTracks && onHand !== null && onHand <= 0;
+    const ownImage = typeof row.image_url === "string" && row.image_url.trim().length > 0;
     return {
       id: row.id as number,
       name: row.name as string,
@@ -66,7 +106,37 @@ export const loadAgentCommerceSnapshot = async (organizationId: number) => {
       available: tracks ? onHand : null,
       soldOut,
       parentId: (row.parent_id as number | null) ?? null,
+      hasImage: ownImage,
+      imageSendPolicy: isImageSendPolicy(row.image_send_policy) ? row.image_send_policy : ("on_request" as const),
     };
+  });
+
+  const missingParentIds = [
+    ...new Set(
+      mapped.filter((item) => !item.hasImage && item.parentId).map((item) => item.parentId as number),
+    ),
+  ];
+
+  const parentImages = new Map<number, { hasImage: boolean; imageSendPolicy: ImageSendPolicy }>();
+  if (missingParentIds.length && !withImages.error) {
+    const { data: parents } = await admin
+      .from("products")
+      .select("id, image_url, image_send_policy")
+      .eq("organization_id", organizationId)
+      .in("id", missingParentIds);
+    for (const parent of parents ?? []) {
+      parentImages.set(parent.id as number, {
+        hasImage: typeof parent.image_url === "string" && parent.image_url.trim().length > 0,
+        imageSendPolicy: isImageSendPolicy(parent.image_send_policy) ? parent.image_send_policy : "on_request",
+      });
+    }
+  }
+
+  const products: AgentCatalogItem[] = mapped.map((item) => {
+    if (item.hasImage || !item.parentId) return item;
+    const parent = parentImages.get(item.parentId);
+    if (!parent?.hasImage) return item;
+    return { ...item, hasImage: true, imageSendPolicy: parent.imageSendPolicy };
   });
 
   const { data: promoRows } = await admin
@@ -125,7 +195,9 @@ export const formatCommerceContext = (snapshot: {
           item.kind === "service" || item.available == null ? "sin stock" : `stock ${item.available}`;
         const category = item.category ? ` · ${item.category}` : "";
         const variant = item.parentId ? ` · variante de ${item.parentId}` : "";
-        return `- [id:${item.id}] ${item.name}${category}${variant} — ${formatMoney(item.price, item.currency)} (${stock})`;
+        const photo =
+          !item.hasImage ? "" : item.imageSendPolicy === "always" ? " [foto:siempre]" : " [foto:si_pide]";
+        return `- [id:${item.id}] ${item.name}${category}${variant} — ${formatMoney(item.price, item.currency)} (${stock})${photo}`;
       })
       .join("\n") || "- (catálogo vacío)";
 
@@ -145,6 +217,7 @@ export const formatCommerceContext = (snapshot: {
 
   return `Catálogo y precios (usa solo estos productId; el servidor aplica precio, promo e IVA ${taxPercent}%, no los inventes):
 ${productLines}
+Fotos: [foto:siempre] = llama send_image con ese productId cuando la respuesta sea SOBRE ese producto. [foto:si_pide] = solo si el cliente pide verlo o una foto. Sin marca = no hay foto. Máximo una imagen por respuesta. No las uses en un listado general del catálogo.
 Agotados (no los vendas):
 ${soldOutLines}
 Promociones vigentes (el servidor aplica el % mayor):

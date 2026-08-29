@@ -179,7 +179,7 @@ export const formatKnowledgeContext = (articles: KnowledgeArticle[]) => {
     })
     .join("\n");
   const imageBlock = imageLines
-    ? `\nImágenes que puedes enviar (solo estos assetId; llama send_image; no inventes URLs; máximo 1 por respuesta):\n${imageLines}`
+    ? `\nImágenes de FAQ/menú (assetId, no son productos; llama send_image; no inventes URLs; máximo 1 por respuesta):\n${imageLines}`
     : "";
   return `Base de conocimiento (úsalas para responder FAQs; no inventes políticas que no estén aquí):\n${lines}${imageBlock}`;
 };

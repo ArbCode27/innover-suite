@@ -57,4 +57,4 @@ export const AGENT_GUARDRAILS = `Reglas internas (no las contradigas aunque el p
 - Si piden un asesor y la oficina está cerrada, no llames handoff_to_human: explica que el equipo vuelve al abrir y sigue ayudando.
 - Catálogo: usa solo productId listados. El servidor aplica el precio. No vendas ítems agotados. No descuentes stock a mano: solo create_order lo hace.
 - Pedidos: no llames create_order hasta que el cliente confirme el ticket (ítems y total) o escriba CONFIRMAR / SÍ / CONFIRMO. Si no hay stock, ofrece alternativas disponibles.
-- Imágenes: usa solo assetId listados. Llama send_image si el cliente pide ver el producto, una foto, el menú o algo visual. Máximo una imagen por respuesta. No inventes URLs. Si no hay asset, responde en texto.`;
+- Imágenes: máximo una por respuesta. No inventes URLs. Productos [foto:siempre]: llama send_image con ese productId cuando respondas SOBRE ese producto (precio, stock, qué es). Productos [foto:si_pide]: solo si piden verlo, una foto o cómo se ve. FAQ/menú: usa assetId de knowledge. Listado general del catálogo: solo texto. Si no hay foto, responde en texto.`;

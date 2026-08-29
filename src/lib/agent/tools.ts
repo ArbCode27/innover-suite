@@ -58,10 +58,28 @@ export const cancelOrderArgsSchema = z.object({
   reason: z.string().trim().min(4).max(240),
 });
 
-export const sendImageArgsSchema = z.object({
-  assetId: z.coerce.number().int().positive(),
-  caption: z.string().trim().max(400).optional(),
-});
+export const sendImageArgsSchema = z
+  .object({
+    productId: z.preprocess(
+      (value) => (value === "" || value == null ? undefined : value),
+      z.coerce.number().int().positive().optional(),
+    ),
+    assetId: z.preprocess(
+      (value) => (value === "" || value == null ? undefined : value),
+      z.coerce.number().int().positive().optional(),
+    ),
+    caption: z.string().trim().max(400).optional(),
+  })
+  .superRefine((data, context) => {
+    const hasProduct = data.productId != null;
+    const hasAsset = data.assetId != null;
+    if (hasProduct === hasAsset) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Indica productId o assetId, no ambos.",
+      });
+    }
+  });
 
 export type GeminiFunctionDeclaration = {
   name: string;
@@ -191,14 +209,20 @@ export const buildAgentToolDeclarations = (
   tools.push({
     name: "send_image",
     description:
-      "Envía una imagen de la base de conocimiento al cliente. Usa solo un assetId listado en el contexto. Máximo una imagen por respuesta. Úsala si piden ver el producto, una foto, el menú o algo visual.",
+      "Envía una foto al cliente. Para un producto del catálogo usa productId. Para FAQ/menú de la base de conocimiento usa assetId. Máximo una imagen por respuesta. No inventes URLs.",
     parameters: {
       type: "OBJECT",
       properties: {
-        assetId: { type: "INTEGER", description: "ID del asset de la lista de imágenes del contexto." },
+        productId: {
+          type: "INTEGER",
+          description: "ID del producto con [foto:siempre] o [foto:si_pide] en el catálogo.",
+        },
+        assetId: {
+          type: "INTEGER",
+          description: "ID de una imagen de la base de conocimiento (no es un productId).",
+        },
         caption: { type: "STRING", description: "Pie de foto corto opcional." },
       },
-      required: ["assetId"],
     },
   });
 

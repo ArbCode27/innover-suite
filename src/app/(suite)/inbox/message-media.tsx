@@ -2,6 +2,7 @@
 
 import { FileText, ImageIcon, Loader2, MapPin, Mic, Video } from "lucide-react";
 import { mapsUrlFromLocation, attachmentPreviewLabel } from "@/lib/media/parse";
+import { MessageAudioPlayer } from "./message-audio-player";
 import type { InboxMessage } from "./types";
 
 type MessageMediaProps = {
@@ -85,14 +86,12 @@ export const MessageMedia = ({ message }: MessageMediaProps) => {
 
   if (kind === "audio" && message.mediaUrl) {
     return (
-      <div className="mt-2 min-w-52">
-        <p className="mb-1 text-[11px] font-medium text-muted-foreground">
-          {message.isVoice ? "Nota de voz" : "Audio"}
-        </p>
-        <audio controls preload="metadata" className="w-full" src={message.mediaUrl}>
-          Tu navegador no puede reproducir este audio.
-        </audio>
-      </div>
+      <MessageAudioPlayer
+        src={message.mediaUrl}
+        isVoice={message.isVoice}
+        isOutbound={message.direction === "outbound"}
+        className={message.content ? "mt-2" : "mt-0.5"}
+      />
     );
   }
 

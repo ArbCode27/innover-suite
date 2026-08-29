@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Download, Filter, Loader2, PackagePlus, Pencil, Plus, Search, Tag, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Filter, ImagePlus, Loader2, PackagePlus, Pencil, Plus, Search, Tag, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  createProductAction,
   createPromotionAction,
   importCatalogCsvAction,
   receiveStockAction,
+  saveProductAction,
   togglePromotionAction,
   updateProductAction,
 } from "@/lib/commerce/actions";
@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Sheet,
   SheetContent,
@@ -60,6 +61,7 @@ const emptyProductForm = {
   description: "",
   trackStock: true,
   currency: DEFAULT_CURRENCY,
+  imageSendAlways: false,
 };
 
 const productInitials = (name: string) =>
@@ -69,6 +71,26 @@ const productInitials = (name: string) =>
     .map((part) => part[0] ?? "")
     .join("")
     .toUpperCase();
+
+const ProductThumb = ({ product, className }: { product: ProductRecord; className: string }) => {
+  if (product.imageUrl) {
+    return (
+      <img
+        src={product.imageUrl}
+        alt=""
+        className={`${className} shrink-0 rounded-lg object-cover`}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={`flex shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary ${className}`}
+    >
+      {productInitials(product.name)}
+    </span>
+  );
+};
 
 const isLowStock = (product: ProductRecord) =>
   Boolean(
@@ -93,6 +115,10 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
   const [page, setPage] = useState(1);
   const [isPending, startTransition] = useTransition();
   const [isImporting, startImport] = useTransition();
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+  const [removeExistingImage, setRemoveExistingImage] = useState(false);
 
   const categories = useMemo(() => {
     const unique = new Set(
@@ -136,9 +162,39 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
     [products],
   );
 
+  const handleResetImage = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(null);
+    setExistingImageUrl(null);
+    setRemoveExistingImage(false);
+  };
+
+  const handleProductImageChange = (file: File | null) => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(file);
+    setImagePreview(file ? URL.createObjectURL(file) : null);
+    setRemoveExistingImage(false);
+  };
+
+  const handleClearProductImage = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(null);
+    setRemoveExistingImage(Boolean(existingImageUrl));
+    setForm((current) => ({ ...current, imageSendAlways: false }));
+  };
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+    };
+  }, [imagePreview]);
+
   const handleOpenCreate = () => {
     setEditingId(null);
     setForm({ ...emptyProductForm, currency: currencies.defaultCode });
+    handleResetImage();
     setIsSheetOpen(true);
   };
 
@@ -155,7 +211,13 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
       description: product.description ?? "",
       trackStock: product.trackStock,
       currency: product.currency || currencies.defaultCode,
+      imageSendAlways: product.imageSendPolicy === "always",
     });
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(null);
+    setExistingImageUrl(product.imageUrl);
+    setRemoveExistingImage(false);
     setIsSheetOpen(true);
   };
 
@@ -167,26 +229,29 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
     }
 
     startTransition(async () => {
-      const payload = {
-        name: form.name,
-        sku: form.sku || undefined,
-        category: form.category || undefined,
-        kind: form.kind,
-        price,
-        trackStock: form.kind === "service" ? false : form.trackStock,
-        description: form.description || undefined,
-        reorderPoint: form.reorderPoint ? Number(form.reorderPoint) : undefined,
-        initialStock: form.initialStock ? Number(form.initialStock) : undefined,
-        currency: form.currency,
-        ...(editingId ? { id: editingId, active: true } : {}),
-      };
+      const payload = new FormData();
+      payload.set("name", form.name);
+      payload.set("sku", form.sku);
+      payload.set("category", form.category);
+      payload.set("kind", form.kind);
+      payload.set("price", String(price));
+      payload.set("trackStock", form.kind === "service" ? "false" : String(form.trackStock));
+      payload.set("description", form.description);
+      payload.set("currency", form.currency);
+      payload.set("imageSendAlways", String(form.imageSendAlways));
+      if (form.reorderPoint) payload.set("reorderPoint", form.reorderPoint);
+      if (form.initialStock) payload.set("initialStock", form.initialStock);
+      if (editingId) payload.set("id", String(editingId));
+      if (imageFile) payload.set("image", imageFile);
+      if (removeExistingImage) payload.set("removeImage", "true");
 
-      const result = editingId ? await updateProductAction(payload) : await createProductAction(payload);
+      const result = await saveProductAction(payload);
       if (result.error) {
         toast.error(result.error);
         return;
       }
       toast.success(result.success);
+      handleResetImage();
       setIsSheetOpen(false);
     });
   };
@@ -447,9 +512,7 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
                           <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{product.id}</td>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-3">
-                              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-                                {productInitials(product.name)}
-                              </span>
+                              <ProductThumb product={product} className="size-9" />
                               <div className="min-w-0">
                                 <p className="truncate font-medium">{product.name}</p>
                                 <p className="truncate text-xs text-muted-foreground">
@@ -545,9 +608,7 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
                   return (
                     <div key={product.id} className="rounded-xl border border-primary/10 bg-background/70 p-3">
                       <div className="flex items-start gap-3">
-                        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-                          {productInitials(product.name)}
-                        </span>
+                        <ProductThumb product={product} className="size-10" />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-2">
                             <p className="font-medium">{product.name}</p>
@@ -741,7 +802,13 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
         onOpenChange={setIsMovementsOpen}
       />
 
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+      <Sheet
+        open={isSheetOpen}
+        onOpenChange={(open) => {
+          setIsSheetOpen(open);
+          if (!open) handleResetImage();
+        }}
+      >
         <SheetContent>
           <SheetHeader>
             <SheetTitle>{editingId ? "Editar producto" : "Nuevo producto"}</SheetTitle>
@@ -755,6 +822,66 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
                 value={form.name}
                 onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Imagen</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-input px-3 py-2 text-sm">
+                  <ImagePlus className="size-4" aria-hidden />
+                  {imageFile || (existingImageUrl && !removeExistingImage) ? "Cambiar imagen" : "Adjuntar imagen"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={(event) => handleProductImageChange(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {imagePreview || (existingImageUrl && !removeExistingImage) ? (
+                  <span className="relative inline-flex">
+                    <img
+                      src={imagePreview || existingImageUrl || ""}
+                      alt="Vista previa del producto"
+                      className="size-14 rounded-lg object-cover"
+                    />
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="secondary"
+                      className="absolute -top-2 -right-2 size-6 rounded-full"
+                      aria-label="Quitar imagen"
+                      onClick={handleClearProductImage}
+                    >
+                      <X className="size-3" />
+                    </Button>
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">JPG, PNG o WebP. Máx. 5 MB.</span>
+                )}
+              </div>
+              <label
+                className={`flex items-start gap-2 text-sm ${
+                  imageFile || (existingImageUrl && !removeExistingImage)
+                    ? "text-foreground"
+                    : "text-muted-foreground"
+                }`}
+              >
+                <Switch
+                  size="sm"
+                  className="mt-0.5"
+                  checked={form.imageSendAlways}
+                  disabled={!imageFile && (!existingImageUrl || removeExistingImage)}
+                  onCheckedChange={(checked) =>
+                    setForm((current) => ({ ...current, imageSendAlways: checked === true }))
+                  }
+                  aria-label="Enviar foto siempre que hablen de este producto"
+                />
+                <span>
+                  Enviar foto siempre que hablen de este producto
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Si está apagado, la IA solo la manda cuando el cliente pide verlo.
+                  </span>
+                </span>
+              </label>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className={currencies.codes.length > 1 ? "col-span-2" : undefined}>

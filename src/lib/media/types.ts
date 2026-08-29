@@ -36,6 +36,8 @@ export type MessageAttachment = {
 };
 
 export const MESSAGE_ATTACHMENTS_BUCKET = "message-attachments";
+export const PRODUCT_IMAGES_BUCKET = "product-images";
+export const KNOWLEDGE_IMAGES_BUCKET = "knowledge-images";
 export const MAX_INBOUND_MEDIA_BYTES = 20 * 1024 * 1024;
 export const MAX_KNOWLEDGE_IMAGE_BYTES = 5 * 1024 * 1024;
 export const KNOWLEDGE_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;

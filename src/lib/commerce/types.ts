@@ -4,11 +4,13 @@ import { DEFAULT_CURRENCY } from "@/lib/organizations/currencies";
 export const DEFAULT_TAX_RATE = 0.16;
 
 export const PRODUCT_KINDS = ["physical", "food", "service"] as const;
+export const IMAGE_SEND_POLICIES = ["on_request", "always"] as const;
 export const ORDER_STATUSES = ["received", "preparing", "ready", "completed", "cancelled"] as const;
 export const FULFILLMENT_TYPES = ["pickup", "delivery", "dine_in", "unspecified"] as const;
 export const PAYMENT_STATUSES = ["unpaid", "pending", "paid", "refunded"] as const;
 
 export type ProductKind = (typeof PRODUCT_KINDS)[number];
+export type ImageSendPolicy = (typeof IMAGE_SEND_POLICIES)[number];
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export type FulfillmentType = (typeof FULFILLMENT_TYPES)[number];
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
@@ -28,6 +30,10 @@ export type ProductRecord = {
   inventoryItemId: number | null;
   onHand: number | null;
   reorderPoint: number | null;
+  imageUrl: string | null;
+  imagePath: string | null;
+  imageMime: string | null;
+  imageSendPolicy: ImageSendPolicy;
 };
 
 export type DeliveryZoneRecord = {
@@ -155,6 +161,9 @@ export const toNumber = (value: unknown) => {
 
 export const isProductKind = (value: unknown): value is ProductKind =>
   typeof value === "string" && PRODUCT_KINDS.includes(value as ProductKind);
+
+export const isImageSendPolicy = (value: unknown): value is ImageSendPolicy =>
+  typeof value === "string" && IMAGE_SEND_POLICIES.includes(value as ImageSendPolicy);
 
 export const isOrderStatus = (value: unknown): value is OrderStatus =>
   typeof value === "string" && ORDER_STATUSES.includes(value as OrderStatus);
