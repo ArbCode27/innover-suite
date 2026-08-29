@@ -1120,7 +1120,7 @@ export const InboxPanel = ({
                         className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}
                       >
                         <article
-                          className={`max-w-[78%] rounded-2xl border px-3 py-2 text-sm shadow-sm ${
+                          className={`max-w-[min(22rem,85%)] overflow-hidden rounded-2xl border px-3 py-2 text-sm shadow-sm ${
                             isOutbound
                               ? "border-primary/30 bg-primary/15 text-foreground"
                               : "border-border bg-background"

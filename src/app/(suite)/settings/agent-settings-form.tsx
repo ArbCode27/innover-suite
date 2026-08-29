@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Bot, ImagePlus, Loader2, Save, X } from "lucide-react";
+import { BookOpen, Bot, ImagePlus, Loader2, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import { saveAgentSettingsAction, createKnowledgeArticleAction, toggleKnowledgeArticleAction } from "@/lib/agent/actions";
 import { AGENT_PROMPT_MAX_CHARS } from "@/lib/agent/constants";
@@ -196,113 +196,154 @@ export const AgentSettingsForm = ({
           ) : null}
         </fieldset>
 
-        <div className="space-y-2">
-          <Label>Base de conocimiento</Label>
-          <p className="text-xs text-muted-foreground">
-            FAQs y fotos que el agente puede enviar. Adjunta una imagen si el cliente suele pedir “cómo se ve”.
-          </p>
-          {canManageOrganization ? (
-            <div className="space-y-2">
-              <Input
-                placeholder="Título"
-                value={articleForm.title}
-                onChange={(event) => setArticleForm((current) => ({ ...current, title: event.target.value }))}
-              />
-              <textarea
-                placeholder="Política, FAQ o dato que el agente debe usar"
-                value={articleForm.body}
-                onChange={(event) => setArticleForm((current) => ({ ...current, body: event.target.value }))}
-                rows={3}
-                className="min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              />
-              <Input
-                placeholder="¿Cuándo enviar la foto? Ej. si preguntan cómo se ve el kit"
-                value={articleForm.useWhen}
-                onChange={(event) => setArticleForm((current) => ({ ...current, useWhen: event.target.value }))}
-                aria-label="Cuándo usar la imagen"
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-input px-3 py-2 text-sm">
-                  <ImagePlus className="size-4" aria-hidden />
-                  {articleImage ? "Cambiar imagen" : "Adjuntar imagen"}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="sr-only"
-                    onChange={(event) => handleArticleImageChange(event.target.files?.[0] ?? null)}
-                  />
-                </label>
-                {articleImagePreview ? (
-                  <span className="relative inline-flex">
-                    <img
-                      src={articleImagePreview}
-                      alt="Vista previa de la imagen del artículo"
-                      className="size-14 rounded-lg object-cover"
-                    />
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="secondary"
-                      className="absolute -top-2 -right-2 size-6 rounded-full"
-                      aria-label="Quitar imagen"
-                      onClick={() => handleArticleImageChange(null)}
-                    >
-                      <X className="size-3" />
-                    </Button>
-                  </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">JPG, PNG o WebP. Máx. 5 MB.</span>
-                )}
+        <section className="overflow-hidden rounded-2xl border border-primary/20 bg-primary/8">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-primary/10 px-4 py-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                <BookOpen className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold">Base de conocimiento</h3>
+                <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                  FAQs y fotos que el agente puede enviar. Adjunta una imagen si el cliente suele pedir “cómo se ve”.
+                </p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isPending}
-                onClick={handlePublishArticle}
-              >
-                Publicar artículo
-              </Button>
             </div>
-          ) : null}
-          <ul className="space-y-2 text-sm">
-            {articles.map((article) => (
-              <li key={article.id} className="flex items-start justify-between gap-2 rounded-lg border border-primary/10 p-2">
-                <span className="flex min-w-0 items-start gap-2">
-                  {article.imageUrl ? (
-                    <img
-                      src={article.imageUrl}
-                      alt=""
-                      className="mt-0.5 size-10 shrink-0 rounded-md object-cover"
+            <Badge variant="outline">
+              {articles.length} artículo{articles.length === 1 ? "" : "s"}
+            </Badge>
+          </div>
+
+          <div className="space-y-4 p-4">
+            {canManageOrganization ? (
+              <div className="space-y-3 rounded-xl border border-primary/15 bg-background/80 p-3">
+                <p className="text-xs font-medium text-primary">Nuevo artículo</p>
+                <div className="space-y-1.5">
+                  <Label htmlFor="knowledge-title">Título</Label>
+                  <Input
+                    id="knowledge-title"
+                    placeholder="Ej. Kit de 3"
+                    value={articleForm.title}
+                    onChange={(event) => setArticleForm((current) => ({ ...current, title: event.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="knowledge-body">Contenido</Label>
+                  <textarea
+                    id="knowledge-body"
+                    placeholder="Política, FAQ o dato que el agente debe usar"
+                    value={articleForm.body}
+                    onChange={(event) => setArticleForm((current) => ({ ...current, body: event.target.value }))}
+                    rows={4}
+                    className="min-h-24 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="knowledge-use-when">¿Cuándo enviar la foto?</Label>
+                  <Input
+                    id="knowledge-use-when"
+                    placeholder="Ej. si preguntan cómo se ve el kit"
+                    value={articleForm.useWhen}
+                    onChange={(event) => setArticleForm((current) => ({ ...current, useWhen: event.target.value }))}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-primary/25 bg-primary/8 px-3 py-2.5">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-primary/20 bg-background px-3 py-2 text-sm">
+                    <ImagePlus className="size-4 text-primary" aria-hidden />
+                    {articleImage ? "Cambiar imagen" : "Adjuntar imagen"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="sr-only"
+                      onChange={(event) => handleArticleImageChange(event.target.files?.[0] ?? null)}
                     />
-                  ) : null}
-                  <span className="min-w-0">
-                    <span className="font-medium">{article.title}</span>
-                    <span className="mt-1 block text-xs text-muted-foreground">{article.body.slice(0, 140)}</span>
-                    {article.useWhen ? (
-                      <span className="mt-1 block text-xs text-muted-foreground">Foto si: {article.useWhen}</span>
-                    ) : null}
-                  </span>
-                </span>
-                {canManageOrganization ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      startTransition(async () => {
-                        const result = await toggleKnowledgeArticleAction(article.id, !article.active);
-                        if (result.error) toast.error(result.error);
-                        else toast.success(result.success);
-                      })
-                    }
+                  </label>
+                  {articleImagePreview ? (
+                    <span className="relative inline-flex">
+                      <img
+                        src={articleImagePreview}
+                        alt="Vista previa de la imagen del artículo"
+                        className="size-14 rounded-lg object-cover"
+                      />
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="secondary"
+                        className="absolute -top-2 -right-2 size-6 rounded-full"
+                        aria-label="Quitar imagen"
+                        onClick={() => handleArticleImageChange(null)}
+                      >
+                        <X className="size-3" />
+                      </Button>
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">JPG, PNG o WebP. Máx. 5 MB.</span>
+                  )}
+                </div>
+                <Button type="button" disabled={isPending} onClick={handlePublishArticle}>
+                  Publicar artículo
+                </Button>
+              </div>
+            ) : null}
+
+            {articles.length ? (
+              <ul className="space-y-2">
+                {articles.map((article) => (
+                  <li
+                    key={article.id}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-primary/10 bg-background/70 p-3"
                   >
-                    {article.active ? "Desactivar" : "Activar"}
-                  </Button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </div>
+                    <span className="flex min-w-0 items-start gap-3">
+                      {article.imageUrl ? (
+                        <img
+                          src={article.imageUrl}
+                          alt=""
+                          className="size-12 shrink-0 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <BookOpen className="size-4" aria-hidden />
+                        </span>
+                      )}
+                      <span className="min-w-0">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{article.title}</span>
+                          <Badge variant={article.active ? "default" : "outline"}>
+                            {article.active ? "Activo" : "Inactivo"}
+                          </Badge>
+                        </span>
+                        <span className="mt-1 block text-xs text-muted-foreground">{article.body.slice(0, 140)}</span>
+                        {article.useWhen ? (
+                          <span className="mt-1 block text-xs text-muted-foreground">Foto si: {article.useWhen}</span>
+                        ) : null}
+                      </span>
+                    </span>
+                    {canManageOrganization ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          startTransition(async () => {
+                            const result = await toggleKnowledgeArticleAction(article.id, !article.active);
+                            if (result.error) toast.error(result.error);
+                            else toast.success(result.success);
+                          })
+                        }
+                      >
+                        {article.active ? "Desactivar" : "Activar"}
+                      </Button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="rounded-xl border border-dashed border-primary/20 px-3 py-6 text-center text-xs text-muted-foreground">
+                Aún no hay artículos. Publica el primero para que el agente tenga FAQs y fotos.
+              </p>
+            )}
+          </div>
+        </section>
 
         {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
 

@@ -66,11 +66,16 @@ export const MessageMedia = ({ message }: MessageMediaProps) => {
 
   if ((kind === "image" || kind === "sticker") && message.mediaUrl) {
     return (
-      <a href={message.mediaUrl} target="_blank" rel="noreferrer" className="mt-2 block">
+      <a
+        href={message.mediaUrl}
+        target="_blank"
+        rel="noreferrer"
+        className={`-mx-3 block overflow-hidden bg-black/5 ${message.content ? "mt-2" : "-mt-1"}`}
+      >
         <img
           src={message.mediaUrl}
           alt={message.attachmentName || "Imagen"}
-          className="max-h-64 w-full rounded-xl object-cover"
+          className="mx-auto max-h-[28rem] w-full object-contain"
         />
       </a>
     );
