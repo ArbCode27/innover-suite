@@ -207,6 +207,45 @@ export const updateProductAction = async (rawValues: unknown): Promise<ActionRes
   return { success: "Producto actualizado." };
 };
 
+export const deleteProductAction = async (productId: number): Promise<ActionResult> => {
+  const access = await requireCatalogMembership();
+  if ("error" in access) return { error: access.error };
+
+  const supabase = await createSupabaseServerClient();
+  const { data: product, error: loadError } = await supabase
+    .from("products")
+    .select("id, active, image_path")
+    .eq("id", productId)
+    .eq("organization_id", access.membership.organizationId)
+    .maybeSingle();
+
+  if (loadError || !product?.id) {
+    return { error: "El producto no existe." };
+  }
+
+  if (product.active === true) {
+    return { error: "Desactiva el producto antes de borrarlo." };
+  }
+
+  const { error } = await supabase
+    .from("products")
+    .delete()
+    .eq("id", productId)
+    .eq("organization_id", access.membership.organizationId);
+
+  if (error) {
+    return { error: error.message || "No se pudo borrar el producto." };
+  }
+
+  const imagePath = typeof product.image_path === "string" ? product.image_path.trim() : "";
+  if (imagePath) {
+    await removeProductImage(imagePath).catch(() => undefined);
+  }
+
+  revalidatePath("/inventory");
+  return { success: "Producto borrado del catálogo." };
+};
+
 const productImageSqlHint = (message: string) => {
   if (/bucket|not found|does not exist/i.test(message)) {
     return "No se encontró el bucket product-images. ¿Corriste supabase/storage-image-buckets.sql?";

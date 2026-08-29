@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Download, Filter, ImagePlus, Loader2, PackagePlus, Pencil, Plus, Search, Tag, Upload, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Filter, ImagePlus, Loader2, PackagePlus, Pencil, Plus, Search, Tag, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   createPromotionAction,
+  deleteProductAction,
   importCatalogCsvAction,
   receiveStockAction,
   saveProductAction,
@@ -289,6 +290,22 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
         currency: product.currency,
         active: !product.active,
       });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result.success);
+    });
+  };
+
+  const handleDeleteProduct = (product: ProductRecord) => {
+    if (product.active) {
+      toast.error("Desactiva el producto antes de borrarlo.");
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await deleteProductAction(product.id);
       if (result.error) {
         toast.error(result.error);
         return;
@@ -592,6 +609,17 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
                                 >
                                   <Pencil />
                                 </Button>
+                                <Button
+                                  type="button"
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  disabled={isPending}
+                                  aria-label={`Borrar ${product.name}`}
+                                  onClick={() => handleDeleteProduct(product)}
+                                >
+                                  <Trash2 />
+                                </Button>
                               </div>
                             </td>
                           ) : null}
@@ -673,6 +701,17 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
                           <Button type="button" variant="ghost" size="sm" onClick={() => handleOpenEdit(product)}>
                             <Pencil />
                             Editar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            disabled={isPending}
+                            onClick={() => handleDeleteProduct(product)}
+                          >
+                            <Trash2 />
+                            Borrar
                           </Button>
                         </div>
                       ) : null}
