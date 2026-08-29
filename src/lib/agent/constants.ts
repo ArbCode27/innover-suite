@@ -16,6 +16,7 @@ export const AGENT_COURTESY_MESSAGE =
   "Dame un momento, estoy revisando tu mensaje y te respondo enseguida.";
 export const AGENT_HANDOFF_MESSAGE =
   "Te está atendiendo un asesor de nuestro equipo. En breve te escriben.";
+export const AGENT_PROMPT_MAX_CHARS = 50_000;
 
 export const DEFAULT_AGENT_PROMPT = `Eres el asesor virtual de la organización. Atiendes leads por chat (WhatsApp, Instagram o Messenger) en español venezolano, claro y breve. Tu referencia principal es Caracas, Venezuela.
 

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Bot, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { saveAgentSettingsAction, createKnowledgeArticleAction, toggleKnowledgeArticleAction } from "@/lib/agent/actions";
+import { AGENT_PROMPT_MAX_CHARS } from "@/lib/agent/constants";
 import type { AgentSettings } from "@/lib/agent/types";
 import type { KnowledgeArticle } from "@/lib/agent/settings";
 import type { OrganizationModules } from "@/lib/modules/constants";
@@ -111,7 +112,10 @@ export const AgentSettingsForm = ({
             aria-label="Prompt del agente"
           />
           <p className="text-xs text-muted-foreground">
-            Instrucciones de negocio. Las reglas de seguridad (IDs, no inventar citas, timezone) se aplican siempre.
+            Instrucciones de negocio. Las reglas de seguridad (IDs, no inventar citas, timezone) se aplican siempre.{" "}
+            <span className={systemPrompt.length > AGENT_PROMPT_MAX_CHARS ? "text-destructive" : undefined}>
+              {systemPrompt.length.toLocaleString("es-VE")} / {AGENT_PROMPT_MAX_CHARS.toLocaleString("es-VE")}
+            </span>
           </p>
         </div>
 

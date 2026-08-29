@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AGENT_MODEL, DEFAULT_AGENT_PROMPT } from "@/lib/agent/constants";
+import { AGENT_MODEL, AGENT_PROMPT_MAX_CHARS, DEFAULT_AGENT_PROMPT } from "@/lib/agent/constants";
 import { DEFAULT_CLOSED_MESSAGE, parseBusinessHours } from "@/lib/agent/hours";
 import { loadAgentSettings, upsertAgentSettings } from "@/lib/agent/settings";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
@@ -17,7 +17,11 @@ const weekdaySchema = z
 
 const saveAgentSettingsSchema = z.object({
   enabled: z.boolean(),
-  systemPrompt: z.string().trim().min(40).max(8000),
+  systemPrompt: z
+    .string()
+    .trim()
+    .min(40, "El prompt debe tener al menos 40 caracteres.")
+    .max(AGENT_PROMPT_MAX_CHARS, `El prompt no puede superar ${AGENT_PROMPT_MAX_CHARS.toLocaleString("es-VE")} caracteres.`),
   toolsCalendar: z.boolean(),
   toolsFunnel: z.boolean(),
   toolsHandoff: z.boolean(),
