@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Loader2, StickyNote, Tag } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { addContactNoteAction, addContactTagAction } from "@/lib/contacts/actions";
 import type { ContactDetail } from "@/lib/contacts/board";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,7 @@ export const ContactDetailCard = ({ contact }: ContactDetailCardProps) => {
     startTransition(async () => {
       const result = await addContactTagAction({ contactId: contact.id, name: tagName });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       toast.success(result.success);
@@ -45,7 +46,7 @@ export const ContactDetailCard = ({ contact }: ContactDetailCardProps) => {
         visibleToAgent,
       });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       toast.success(result.success);

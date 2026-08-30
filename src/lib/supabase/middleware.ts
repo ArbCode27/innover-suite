@@ -1,12 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthUserWithTimeout } from "@/lib/supabase/auth-user";
+import { isSafeReturnPath, isSafeWhatsAppOAuthReturnPath } from "@/lib/auth/return-path";
 
 const PUBLIC_PATHS = [
   "/login",
   "/privacy",
   "/terms",
   "/invite",
+  "/auth",
   "/api/health",
   "/api/auth/instagram/callback",
   "/api/auth/messenger/callback",
@@ -22,6 +24,7 @@ const AUTH_SKIP_PATHS = [
   "/privacy",
   "/terms",
   "/invite",
+  "/auth",
   "/api/health",
   "/api/auth/instagram/callback",
   "/api/auth/messenger/callback",
@@ -40,22 +43,6 @@ const isPublicPath = (pathname: string) => isPrefixedPath(pathname, PUBLIC_PATHS
 
 const shouldSkipAuth = (pathname: string) => isPrefixedPath(pathname, AUTH_SKIP_PATHS);
 
-const isSafeWhatsAppOAuthReturnPath = (value: string | null) => {
-  if (!value || !value.startsWith("/api/auth/whatsapp/callback")) {
-    return false;
-  }
-
-  if (value.includes("://") || value.includes("//") || value.includes("\\")) {
-    return false;
-  }
-
-  try {
-    return new URL(value, "http://innover.local").pathname === "/api/auth/whatsapp/callback";
-  } catch {
-    return false;
-  }
-};
-
 const hasSupabaseAuthCookie = (request: NextRequest) =>
   request.cookies.getAll().some((cookie) => cookie.name.includes("-auth-token"));
 
@@ -67,16 +54,23 @@ const copyCookies = (from: NextResponse, to: NextResponse) => {
   return to;
 };
 
-const redirectWithCookies = (
+const redirectTo = (
   request: NextRequest,
   sessionResponse: NextResponse,
   pathname: string,
+  search = "",
 ) => {
   const url = request.nextUrl.clone();
   url.pathname = pathname;
-  url.search = "";
+  url.search = search;
+  url.hash = "";
 
   return copyCookies(sessionResponse, NextResponse.redirect(url));
+};
+
+const loginRedirectSearch = (request: NextRequest) => {
+  const candidate = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+  return isSafeReturnPath(candidate) ? `?next=${encodeURIComponent(candidate)}` : "";
 };
 
 export const updateSession = async (request: NextRequest) => {
@@ -91,21 +85,19 @@ export const updateSession = async (request: NextRequest) => {
 
   if (!supabaseUrl || !supabaseAnonKey) {
     if (!isPublicPath(pathname)) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
+      return redirectTo(request, sessionResponse, "/login", loginRedirectSearch(request));
     }
 
     return sessionResponse;
   }
 
   if (!hasSupabaseAuthCookie(request) && !isPublicPath(pathname)) {
-    return redirectWithCookies(request, sessionResponse, "/login");
+    return redirectTo(request, sessionResponse, "/login", loginRedirectSearch(request));
   }
 
   // Cookie presence is enough to leave `/`; suite layout validates the session.
   if (pathname === "/") {
-    return redirectWithCookies(request, sessionResponse, "/home");
+    return redirectTo(request, sessionResponse, "/home");
   }
 
   // Protected routes: do not block on getUser. /login still confirms the session.
@@ -137,14 +129,23 @@ export const updateSession = async (request: NextRequest) => {
 
   if (user && pathname === "/login") {
     const nextPath = request.nextUrl.searchParams.get("next");
-    if (pathname === "/login" && nextPath && isSafeWhatsAppOAuthReturnPath(nextPath)) {
+    if (nextPath && isSafeWhatsAppOAuthReturnPath(nextPath)) {
       const resumeUrl = request.nextUrl.clone();
       resumeUrl.pathname = "/api/auth/whatsapp/callback";
       resumeUrl.search = new URL(nextPath, request.nextUrl.origin).search;
       return copyCookies(response, NextResponse.redirect(resumeUrl));
     }
 
-    return redirectWithCookies(request, response, "/home");
+    if (isSafeReturnPath(nextPath)) {
+      const dest = request.nextUrl.clone();
+      const parsed = new URL(nextPath, request.nextUrl.origin);
+      dest.pathname = parsed.pathname;
+      dest.search = parsed.search;
+      dest.hash = "";
+      return copyCookies(response, NextResponse.redirect(dest));
+    }
+
+    return redirectTo(request, response, "/home");
   }
 
   return response;

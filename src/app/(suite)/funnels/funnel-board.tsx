@@ -19,6 +19,7 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import { DollarSign, GripVertical, KanbanSquare, Loader2, Plus, Target, Users } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { CHANNEL_BADGE_CLASSNAMES, CHANNEL_LABELS } from "@/lib/contacts/display";
 import { AppSelect } from "@/components/ui/app-select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -343,7 +344,7 @@ export const FunnelBoard = ({ initialBoard, contacts, currencies }: FunnelBoardP
             position: destinationIndex,
           });
           if (result.error) {
-            toast.error(result.error);
+            toastActionError(result);
             setBoard(previousBoard);
             return;
           }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { upsertContactAction } from "@/lib/contacts/actions";
 import type { ContactListItem } from "@/lib/contacts/board";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,7 @@ export const ContactsBoard = ({ contacts, initialQuery }: ContactsBoardProps) =>
         email: form.email || undefined,
       });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       toast.success(result.success);

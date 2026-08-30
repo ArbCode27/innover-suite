@@ -182,6 +182,11 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
             <div className="mb-3 flex items-center justify-end gap-2 md:hidden">
               <ThemeToggle compact />
               <div id="suite-notification-slot-mobile" />
+              <form action={signOut}>
+                <Button type="submit" variant="outline" size="icon" aria-label="Cerrar sesión">
+                  <LogOut />
+                </Button>
+              </form>
             </div>
             {children}
           </main>

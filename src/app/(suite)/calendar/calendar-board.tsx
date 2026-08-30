@@ -24,6 +24,7 @@ import {
   Video,
 } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { createCalendarAppointmentAction, rescheduleCalendarAppointmentAction } from "@/lib/calendar/actions";
 import { CalendarEventCard } from "./calendar-event-card";
 import type {
@@ -189,7 +190,7 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
         endsAt,
       });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         setLocalEvents((current) =>
           (current ?? agenda.events).map((item) => (item.id === original.id ? original : item)),
         );

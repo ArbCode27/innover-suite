@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Bell, X } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { BrowserNotificationsControls } from "@/components/suite/browser-notifications-controls";
 import { deleteNotificationAction, markNotificationsReadAction } from "@/lib/notifications/actions";
 import type { NotificationRecord } from "@/lib/notifications/board";
@@ -96,7 +97,7 @@ export const NotificationBell = ({ organizationId, initialNotifications }: Notif
       const result = await deleteNotificationAction(notificationId);
       if (result.error) {
         setItems(previous);
-        toast.error(result.error);
+        toastActionError(result);
       }
     });
   };

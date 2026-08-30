@@ -1,9 +1,10 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getRequestOrigin } from "@/lib/auth/origin";
+import { sessionExpiredResult } from "@/lib/auth/session-result";
 import { recordAuditEvent } from "@/lib/organizations/audit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getCurrentMembership, hasOrganizationRole, type OrganizationRole } from "@/lib/organizations/membership";
@@ -18,13 +19,6 @@ const inviteAdvisorSchema = z.object({
   role: z.enum(["admin", "agent", "viewer", "kitchen", "cashier"]),
 });
 
-const inviteOrigin = async () => {
-  const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "localhost:3000";
-  const proto = headerStore.get("x-forwarded-proto") || "https";
-  return `${proto}://${host}`;
-};
-
 export const createOrganizationAction = async (rawValues: unknown) => {
   const parsed = createOrganizationSchema.safeParse(rawValues);
   if (!parsed.success) {
@@ -37,7 +31,7 @@ export const createOrganizationAction = async (rawValues: unknown) => {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
+    return sessionExpiredResult();
   }
 
   const { error } = await supabase.rpc("create_organization_for_current_user", {
@@ -68,7 +62,7 @@ export const inviteAdvisorAction = async (rawValues: unknown) => {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
+    return sessionExpiredResult();
   }
 
   const token = crypto.randomUUID();
@@ -94,7 +88,7 @@ export const inviteAdvisorAction = async (rawValues: unknown) => {
   }
 
   const inviteToken = (data?.token as string | undefined) || token;
-  const inviteUrl = `${await inviteOrigin()}/invite/${inviteToken}`;
+  const inviteUrl = `${await getRequestOrigin()}/invite/${inviteToken}`;
   await recordAuditEvent({
     organizationId: membership.organizationId,
     actorUserId: user.id,

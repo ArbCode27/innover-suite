@@ -10,6 +10,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarDays, Camera, Loader2, MessageCircle, MessagesSquare, Unplug, UserPlus } from "lucide-react";
 import { WhatsAppConnectButton } from "./whatsapp-connect-button";
 import { inviteAdvisorAction } from "@/lib/organizations/actions";
+import { CopyableText } from "@/components/auth/copyable-text";
+import { redirectIfSessionExpired } from "@/lib/auth/session-client";
 import { AppSelect } from "@/components/ui/app-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -219,7 +221,10 @@ export const TeamAndIntegrationsForm = ({
     setInviteMessage(null);
     setInviteUrl(null);
     const result = await inviteAdvisorAction(values);
-    setInviteMessage(result?.success || result?.error || null);
+    if (redirectIfSessionExpired(result)) return;
+    const message =
+      (result && "success" in result && result.success) || (result && "error" in result && result.error) || null;
+    setInviteMessage(message);
     if (result && "inviteUrl" in result && result.inviteUrl) {
       setInviteUrl(result.inviteUrl);
     }
@@ -471,7 +476,7 @@ export const TeamAndIntegrationsForm = ({
                   </p>
                 ) : null}
                 {inviteUrl ? (
-                  <p className="break-all rounded-xl border border-primary/15 bg-muted/40 p-3 text-xs">{inviteUrl}</p>
+                  <CopyableText value={inviteUrl} label="Copiar" successMessage="Enlace de invitación copiado" />
                 ) : null}
               </form>
             ) : (
@@ -491,17 +496,32 @@ export const TeamAndIntegrationsForm = ({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="rounded-xl border border-primary/15 bg-muted/40 p-3">
+            <div>
               <p className="text-xs font-medium text-muted-foreground">Messenger e Instagram</p>
-              <code className="mt-1 block break-all text-xs">/api/webhooks/meta/social</code>
+              <CopyableText
+                className="mt-1"
+                value="/api/webhooks/meta/social"
+                label="Copiar"
+                successMessage="Ruta de webhook copiada"
+              />
             </div>
-            <div className="rounded-xl border border-primary/15 bg-muted/40 p-3">
+            <div>
               <p className="text-xs font-medium text-muted-foreground">WhatsApp Cloud API</p>
-              <code className="mt-1 block break-all text-xs">/api/webhooks/meta/whatsapp</code>
+              <CopyableText
+                className="mt-1"
+                value="/api/webhooks/meta/whatsapp"
+                label="Copiar"
+                successMessage="Ruta de webhook copiada"
+              />
             </div>
-            <div className="rounded-xl border border-primary/15 bg-muted/40 p-3">
+            <div>
               <p className="text-xs font-medium text-muted-foreground">Registro insertado de WhatsApp (URI de redirección)</p>
-              <code className="mt-1 block break-all text-xs">{whatsappOAuthRedirectUri}</code>
+              <CopyableText
+                className="mt-1"
+                value={whatsappOAuthRedirectUri}
+                label="Copiar"
+                successMessage="URI de redirección copiada"
+              />
             </div>
           </CardContent>
         </Card>

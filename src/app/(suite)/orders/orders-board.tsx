@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, ChefHat, ClipboardList, Loader2, PackageCheck, Printer, Undo2, Wallet } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { cancelOrderAction, updateOrderPaymentAction, updateOrderStatusAction } from "@/lib/commerce/actions";
 import { mapOrderRow, ORDER_SELECT } from "@/lib/commerce/orders";
 import {
@@ -134,7 +135,7 @@ export const OrdersBoard = ({ organizationId, kitchenMode, initialOrders, canMan
     startTransition(async () => {
       const result = await updateOrderStatusAction({ orderId: order.id, status: next });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       setOrders((current) => current.map((item) => (item.id === order.id ? { ...item, status: next } : item)));
@@ -151,7 +152,7 @@ export const OrdersBoard = ({ organizationId, kitchenMode, initialOrders, canMan
         paymentMethod: nextStatus === "paid" ? "caja" : undefined,
       });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       setOrders((current) =>
@@ -165,7 +166,7 @@ export const OrdersBoard = ({ organizationId, kitchenMode, initialOrders, canMan
     startTransition(async () => {
       const result = await cancelOrderAction({ orderId: order.id, reason: "Cancelado desde el tablero" });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       setOrders((current) => current.map((item) => (item.id === order.id ? { ...item, status: "cancelled" } : item)));

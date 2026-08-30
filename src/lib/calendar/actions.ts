@@ -15,6 +15,7 @@ import {
 } from "@/lib/integrations/google-calendar";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { sessionExpiredResult } from "@/lib/auth/session-result";
 
 const isoDateTime = z.string().refine((value) => Number.isFinite(Date.parse(value)), {
   message: "La fecha no es válida.",
@@ -79,7 +80,7 @@ export const createCalendarAppointmentAction = async (
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
+    return sessionExpiredResult();
   }
 
   const { data: contact, error: contactError } = await supabase

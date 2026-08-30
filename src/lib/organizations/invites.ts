@@ -1,10 +1,12 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { z } from "zod";
+import { getAuthErrorCode, getAuthErrorMessage } from "@/lib/auth/errors";
+import { loginPathWithNext } from "@/lib/auth/return-path";
+import { inviteSignUpSchema } from "@/lib/auth/schema";
+import { EMAIL_NOT_CONFIRMED_CODE } from "@/lib/auth/session-result";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getAuthErrorMessage } from "@/lib/auth/errors";
 import { recordAuditEvent } from "@/lib/organizations/audit";
 
 export type InvitePreview = {
@@ -94,23 +96,18 @@ export const acceptInviteAction = async (token: string) => {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user?.email) {
-    return { error: "Inicia sesión o crea tu cuenta para aceptar la invitación." };
+  const email = user?.email;
+  if (!user || !email) {
+    redirect(loginPathWithNext(`/invite/${token}`));
   }
 
-  const result = await acceptInvite(token, user.id, user.email);
+  const result = await acceptInvite(token, user.id, email);
   if ("error" in result) return result;
   redirect("/home");
 };
 
-const signupSchema = z.object({
-  token: z.string().uuid(),
-  email: z.email(),
-  password: z.string().min(6),
-});
-
 export const signUpAndAcceptInviteAction = async (rawValues: unknown) => {
-  const parsed = signupSchema.safeParse(rawValues);
+  const parsed = inviteSignUpSchema.safeParse(rawValues);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Revisa los datos." };
   }
@@ -131,7 +128,10 @@ export const signUpAndAcceptInviteAction = async (rawValues: unknown) => {
   });
 
   if (error) {
-    return { error: getAuthErrorMessage(error.message) };
+    return {
+      error: getAuthErrorMessage(error.message, "No se pudo crear la cuenta."),
+      code: getAuthErrorCode(error.message),
+    };
   }
 
   if (!data.user) {
@@ -141,6 +141,7 @@ export const signUpAndAcceptInviteAction = async (rawValues: unknown) => {
   if (!data.session) {
     return {
       success: "Cuenta creada. Confirma tu correo y luego entra para unirte al equipo.",
+      code: EMAIL_NOT_CONFIRMED_CODE,
     };
   }
 

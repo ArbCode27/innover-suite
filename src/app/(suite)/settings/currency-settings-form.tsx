@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check, Loader2, Save, Wallet } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { updateOrganizationCurrenciesAction } from "@/lib/organizations/actions";
 import {
   CURRENCY_CATALOG,
@@ -50,7 +51,7 @@ export const CurrencySettingsForm = ({ canManageOrganization, currencies }: Curr
       });
       if (result.error) {
         setFormError(result.error);
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       toast.success(result.success);

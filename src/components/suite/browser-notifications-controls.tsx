@@ -2,6 +2,7 @@
 
 import { BellRing } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { Switch } from "@/components/ui/switch";
 import { useBrowserNotifications } from "@/lib/notifications/use-browser-notifications";
 import { cn } from "@/lib/utils";
@@ -48,7 +49,7 @@ export const BrowserNotificationsControls = ({ compact = false }: BrowserNotific
 
     const result = await handleEnable();
     if (!result.ok) {
-      toast.error(result.error);
+      toastActionError(result);
       return;
     }
     toast.success("Avisos del navegador activados");

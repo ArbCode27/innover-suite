@@ -1,31 +1,40 @@
+import Link from "next/link";
 import { InviteAcceptForm } from "./invite-accept-form";
 import { loadInvitePreview } from "@/lib/organizations/invites";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ROLE_LABELS, type OrganizationRole } from "@/lib/organizations/membership";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { Button } from "@/components/ui/button";
 
 type InvitePageProps = {
   params: Promise<{ token: string }>;
 };
 
+const roleLabel = (role: string) =>
+  role in ROLE_LABELS ? ROLE_LABELS[role as OrganizationRole] : role;
+
 export default async function InvitePage({ params }: InvitePageProps) {
   const { token } = await params;
   const invite = await loadInvitePreview(token);
 
+  if (!invite) {
+    return (
+      <AuthShell
+        title="Invitación no disponible"
+        description="Esta invitación no es válida o ya expiró. Pide una nueva a un admin de tu equipo."
+      >
+        <Button asChild className="w-full" size="lg">
+          <Link href="/login">Ir al inicio de sesión</Link>
+        </Button>
+      </AuthShell>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-3 p-8 pb-4">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">Innover Suite</p>
-          <CardTitle className="text-2xl">Invitación al equipo</CardTitle>
-          <CardDescription>
-            {invite
-              ? `Te invitaron a ${invite.organizationName} como ${invite.role}.`
-              : "Esta invitación no es válida o ya expiró."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-8 pt-2">
-          {invite ? <InviteAcceptForm invite={invite} /> : null}
-        </CardContent>
-      </Card>
-    </div>
+    <AuthShell
+      title="Invitación al equipo"
+      description={`Te invitaron a ${invite.organizationName} como ${roleLabel(invite.role)}.`}
+    >
+      <InviteAcceptForm invite={invite} />
+    </AuthShell>
   );
 }

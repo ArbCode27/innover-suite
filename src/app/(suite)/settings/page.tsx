@@ -5,6 +5,7 @@ import { OfficeHoursForm } from "./office-hours-form";
 import { ModulesSettingsForm } from "./modules-settings-form";
 import { CurrencySettingsForm } from "./currency-settings-form";
 import { BrowserNotificationsCard } from "./browser-notifications-card";
+import { SecuritySettingsForm } from "./security-settings-form";
 import { loadCurrentMemberSession, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ModuleShell } from "@/components/suite/module-shell";
@@ -138,6 +139,7 @@ export default async function SettingsPage() {
           businessHours={agentSettings.businessHours}
           closedMessage={agentSettings.closedMessage}
         />
+        <SecuritySettingsForm />
         {orgBilling ? (
           <p className="text-sm text-muted-foreground">
             Plan {orgBilling.plan || "starter"} · IVA {Math.round(Number(orgBilling.tax_rate ?? DEFAULT_TAX_RATE) * 100)}%. El cobro de

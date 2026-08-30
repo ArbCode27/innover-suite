@@ -7,6 +7,7 @@ import { DEFAULT_CLOSED_MESSAGE, parseBusinessHours } from "@/lib/agent/hours";
 import { loadAgentSettings, upsertAgentSettings } from "@/lib/agent/settings";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { sessionExpiredResult } from "@/lib/auth/session-result";
 import { readCatalogImageFile } from "@/lib/media/image-upload";
 import { buildKnowledgeImagePath, uploadPublicMedia } from "@/lib/media/storage";
 import { KNOWLEDGE_IMAGES_BUCKET } from "@/lib/media/types";
@@ -72,7 +73,7 @@ export const saveAgentSettingsAction = async (rawValues: unknown): Promise<Actio
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
+    return sessionExpiredResult();
   }
 
   const current = await loadAgentSettings(membership.organizationId);
@@ -117,7 +118,7 @@ export const saveOfficeHoursAction = async (rawValues: unknown): Promise<ActionR
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
+    return sessionExpiredResult();
   }
 
   const current = await loadAgentSettings(membership.organizationId);

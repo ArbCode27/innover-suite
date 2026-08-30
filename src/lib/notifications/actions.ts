@@ -3,6 +3,7 @@
 import { getCurrentMembership } from "@/lib/organizations/membership";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { sessionExpiredResult } from "@/lib/auth/session-result";
 
 export const markNotificationsReadAction = async () => {
   const membership = await getCurrentMembership();
@@ -41,7 +42,7 @@ export const deleteNotificationAction = async (notificationId: number) => {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { error: "Sin sesión." };
+    return sessionExpiredResult();
   }
 
   const admin = getSupabaseAdminClient();

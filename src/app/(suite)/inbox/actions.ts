@@ -9,6 +9,7 @@ import { mergeAttachmentMetadata } from "@/lib/media/parse";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { sessionExpiredResult } from "@/lib/auth/session-result";
 import type { MetaChannel } from "@/types/domain";
 import type { FileAttachmentKind, InboxMessage } from "./types";
 import { normalizeInboxMessage } from "./types";
@@ -41,6 +42,7 @@ const setConversationModeSchema = z.object({
 type ActionResult<T = undefined> = {
   success?: string;
   error?: string;
+  code?: string;
   data?: T;
 };
 
@@ -174,7 +176,7 @@ export const sendConversationMessageAction = async (
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
+    return sessionExpiredResult();
   }
 
   const { data: conversation, error: conversationError } = await supabase
@@ -356,7 +358,7 @@ export const setConversationModeAction = async (
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
+    return sessionExpiredResult();
   }
 
   const now = new Date().toISOString();
@@ -416,7 +418,7 @@ export const assignConversationAction = async (rawValues: unknown): Promise<Acti
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
+    return sessionExpiredResult();
   }
 
   const now = new Date().toISOString();

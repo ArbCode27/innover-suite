@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { createOrganizationAction } from "@/lib/organizations/actions";
+import { redirectIfSessionExpired } from "@/lib/auth/session-client";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ export const CreateOrganizationForm = () => {
   const handleCreate = handleSubmit(async (values) => {
     setFormMessage(null);
     const result = await createOrganizationAction(values);
+    if (redirectIfSessionExpired(result)) return;
     if (result?.error) {
       setFormMessage(result.error);
     }

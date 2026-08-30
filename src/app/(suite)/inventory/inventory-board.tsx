@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Download, Filter, ImagePlus, Loader2, PackagePlus, Pencil, Plus, Search, Tag, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { cn } from "@/lib/utils";
 import {
   createPromotionAction,
@@ -256,7 +257,7 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
 
       const result = await saveProductAction(payload);
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       toast.success(result.success);
@@ -275,7 +276,7 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
     startTransition(async () => {
       const result = await receiveStockAction({ inventoryItemId, quantity });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       toast.success(result.success);
@@ -299,7 +300,7 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
         active: !product.active,
       });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       toast.success(result.success);
@@ -315,7 +316,7 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
     startTransition(async () => {
       const result = await deleteProductAction(product.id);
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       toast.success(result.success);
@@ -350,7 +351,7 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
       const text = await file.text();
       const result = await importCatalogCsvAction(text);
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       toast.success(result.success);
@@ -377,7 +378,7 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
         discountPercent: promoForm.discountPercent ? Number(promoForm.discountPercent) : undefined,
       });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       toast.success(result.success);
@@ -827,8 +828,7 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
                       onClick={() => {
                         startTransition(async () => {
                           const result = await togglePromotionAction(promo.id, !promo.active);
-                          if (result.error) toast.error(result.error);
-                          else toast.success(result.success);
+                          if (!toastActionError(result)) toast.success(result.success);
                         });
                       }}
                     >

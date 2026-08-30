@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Loader2, MapPin, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import {
   createDeliveryZoneAction,
   deleteDeliveryZoneAction,
@@ -48,7 +49,7 @@ export const InventoryOps = ({ zones, currencies, canManage }: InventoryOpsProps
         currency: zoneForm.currency,
       });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       toast.success(result.success);
@@ -59,8 +60,7 @@ export const InventoryOps = ({ zones, currencies, canManage }: InventoryOpsProps
   const handleToggleZone = (zone: DeliveryZoneRecord) => {
     startTransition(async () => {
       const result = await toggleDeliveryZoneAction(zone.id, !zone.active);
-      if (result.error) toast.error(result.error);
-      else toast.success(result.success);
+      if (!toastActionError(result)) toast.success(result.success);
     });
   };
 
@@ -69,8 +69,7 @@ export const InventoryOps = ({ zones, currencies, canManage }: InventoryOpsProps
 
     startTransition(async () => {
       const result = await deleteDeliveryZoneAction(zone.id);
-      if (result.error) toast.error(result.error);
-      else toast.success(result.success);
+      if (!toastActionError(result)) toast.success(result.success);
     });
   };
 

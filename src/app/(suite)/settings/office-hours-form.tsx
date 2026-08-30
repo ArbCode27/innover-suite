@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { Clock, Loader2, RotateCcw, Save } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { saveOfficeHoursAction } from "@/lib/agent/actions";
 import {
   DEFAULT_BUSINESS_HOURS,
@@ -158,7 +159,7 @@ export const OfficeHoursForm = ({
 
       if (result.error) {
         setFormError(result.error);
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
 

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { BookOpen, Bot, ImagePlus, Loader2, Save, X } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { saveAgentSettingsAction, createKnowledgeArticleAction, toggleKnowledgeArticleAction } from "@/lib/agent/actions";
 import { AGENT_PROMPT_MAX_CHARS } from "@/lib/agent/constants";
 import type { AgentSettings } from "@/lib/agent/types";
@@ -63,7 +64,7 @@ export const AgentSettingsForm = ({
       }
       const result = await createKnowledgeArticleAction(payload);
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       toast.success(result.success);
@@ -86,7 +87,7 @@ export const AgentSettingsForm = ({
 
       if (result.error) {
         setFormError(result.error);
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
 
@@ -326,8 +327,7 @@ export const AgentSettingsForm = ({
                         onClick={() =>
                           startTransition(async () => {
                             const result = await toggleKnowledgeArticleAction(article.id, !article.active);
-                            if (result.error) toast.error(result.error);
-                            else toast.success(result.success);
+                            if (!toastActionError(result)) toast.success(result.success);
                           })
                         }
                       >

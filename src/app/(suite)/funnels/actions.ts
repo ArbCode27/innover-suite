@@ -6,6 +6,7 @@ import { loadFunnelBoard } from "@/lib/funnels/board";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { loadOrganizationCurrencies, resolveOrganizationCurrency } from "@/lib/organizations/currencies";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { sessionExpiredResult } from "@/lib/auth/session-result";
 import type { FunnelCardView } from "./types";
 
 const POSTGRES_UNIQUE_VIOLATION = "23505";
@@ -102,7 +103,7 @@ export const createFunnelCardAction = async (
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { error: "Tu sesión expiró. Inicia sesión nuevamente." };
+    return sessionExpiredResult();
   }
 
   const stageContext = await loadStageContext(parsed.data.stageId, access.membership.organizationId);

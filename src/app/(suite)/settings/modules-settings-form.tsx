@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { LayoutGrid, Loader2, Save, Store, UtensilsCrossed, Briefcase } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { saveOrganizationModulesAction } from "@/lib/modules/actions";
 import {
   BUSINESS_TEMPLATES,
@@ -45,7 +46,7 @@ export const ModulesSettingsForm = ({ canManageOrganization, modules }: ModulesS
       const result = await saveOrganizationModulesAction(values);
       if (result.error) {
         setFormError(result.error);
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       if (result.modules) {

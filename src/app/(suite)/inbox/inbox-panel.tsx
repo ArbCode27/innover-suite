@@ -56,6 +56,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/auth/action-toast";
 import { CHANNEL_BADGE_CLASSNAMES, CHANNEL_LABELS } from "@/lib/contacts/display";
 import { attachmentPreviewLabel } from "@/lib/media/parse";
 import { MESSAGE_ATTACHMENTS_BUCKET } from "@/lib/media/types";
@@ -648,7 +649,10 @@ export const InboxPanel = ({
           });
 
           if (!result.data?.message) {
-            toast.error(result.error ?? "No se pudo enviar la ubicación.");
+            toastActionError({
+              code: result.code,
+              error: result.error ?? "No se pudo enviar la ubicación.",
+            });
             return;
           }
 
@@ -691,7 +695,7 @@ export const InboxPanel = ({
         mode,
       });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
 
@@ -720,7 +724,7 @@ export const InboxPanel = ({
     startTransition(async () => {
       const result = await assignConversationAction({ conversationId: activeConversationId, assignToMe });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       setConversations((current) =>
@@ -744,7 +748,7 @@ export const InboxPanel = ({
     startTransition(async () => {
       const result = await suggestReplyAction({ conversationId: activeConversationId });
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
       if (result.reply) {
@@ -766,7 +770,7 @@ export const InboxPanel = ({
       });
 
       if (result.error) {
-        toast.error(result.error);
+        toastActionError(result);
         return;
       }
 

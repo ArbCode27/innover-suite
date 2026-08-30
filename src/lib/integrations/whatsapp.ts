@@ -108,22 +108,7 @@ export const getWhatsAppSettingsRedirectUrl = (status: string) => {
   return redirectUrl;
 };
 
-export const isSafeWhatsAppOAuthReturnPath = (value: string | null | undefined): value is string => {
-  if (!value || !value.startsWith("/api/auth/whatsapp/callback")) {
-    return false;
-  }
-
-  if (value.includes("://") || value.includes("//") || value.includes("\\")) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(value, "http://innover.local");
-    return parsed.pathname === "/api/auth/whatsapp/callback";
-  } catch {
-    return false;
-  }
-};
+export { isSafeWhatsAppOAuthReturnPath } from "@/lib/auth/return-path";
 
 export const exchangeWhatsAppAuthorizationCode = async (code: string, redirectUri?: string) => {
   const url = new URL(`${FACEBOOK_GRAPH_BASE}/oauth/access_token`);
