@@ -93,6 +93,9 @@ export const canReplyInbox = (membership: OrganizationMembership | null) =>
 export const canManageCatalog = (membership: OrganizationMembership | null) =>
   hasOrganizationRole(membership, ["owner", "admin", "agent", "kitchen"]);
 
+export const canManageListings = (membership: OrganizationMembership | null) =>
+  hasOrganizationRole(membership, ["owner", "admin", "agent"]);
+
 export const canManageOrders = (membership: OrganizationMembership | null) =>
   hasOrganizationRole(membership, ["owner", "admin", "agent", "kitchen", "cashier"]);
 

@@ -41,10 +41,12 @@ import { PriceCurrencyField } from "@/components/ui/price-currency-field";
 import { DEFAULT_CURRENCY, type OrganizationCurrencySettings } from "@/lib/organizations/currencies";
 import { createFunnelCardAction, moveFunnelCardAction } from "./actions";
 import type { FunnelBoardView, FunnelCardView, FunnelContactOption, FunnelMetrics, FunnelStageView } from "./types";
+import type { ListingOption } from "@/lib/listings/types";
 
 type FunnelBoardProps = {
   initialBoard: FunnelBoardView;
   contacts: FunnelContactOption[];
+  listings?: ListingOption[];
   currencies: OrganizationCurrencySettings;
 };
 
@@ -122,6 +124,7 @@ const FunnelCardBody = ({ card, isOverlay = false }: { card: FunnelCardView; isO
         {card.valueAmount ? (
           <Badge variant="outline">{formatMoney(card.valueAmount, card.currency ?? DEFAULT_CURRENCY)}</Badge>
         ) : null}
+        {card.listingTitle ? <Badge variant="outline">{card.listingTitle}</Badge> : null}
       </div>
     </div>
   </div>
@@ -216,7 +219,7 @@ const StageColumn = ({
   );
 };
 
-export const FunnelBoard = ({ initialBoard, contacts, currencies }: FunnelBoardProps) => {
+export const FunnelBoard = ({ initialBoard, contacts, listings = [], currencies }: FunnelBoardProps) => {
   const [board, setBoard] = useState(initialBoard);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [contactId, setContactId] = useState(contacts[0]?.id ? String(contacts[0].id) : "");
@@ -224,6 +227,7 @@ export const FunnelBoard = ({ initialBoard, contacts, currencies }: FunnelBoardP
   const [title, setTitle] = useState(contacts[0]?.fullName ?? "");
   const [valueAmount, setValueAmount] = useState("");
   const [valueCurrency, setValueCurrency] = useState(currencies.defaultCode);
+  const [listingId, setListingId] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [activeCard, setActiveCard] = useState<FunnelCardView | null>(null);
   const [overStageId, setOverStageId] = useState<number | null>(null);
@@ -269,6 +273,7 @@ export const FunnelBoard = ({ initialBoard, contacts, currencies }: FunnelBoardP
         title: title.trim(),
         valueAmount: parsedValue,
         currency: parsedValue === undefined ? undefined : valueCurrency,
+        listingId: listingId ? Number(listingId) : undefined,
       });
 
       if (result.error || !result.data?.card) {
@@ -499,6 +504,25 @@ export const FunnelBoard = ({ initialBoard, contacts, currencies }: FunnelBoardP
               onAmountChange={setValueAmount}
               onCurrencyChange={setValueCurrency}
             />
+            {listings.length ? (
+              <div className="space-y-2">
+                <Label htmlFor="funnel-listing">Inmueble</Label>
+                <AppSelect
+                  id="funnel-listing"
+                  aria-label="Inmueble"
+                  value={listingId}
+                  onValueChange={setListingId}
+                  placeholder="Sin inmueble"
+                  options={[
+                    { value: "", label: "Sin inmueble" },
+                    ...listings.map((item) => ({
+                      value: String(item.id),
+                      label: `${item.code} · ${item.title}`,
+                    })),
+                  ]}
+                />
+              </div>
+            ) : null}
             {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
             {!contacts.length ? (
               <p className="text-sm text-muted-foreground">

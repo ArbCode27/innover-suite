@@ -29,6 +29,8 @@ export type FunnelCardView = {
   contactName: string;
   contactPhone: string | null;
   channel: MetaChannel | null;
+  listingId: number | null;
+  listingTitle: string | null;
 };
 
 export type FunnelStageView = {

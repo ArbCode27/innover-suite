@@ -28,6 +28,7 @@ type CardRow = {
   owner_user_id: string | null;
   position: number;
   updated_at: string;
+  listing_id?: number | null;
   contacts: {
     full_name: string;
     phone: string | null;
@@ -35,6 +36,15 @@ type CardRow = {
   conversations: {
     channel: MetaChannel;
   } | null;
+  listings?: { title?: string | null; code?: string | null } | { title?: string | null; code?: string | null }[] | null;
+};
+
+const listingTitleFromCard = (row: CardRow) => {
+  const listing = Array.isArray(row.listings) ? row.listings[0] : row.listings;
+  const title = listing?.title?.trim();
+  const code = listing?.code?.trim();
+  if (title && code) return `${code} · ${title}`;
+  return title || code || null;
 };
 
 const asNumber = (value: number | string | null) => {
@@ -60,6 +70,8 @@ export const mapFunnelCard = (row: CardRow): FunnelCardView => ({
   contactName: row.contacts?.full_name || row.title,
   contactPhone: row.contacts?.phone ?? null,
   channel: row.conversations?.channel ?? null,
+  listingId: row.listing_id ?? null,
+  listingTitle: listingTitleFromCard(row),
 });
 
 const ensureDefaultStages = async (supabase: FunnelSupabase, funnelId: number) => {
@@ -167,6 +179,8 @@ export const loadFunnelBoard = async (
   const stages = (stageRows ?? []) as StageRow[];
   const stageIds = stages.map((stage) => stage.id);
 
+  const cardSelectWithListing =
+    "id, stage_id, contact_id, conversation_id, title, value_amount, currency, owner_user_id, position, updated_at, listing_id, contacts(full_name, phone), conversations(channel), listings(title, code)";
   const cardSelectWithCurrency =
     "id, stage_id, contact_id, conversation_id, title, value_amount, currency, owner_user_id, position, updated_at, contacts(full_name, phone), conversations(channel)";
   const cardSelect =
@@ -175,14 +189,35 @@ export const loadFunnelBoard = async (
   let cardRows: unknown[] | null = [];
   let cardsError: { message?: string } | null = null;
   if (stageIds.length) {
-    const withCurrency = await supabase
+    const withListing = await supabase
       .from("funnel_cards")
-      .select(cardSelectWithCurrency)
+      .select(cardSelectWithListing)
       .eq("organization_id", organizationId)
       .eq("funnel_id", funnel.id)
       .order("position", { ascending: true })
       .order("id", { ascending: true });
-    if (withCurrency.error) {
+    if (withListing.error && /listing/i.test(withListing.error.message)) {
+      const withCurrency = await supabase
+        .from("funnel_cards")
+        .select(cardSelectWithCurrency)
+        .eq("organization_id", organizationId)
+        .eq("funnel_id", funnel.id)
+        .order("position", { ascending: true })
+        .order("id", { ascending: true });
+      if (withCurrency.error) {
+        const fallback = await supabase
+          .from("funnel_cards")
+          .select(cardSelect)
+          .eq("organization_id", organizationId)
+          .eq("funnel_id", funnel.id)
+          .order("position", { ascending: true })
+          .order("id", { ascending: true });
+        cardRows = fallback.data;
+        cardsError = fallback.error;
+      } else {
+        cardRows = withCurrency.data;
+      }
+    } else if (withListing.error) {
       const fallback = await supabase
         .from("funnel_cards")
         .select(cardSelect)
@@ -193,7 +228,7 @@ export const loadFunnelBoard = async (
       cardRows = fallback.data;
       cardsError = fallback.error;
     } else {
-      cardRows = withCurrency.data;
+      cardRows = withListing.data;
     }
   }
 

@@ -14,7 +14,7 @@ export default async function OnboardingSetupPage() {
 
   const supabase = await createSupabaseServerClient();
   const modules = await loadOrganizationModules(supabase, membership.organizationId);
-  const [{ data: instagram }, { data: messenger }, { count: productsCount }] = await Promise.all([
+  const [{ data: instagram }, { data: messenger }, { count: productsCount }, { count: listingsCountRaw }] = await Promise.all([
     supabase
       .from("instagram_connections")
       .select("id")
@@ -32,8 +32,13 @@ export default async function OnboardingSetupPage() {
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("organization_id", membership.organizationId),
+    supabase
+      .from("listings")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", membership.organizationId),
   ]);
 
+  const listingsCount = listingsCountRaw ?? 0;
   let catalogCount = productsCount ?? 0;
   if (catalogCount === 0) {
     try {
@@ -44,8 +49,9 @@ export default async function OnboardingSetupPage() {
   }
 
   const steps = [
-    { done: Boolean(modules.orders || modules.catalog || modules.funnels || modules.calendar), title: "Módulos", href: "/settings", hint: "Activa pedidos, catálogo, embudos o calendario." },
+    { done: Boolean(modules.orders || modules.catalog || modules.funnels || modules.calendar || modules.listings), title: "Módulos", href: "/settings", hint: "Activa pedidos, catálogo, inmuebles, embudos o calendario." },
     { done: !modules.catalog || catalogCount > 0, title: "Catálogo", href: "/inventory", hint: "Carga productos o importa un CSV." },
+    { done: !modules.listings || listingsCount > 0, title: "Inmuebles", href: "/listings", hint: "Carga fichas de propiedades para visitas y chat." },
     { done: true, title: "Agente IA", href: "/settings#agent-ia", hint: "Revisa el prompt. El horario de oficina está aparte: la IA atiende 24/7." },
     { done: Boolean(instagram || messenger), title: "Canal Meta", href: "/settings", hint: "Conecta Instagram, Messenger o WhatsApp." },
   ];
@@ -56,7 +62,7 @@ export default async function OnboardingSetupPage() {
         <CardHeader>
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">Onboarding</p>
           <CardTitle>Configura {membership.organizationName}</CardTitle>
-          <CardDescription>Cuatro pasos para dejar el CRM listo. Puedes saltarlos y volver después.</CardDescription>
+          <CardDescription>Pasos para dejar el CRM listo. Puedes saltarlos y volver después.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <ol className="space-y-3">

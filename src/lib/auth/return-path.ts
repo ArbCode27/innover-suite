@@ -7,6 +7,7 @@ const SAFE_RETURN_PREFIXES = [
   "/inventory",
   "/funnels",
   "/calendar",
+  "/listings",
   "/contacts",
   "/onboarding",
   "/print",

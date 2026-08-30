@@ -1,5 +1,7 @@
 import { ModuleShell } from "@/components/suite/module-shell";
 import { loadFunnelBoard } from "@/lib/funnels/board";
+import { loadListingOptions } from "@/lib/listings/board";
+import type { ListingOption } from "@/lib/listings/types";
 import { requireSuiteModule } from "@/lib/modules/guard";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { FunnelBoard } from "./funnel-board";
@@ -7,7 +9,7 @@ import type { FunnelContactOption } from "./types";
 import { loadOrganizationCurrencies } from "@/lib/organizations/currencies";
 
 export default async function FunnelsPage() {
-  const { membership } = await requireSuiteModule("funnels");
+  const { membership, modules } = await requireSuiteModule("funnels");
 
   const supabase = await createSupabaseServerClient();
   const board = await loadFunnelBoard(supabase, membership.organizationId);
@@ -29,13 +31,21 @@ export default async function FunnelsPage() {
     fullName: (row.full_name as string) || "Contacto sin nombre",
   }));
 
+  const listings: ListingOption[] = modules.listings
+    ? await loadListingOptions(supabase, membership.organizationId)
+    : [];
+
   return (
     <ModuleShell
       title="Embudo de ventas"
-      description="Arrastra cada contacto entre etapas para avanzar el pipeline."
+      description={
+        modules.listings
+          ? "Arrastra cada contacto entre etapas. Etapas típicas para inmobiliaria: Consulta, Visita, Negociación, Reserva, Cierre. No se migran etapas existentes."
+          : "Arrastra cada contacto entre etapas para avanzar el pipeline."
+      }
       eyebrow={board.name}
     >
-      <FunnelBoard initialBoard={board} contacts={contacts} currencies={currencies} />
+      <FunnelBoard initialBoard={board} contacts={contacts} listings={listings} currencies={currencies} />
     </ModuleShell>
   );
 }

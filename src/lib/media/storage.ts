@@ -1,6 +1,7 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   KNOWLEDGE_IMAGES_BUCKET,
+  LISTING_IMAGES_BUCKET,
   MESSAGE_ATTACHMENTS_BUCKET,
   PRODUCT_IMAGES_BUCKET,
 } from "@/lib/media/types";
@@ -15,6 +16,13 @@ export const buildKnowledgeImagePath = (params: { organizationId: number; fileNa
 
 export const buildProductImagePath = (params: { organizationId: number; fileName: string }) =>
   orgImagePath(params.organizationId, params.fileName);
+
+export const buildListingImagePath = (params: {
+  organizationId: number;
+  listingId: number;
+  fileName: string;
+}) =>
+  `org/${params.organizationId}/listings/${params.listingId}/${crypto.randomUUID()}-${safeFileName(params.fileName)}`;
 
 export const buildMessageStoragePath = (params: {
   organizationId: number;
@@ -71,6 +79,13 @@ export const removeStoredMedia = async (params: { bucket: string; path: string; 
 export const removeProductImage = async (path: string) =>
   removeStoredMedia({
     bucket: PRODUCT_IMAGES_BUCKET,
+    path,
+    fallbackBuckets: [MESSAGE_ATTACHMENTS_BUCKET],
+  });
+
+export const removeListingImage = async (path: string) =>
+  removeStoredMedia({
+    bucket: LISTING_IMAGES_BUCKET,
     path,
     fallbackBuckets: [MESSAGE_ATTACHMENTS_BUCKET],
   });

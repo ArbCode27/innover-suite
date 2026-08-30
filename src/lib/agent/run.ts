@@ -29,6 +29,10 @@ import {
   formatCommerceContext,
   loadAgentCommerceSnapshot,
 } from "@/lib/commerce/agent";
+import {
+  formatListingsContext,
+  loadAgentListingsSnapshot,
+} from "@/lib/listings/agent";
 import { loadAgentFunnelSnapshot } from "@/lib/funnels/agent";
 import {
   escalateConversationToHuman,
@@ -359,6 +363,7 @@ const buildSystemInstruction = (params: {
   stages: Array<{ id: number; name: string }>;
   upcomingAppointments: string[];
   commerceContext: string | null;
+  listingsContext: string | null;
   knowledgeContext: string | null;
   advisorsAvailable: boolean;
   closedMessage: string;
@@ -373,6 +378,7 @@ const buildSystemInstruction = (params: {
 ${params.commerceContext}
 - Confirmación de pedido: resume el ticket (ítems, IVA, envío y total) y espera un sí o CONFIRMAR antes de create_order.`
     : "";
+  const listingsBlock = params.listingsContext ? `\n${params.listingsContext}` : "";
   const knowledgeBlock = params.knowledgeContext ? `\n${params.knowledgeContext}` : "";
 
   return `${AGENT_GUARDRAILS}
@@ -394,7 +400,7 @@ ${params.advisorsAvailable ? "" : `- Si piden un asesor, NO uses handoff_to_huma
 - Etapas disponibles:
 ${stageList}
 - Próximas citas del contacto:
-${appointments}${commerceBlock}${knowledgeBlock}`;
+${appointments}${commerceBlock}${listingsBlock}${knowledgeBlock}`;
 };
 
 const handleUnrecoverableTurn = async (params: {
@@ -643,6 +649,19 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
       }
     }
 
+    let listingsContext: string | null = null;
+    if (modules.listings) {
+      try {
+        const listings = await loadAgentListingsSnapshot(job.organizationId);
+        listingsContext = formatListingsContext(listings);
+      } catch (error) {
+        logMetaWebhook("warn", "agent.listings_unavailable", {
+          organizationId: job.organizationId,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
     let knowledgeContext: string | null = null;
     try {
       const articles = await loadKnowledgeArticles(job.organizationId, true);
@@ -678,6 +697,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
         (row) => `${row.title}: ${formatTime(row.starts_at as string)} – ${formatTime(row.ends_at as string)}`,
       ),
       commerceContext,
+      listingsContext,
       knowledgeContext,
       advisorsAvailable,
       closedMessage: settings.closedMessage,

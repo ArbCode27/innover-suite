@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AppointmentPurpose } from "@/lib/calendar/constants";
-import { APPOINTMENT_PURPOSES, CALENDAR_TIME_ZONE } from "@/lib/calendar/constants";
+import { APPOINTMENT_PURPOSES, CALENDAR_TIME_ZONE, isVisitPurpose } from "@/lib/calendar/constants";
 import { toZonedIso } from "@/lib/calendar/range";
 import type { AttendeeResponse } from "@/lib/calendar/types";
 import { getOrganizationGoogleCalendarSession } from "@/lib/integrations/google-calendar-credentials";
@@ -29,6 +29,7 @@ export const createChatAppointment = async (params: {
   purpose: AppointmentPurpose;
   notes?: string;
   createMeet: boolean;
+  listingId?: number;
 }) => {
   const endTime = params.endTime || addMinutesToTime(params.startTime, 30);
   const startsAt = toZonedIso(params.date, params.startTime);
@@ -58,17 +59,35 @@ export const createChatAppointment = async (params: {
     return { ok: false as const, error: "El contacto no existe en esta organización." };
   }
 
+  let listingTitle: string | null = null;
+  if (params.listingId) {
+    const { data: listing } = await admin
+      .from("listings")
+      .select("id, title, code, status")
+      .eq("id", params.listingId)
+      .eq("organization_id", params.organizationId)
+      .maybeSingle();
+    if (!listing?.id) {
+      return { ok: false as const, error: "Ese inmueble no existe. Usa un listingId del contexto o de search_listings." };
+    }
+    listingTitle = `${listing.code} · ${listing.title}`;
+  }
+
+  const title = listingTitle
+    ? `${isVisitPurpose(params.purpose) ? "Visita" : "Cita"}: ${listingTitle}`
+    : `Cita con ${contact.full_name || "cliente"}`;
+  const notes = [params.notes?.trim(), listingTitle ? `Inmueble: ${listingTitle}` : null].filter(Boolean).join("\n") || undefined;
+
   const session = await getOrganizationGoogleCalendarSession(params.organizationId);
   if (!session) {
     return { ok: false as const, error: "Google Calendar no está conectado. Un asesor debe vincularlo en Ajustes." };
   }
 
-  const title = `Cita con ${contact.full_name || "cliente"}`;
   const googleEvent = await createGoogleCalendarEvent({
     accessToken: session.accessToken,
     calendarId: session.calendarId,
     title,
-    description: params.notes,
+    description: notes,
     startsAt,
     endsAt,
     timeZone: CALENDAR_TIME_ZONE,
@@ -107,15 +126,24 @@ export const createChatAppointment = async (params: {
     status: "pending",
     source: "chat",
     purpose: params.purpose,
+    listing_id: params.listingId ?? null,
+    visit_status: params.listingId || isVisitPurpose(params.purpose) ? "pending" : null,
     meeting_url: meetingUrl,
     attendees,
-    notes: params.notes || null,
+    notes: notes || null,
   };
 
   let { data: inserted, error: insertError } = await admin.from("appointments").insert(payload).select("id").single();
 
+  if (insertError && /listing_id|visit_status/i.test(insertError.message)) {
+    const { listing_id: _listingId, visit_status: _visitStatus, ...withoutListing } = payload;
+    const listingFallback = await admin.from("appointments").insert(withoutListing).select("id").single();
+    inserted = listingFallback.data;
+    insertError = listingFallback.error;
+  }
+
   if (insertError?.message.toLowerCase().includes("purpose")) {
-    const { purpose: _purpose, ...withoutPurpose } = payload;
+    const { purpose: _purpose, listing_id: _listingId, visit_status: _visitStatus, ...withoutPurpose } = payload;
     const fallback = await admin.from("appointments").insert(withoutPurpose).select("id").single();
     inserted = fallback.data;
     insertError = fallback.error;

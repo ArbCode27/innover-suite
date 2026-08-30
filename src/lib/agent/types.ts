@@ -32,4 +32,6 @@ export type AgentToolName =
   | "handoff_to_human"
   | "create_order"
   | "cancel_order"
-  | "send_image";
+  | "send_image"
+  | "search_listings"
+  | "send_listing";

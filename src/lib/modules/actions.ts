@@ -13,6 +13,7 @@ const saveModulesSchema = z.object({
   catalog: z.boolean(),
   orders: z.boolean(),
   kitchen: z.boolean(),
+  listings: z.boolean(),
 });
 
 type ActionResult = {
@@ -40,7 +41,10 @@ export const saveOrganizationModulesAction = async (rawValues: unknown): Promise
   );
 
   if (error) {
-    return { error: "No se pudieron guardar los módulos. ¿Corriste el SQL de commerce-upgrade?" };
+    return {
+      error:
+        "No se pudieron guardar los módulos. ¿Corriste el SQL de supabase/commerce-upgrade.sql y supabase/listings-upgrade.sql?",
+    };
   }
 
   revalidatePath("/settings");
@@ -48,6 +52,7 @@ export const saveOrganizationModulesAction = async (rawValues: unknown): Promise
   revalidatePath("/orders");
   revalidatePath("/funnels");
   revalidatePath("/calendar");
+  revalidatePath("/listings");
   for (const key of MODULE_KEYS) {
     revalidatePath(`/${key}`);
   }

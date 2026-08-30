@@ -13,6 +13,7 @@ import {
   Package,
   Settings,
   Sparkles,
+  Building2,
 } from "lucide-react";
 import { signOut } from "@/lib/auth/actions";
 import { loadCachedOrganizationModules } from "@/lib/modules/settings";
@@ -96,6 +97,13 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
       icon: CalendarDays,
       iconKey: "calendar",
       show: Boolean(modules.calendar && canUseInbox(membership)),
+    },
+    {
+      href: "/listings",
+      label: "Inmuebles",
+      icon: Building2,
+      iconKey: "listings",
+      show: Boolean(modules.listings && canUseInbox(membership)),
     },
     {
       href: "/contacts",

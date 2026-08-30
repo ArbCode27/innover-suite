@@ -3,8 +3,8 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { APPOINTMENT_PURPOSES, CALENDAR_TIME_ZONE } from "@/lib/calendar/constants";
-import type { AttendeeResponse, CalendarEventView } from "@/lib/calendar/types";
+import { APPOINTMENT_PURPOSES, CALENDAR_TIME_ZONE, VISIT_STATUSES, isVisitPurpose } from "@/lib/calendar/constants";
+import type { AttendeeResponse, CalendarEventView, VisitStatus } from "@/lib/calendar/types";
 import { toZonedIso } from "@/lib/calendar/range";
 import { getOrganizationGoogleCalendarSession } from "@/lib/integrations/google-calendar-credentials";
 import {
@@ -30,6 +30,7 @@ const createAppointmentSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
   createMeet: z.boolean(),
   purpose: z.enum(APPOINTMENT_PURPOSES).default("consulta"),
+  listingId: z.number().int().positive().optional(),
 });
 
 const rescheduleAppointmentSchema = z.object({
@@ -37,6 +38,12 @@ const rescheduleAppointmentSchema = z.object({
   googleEventId: z.string().trim().min(1).nullable(),
   startsAt: isoDateTime,
   endsAt: isoDateTime,
+});
+
+const updateVisitSchema = z.object({
+  appointmentId: z.number().int().positive(),
+  visitStatus: z.enum(VISIT_STATUSES),
+  notes: z.string().trim().max(1000).optional(),
 });
 
 type ActionResult<T = undefined> = {
@@ -94,6 +101,22 @@ export const createCalendarAppointmentAction = async (
     return { error: "El contacto no existe o no pertenece a tu organización." };
   }
 
+  let listingId: number | null = null;
+  let listingTitle: string | null = null;
+  if (parsed.data.listingId) {
+    const { data: listing } = await supabase
+      .from("listings")
+      .select("id, title, code")
+      .eq("id", parsed.data.listingId)
+      .eq("organization_id", access.membership.organizationId)
+      .maybeSingle();
+    if (!listing?.id) {
+      return { error: "El inmueble no existe o no pertenece a tu organización." };
+    }
+    listingId = listing.id as number;
+    listingTitle = `${listing.code} · ${listing.title}`;
+  }
+
   const session = await getOrganizationGoogleCalendarSession(access.membership.organizationId);
   if (!session) {
     return { error: "Conecta Google Calendar en Ajustes antes de crear citas." };
@@ -146,6 +169,8 @@ export const createCalendarAppointmentAction = async (
     status: "pending",
     source: "manual",
     purpose: parsed.data.purpose,
+    listing_id: listingId,
+    visit_status: listingId || isVisitPurpose(parsed.data.purpose) ? "pending" : null,
     meeting_url: meetingUrl,
     attendees,
     notes: parsed.data.notes || null,
@@ -155,12 +180,27 @@ export const createCalendarAppointmentAction = async (
     .from("appointments")
     .insert(appointmentPayload)
     .select(
-      "id, contact_id, external_calendar_event_id, title, starts_at, ends_at, status, source, purpose, meeting_url, attendees, notes",
+      "id, contact_id, external_calendar_event_id, title, starts_at, ends_at, status, source, purpose, listing_id, visit_status, meeting_url, attendees, notes",
     )
     .single();
 
+  if (insertError && /listing_id|visit_status/i.test(insertError.message)) {
+    const { listing_id: _listingId, visit_status: _visitStatus, ...payloadWithoutListing } = appointmentPayload;
+    const listingFallback = await supabase
+      .from("appointments")
+      .insert(payloadWithoutListing)
+      .select(
+        "id, contact_id, external_calendar_event_id, title, starts_at, ends_at, status, source, purpose, meeting_url, attendees, notes",
+      )
+      .single();
+    inserted = listingFallback.data
+      ? { ...listingFallback.data, listing_id: null, visit_status: null }
+      : null;
+    insertError = listingFallback.error;
+  }
+
   if (insertError?.message.toLowerCase().includes("purpose")) {
-    const { purpose: _purpose, ...payloadWithoutPurpose } = appointmentPayload;
+    const { purpose: _purpose, listing_id: _listingId, visit_status: _visitStatus, ...payloadWithoutPurpose } = appointmentPayload;
     const fallbackInsert = await supabase
       .from("appointments")
       .insert(payloadWithoutPurpose)
@@ -169,7 +209,7 @@ export const createCalendarAppointmentAction = async (
       )
       .single();
     inserted = fallbackInsert.data
-      ? { ...fallbackInsert.data, purpose: parsed.data.purpose }
+      ? { ...fallbackInsert.data, purpose: parsed.data.purpose, listing_id: null, visit_status: null }
       : null;
     insertError = fallbackInsert.error;
   }
@@ -195,6 +235,9 @@ export const createCalendarAppointmentAction = async (
         status: "pending",
         source: "manual",
         purpose: parsed.data.purpose,
+        listingId: (inserted as { listing_id?: number | null }).listing_id ?? null,
+        listingTitle: (inserted as { listing_id?: number | null }).listing_id ? listingTitle : null,
+        visitStatus: (inserted as { visit_status?: VisitStatus | null }).visit_status ?? null,
         notes: inserted.notes,
         meetingUrl: inserted.meeting_url,
         contactId: inserted.contact_id,
@@ -263,4 +306,40 @@ export const rescheduleCalendarAppointmentAction = async (rawValues: unknown): P
 
   invalidateGoogleCalendarEventsCache();
   return { success: "Cita actualizada correctamente" };
+};
+
+export const updateAppointmentVisitAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = updateVisitSchema.safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: "El resultado de la visita no es válido." };
+  }
+
+  const access = await requireAgentMembership();
+  if ("error" in access) {
+    return { error: access.error };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const patch: Record<string, unknown> = {
+    visit_status: parsed.data.visitStatus,
+  };
+  if (parsed.data.notes !== undefined) {
+    patch.notes = parsed.data.notes.trim() || null;
+  }
+
+  const { error } = await supabase
+    .from("appointments")
+    .update(patch)
+    .eq("id", parsed.data.appointmentId)
+    .eq("organization_id", access.membership.organizationId);
+
+  if (error) {
+    if (/visit_status/i.test(error.message)) {
+      return { error: "No se pudo guardar el resultado. ¿Corriste el SQL de supabase/listings-upgrade.sql?" };
+    }
+    return { error: error.message || "No se pudo guardar el resultado de la visita." };
+  }
+
+  revalidatePath("/calendar");
+  return { success: "Visita actualizada." };
 };

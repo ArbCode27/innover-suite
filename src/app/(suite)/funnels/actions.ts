@@ -18,6 +18,7 @@ const createCardSchema = z.object({
   valueAmount: z.number().nonnegative().max(1_000_000_000).optional(),
   currency: z.string().trim().length(3).optional(),
   conversationId: z.number().int().positive().optional(),
+  listingId: z.number().int().positive().optional(),
 });
 
 const moveCardSchema = z.object({
@@ -141,6 +142,23 @@ export const createFunnelCardAction = async (
   const currency = parsed.data.valueAmount
     ? resolveOrganizationCurrency(parsed.data.currency, orgCurrencies)
     : null;
+
+  let listingId: number | null = null;
+  let listingTitle: string | null = null;
+  if (parsed.data.listingId) {
+    const { data: listing } = await supabase
+      .from("listings")
+      .select("id, title, code")
+      .eq("id", parsed.data.listingId)
+      .eq("organization_id", access.membership.organizationId)
+      .maybeSingle();
+    if (!listing?.id) {
+      return { error: "El inmueble no existe o no pertenece a tu organización." };
+    }
+    listingId = listing.id as number;
+    listingTitle = `${listing.code} · ${listing.title}`;
+  }
+
   const insertPayload = {
     organization_id: access.membership.organizationId,
     funnel_id: stageContext.funnelId,
@@ -152,14 +170,28 @@ export const createFunnelCardAction = async (
     currency,
     owner_user_id: user.id,
     position,
+    listing_id: listingId,
   };
+  const cardSelectWithListing =
+    "id, stage_id, contact_id, conversation_id, title, value_amount, currency, owner_user_id, position, updated_at, listing_id, contacts(full_name, phone), conversations(channel), listings(title, code)";
   const cardSelect =
     "id, stage_id, contact_id, conversation_id, title, value_amount, currency, owner_user_id, position, updated_at, contacts(full_name, phone), conversations(channel)";
   let { data: inserted, error: insertError } = await supabase
     .from("funnel_cards")
     .insert(insertPayload)
-    .select(cardSelect)
+    .select(cardSelectWithListing)
     .single();
+
+  if (insertError && /listing/i.test(insertError.message)) {
+    const { listing_id: _listingId, ...payloadWithoutListing } = insertPayload;
+    const listingFallback = await supabase.from("funnel_cards").insert(payloadWithoutListing).select(cardSelect).single();
+    inserted = listingFallback.data
+      ? { ...listingFallback.data, listing_id: null, listings: [] }
+      : listingFallback.data;
+    insertError = listingFallback.error;
+    listingId = null;
+    listingTitle = null;
+  }
 
   if (insertError) {
     if (isUniqueViolation(insertError)) {
@@ -183,7 +215,7 @@ export const createFunnelCardAction = async (
       )
       .single();
     inserted = fallback.data
-      ? { ...fallback.data, currency: currency ?? null }
+      ? { ...fallback.data, currency: currency ?? null, listing_id: null, listings: [] }
       : fallback.data;
     insertError = fallback.error;
   }
@@ -214,6 +246,8 @@ export const createFunnelCardAction = async (
         contactName: (inserted.contacts as { full_name?: string } | null)?.full_name || inserted.title,
         contactPhone: (inserted.contacts as { phone?: string | null } | null)?.phone ?? null,
         channel: (inserted.conversations as { channel?: FunnelCardView["channel"] } | null)?.channel ?? null,
+        listingId: ((inserted as { listing_id?: number | null }).listing_id as number | null) ?? listingId,
+        listingTitle: listingTitle,
       },
     },
   };

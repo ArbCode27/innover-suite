@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { LayoutGrid, Loader2, Save, Store, UtensilsCrossed, Briefcase } from "lucide-react";
+import { LayoutGrid, Loader2, Save, Store, UtensilsCrossed, Briefcase, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { toastActionError } from "@/lib/auth/action-toast";
 import { saveOrganizationModulesAction } from "@/lib/modules/actions";
@@ -25,6 +25,7 @@ const TEMPLATE_ICONS = {
   restaurant: UtensilsCrossed,
   retail: Store,
   services: Briefcase,
+  realestate: Building2,
 } as const;
 
 export const ModulesSettingsForm = ({ canManageOrganization, modules }: ModulesSettingsFormProps) => {
@@ -75,7 +76,7 @@ export const ModulesSettingsForm = ({ canManageOrganization, modules }: ModulesS
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {BUSINESS_TEMPLATES.map((template) => {
             const Icon = TEMPLATE_ICONS[template.id];
             return (

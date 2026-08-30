@@ -1,7 +1,7 @@
 import type { AppointmentStatus } from "@/types/domain";
-import type { AppointmentPurpose } from "@/lib/calendar/constants";
+import type { AppointmentPurpose, VisitStatus } from "@/lib/calendar/constants";
 
-export type { AppointmentPurpose, CalendarViewMode } from "@/lib/calendar/constants";
+export type { AppointmentPurpose, CalendarViewMode, VisitStatus } from "@/lib/calendar/constants";
 
 export type AppointmentSource = "chat" | "manual" | "google";
 export type AttendeeResponse = "pending" | "accepted" | "declined" | "tentative";
@@ -31,6 +31,9 @@ export type CalendarEventView = {
   notes: string | null;
   meetingUrl: string | null;
   purpose: AppointmentPurpose;
+  listingId: number | null;
+  listingTitle: string | null;
+  visitStatus: VisitStatus | null;
   contactId: number | null;
   contactName: string | null;
   attendees: CalendarAttendee[];

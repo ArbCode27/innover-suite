@@ -12,6 +12,7 @@ import {
   KanbanSquare,
   Package,
   Settings,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ const NAV_ICONS = {
   inventory: Package,
   funnels: KanbanSquare,
   calendar: CalendarDays,
+  listings: Building2,
   contacts: Contact,
   settings: Settings,
 } as const;

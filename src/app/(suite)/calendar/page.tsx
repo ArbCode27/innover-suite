@@ -6,6 +6,8 @@ import { ModuleShell } from "@/components/suite/module-shell";
 import { Button } from "@/components/ui/button";
 import { loadCalendarAgenda } from "@/lib/calendar/board";
 import { parseAnchorDate, parseViewMode } from "@/lib/calendar/range";
+import { loadListingOptions } from "@/lib/listings/board";
+import type { ListingOption } from "@/lib/listings/types";
 import { requireSuiteModule } from "@/lib/modules/guard";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -14,7 +16,7 @@ type CalendarPageProps = {
 };
 
 export default async function CalendarPage({ searchParams }: CalendarPageProps) {
-  const { membership } = await requireSuiteModule("calendar");
+  const { membership, modules } = await requireSuiteModule("calendar");
 
   const params = await searchParams;
   const view = parseViewMode(params.view);
@@ -39,6 +41,10 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
     email: (row.email as string | null) ?? null,
   }));
 
+  const listings: ListingOption[] = modules.listings
+    ? await loadListingOptions(supabase, membership.organizationId)
+    : [];
+
   return (
     <ModuleShell
       title="Calendario de citas"
@@ -54,7 +60,14 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
         </Button>
       }
     >
-      <CalendarBoard key={`${view}-${anchorDate}`} agenda={agenda} contacts={contacts} view={view} anchorDate={anchorDate} />
+      <CalendarBoard
+        key={`${view}-${anchorDate}`}
+        agenda={agenda}
+        contacts={contacts}
+        listings={listings}
+        view={view}
+        anchorDate={anchorDate}
+      />
       {agenda.connected ? null : (
         <EmptyMetaState
           title="Conecta Google Calendar para agendar"

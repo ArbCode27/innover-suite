@@ -1,6 +1,8 @@
 import { createChatAppointment } from "@/lib/calendar/agent";
 import { cancelCommerceOrderForAgent, createCommerceOrderForAgent } from "@/lib/commerce/agent";
 import { formatMoney, isFulfillmentType } from "@/lib/commerce/types";
+import { formatListingForAgent, loadListingForAgent, searchListingsForAgent } from "@/lib/listings/agent";
+import { LISTING_STATUS_LABELS } from "@/lib/listings/types";
 import { moveContactToFunnelStage } from "@/lib/funnels/agent";
 import { insertSystemMessage } from "@/lib/inbox/agent-outbound";
 import type { OrganizationModules } from "@/lib/modules/constants";
@@ -14,7 +16,9 @@ import {
   createOrderArgsSchema,
   handoffToHumanArgsSchema,
   moveContactToStageArgsSchema,
+  searchListingsArgsSchema,
   sendImageArgsSchema,
+  sendListingArgsSchema,
 } from "@/lib/agent/tools";
 import { formatTime } from "@/lib/calendar/range";
 
@@ -95,6 +99,7 @@ export const executeAgentTool = async (
       purpose: parsed.data.purpose,
       notes: parsed.data.notes,
       createMeet: parsed.data.createMeet ?? true,
+      listingId: parsed.data.listingId,
     });
 
     if (!created.ok) {
@@ -378,6 +383,87 @@ export const executeAgentTool = async (
       result,
       image: { mediaUrl: imageUrl, caption },
     };
+  }
+
+  if (name === "search_listings") {
+    if (!context.modules.listings) {
+      const result = { error: "Los inmuebles no están habilitados para este negocio." };
+      await logToolRun(context, name, rawArgs, result, false);
+      return { ok: false, result };
+    }
+
+    const parsed = searchListingsArgsSchema.safeParse(rawArgs);
+    if (!parsed.success) {
+      const result = { error: parsed.error.issues[0]?.message ?? "Argumentos inválidos para buscar inmuebles." };
+      await logToolRun(context, name, rawArgs, result, false);
+      return { ok: false, result };
+    }
+
+    const found = await searchListingsForAgent(context.organizationId, parsed.data);
+    if (!found.ok) {
+      await logToolRun(context, name, parsed.data, { error: found.error }, false);
+      return { ok: false, result: { error: found.error } };
+    }
+
+    const result = {
+      ok: true,
+      count: found.listings.length,
+      listings: found.listings.map(formatListingForAgent),
+    };
+    await logToolRun(context, name, parsed.data, result, true);
+    return { ok: true, result };
+  }
+
+  if (name === "send_listing") {
+    if (!context.modules.listings) {
+      const result = { error: "Los inmuebles no están habilitados para este negocio." };
+      await logToolRun(context, name, rawArgs, result, false);
+      return { ok: false, result };
+    }
+
+    const parsed = sendListingArgsSchema.safeParse({
+      listingId: rawArgs.listingId ?? rawArgs.listing_id,
+      caption: rawArgs.caption,
+    });
+    if (!parsed.success) {
+      const result = { error: parsed.error.issues[0]?.message ?? "Indica un listingId válido." };
+      await logToolRun(context, name, rawArgs, result, false);
+      return { ok: false, result };
+    }
+
+    if (context.imagesSentThisTurn.count >= AGENT_MAX_IMAGES_PER_TURN) {
+      const result = { error: "Ya se envió una imagen en esta respuesta. No mandes otra." };
+      await logToolRun(context, name, parsed.data, result, false);
+      return { ok: false, result };
+    }
+
+    const listing = await loadListingForAgent(context.organizationId, parsed.data.listingId);
+    if (!listing) {
+      const result = { error: "Ese inmueble no existe. Usa search_listings o un listingId del contexto." };
+      await logToolRun(context, name, parsed.data, result, false);
+      return { ok: false, result };
+    }
+
+    const details = formatListingForAgent(listing);
+    const caption = parsed.data.caption?.trim() || null;
+    const result = {
+      ok: true,
+      ...details,
+      statusLabel: LISTING_STATUS_LABELS[listing.status],
+      queuedPhoto: Boolean(listing.coverUrl),
+    };
+    await logToolRun(context, name, parsed.data, result, true);
+
+    if (listing.coverUrl) {
+      context.imagesSentThisTurn.count += 1;
+      return {
+        ok: true,
+        result,
+        image: { mediaUrl: listing.coverUrl, caption },
+      };
+    }
+
+    return { ok: true, result };
   }
 
   const result = { error: `Herramienta desconocida: ${name}` };

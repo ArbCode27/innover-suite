@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { toastActionError } from "@/lib/auth/action-toast";
-import { createCalendarAppointmentAction, rescheduleCalendarAppointmentAction } from "@/lib/calendar/actions";
+import { createCalendarAppointmentAction, rescheduleCalendarAppointmentAction, updateAppointmentVisitAction } from "@/lib/calendar/actions";
 import { CalendarEventCard } from "./calendar-event-card";
 import type {
   AppointmentPurpose,
@@ -51,7 +51,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { APPOINTMENT_PURPOSE_LABELS, APPOINTMENT_PURPOSES } from "@/lib/calendar/constants";
+import { APPOINTMENT_PURPOSE_LABELS, APPOINTMENT_PURPOSES, VISIT_STATUS_LABELS, VISIT_STATUSES, isVisitPurpose, type VisitStatus } from "@/lib/calendar/constants";
+import type { ListingOption } from "@/lib/listings/types";
 import {
   dateAndMinutesToIso,
   formatDayHeading,
@@ -65,6 +66,7 @@ import {
 type CalendarBoardProps = {
   agenda: CalendarAgendaView;
   contacts: CalendarContactOption[];
+  listings: ListingOption[];
   view: CalendarViewMode;
   anchorDate: string;
 };
@@ -139,7 +141,7 @@ const DayColumn = ({
   );
 };
 
-export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBoardProps) => {
+export const CalendarBoard = ({ agenda, contacts, listings, view, anchorDate }: CalendarBoardProps) => {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const rangeKey = `${agenda.rangeStart}:${agenda.rangeEnd}`;
   const [syncedRange, setSyncedRange] = useState(rangeKey);
@@ -154,10 +156,13 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
   const [date, setDate] = useState(defaults.date);
   const [startTime, setStartTime] = useState(defaults.startTime);
   const [endTime, setEndTime] = useState(defaults.endTime);
-  const [purpose, setPurpose] = useState<AppointmentPurpose>("consulta");
+  const [purpose, setPurpose] = useState<AppointmentPurpose>(listings.length ? "visita" : "consulta");
+  const [listingId, setListingId] = useState("");
   const [notes, setNotes] = useState("");
   const [createMeet, setCreateMeet] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
+  const [visitStatus, setVisitStatus] = useState<VisitStatus>("pending");
+  const [visitNotes, setVisitNotes] = useState("");
 
   if (syncedRange !== rangeKey) {
     setSyncedRange(rangeKey);
@@ -250,6 +255,7 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
         notes: notes.trim() || undefined,
         createMeet,
         purpose,
+        listingId: listingId ? Number(listingId) : undefined,
       });
 
       if (result.error || !result.data?.event) {
@@ -378,7 +384,15 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
                   <DayColumn key={`grid-${day}`} day={day} isToday={day === todayKey}>
                     {dayEvents.length ? (
                       dayEvents.map((event) => (
-                        <CalendarEventCard key={event.id} event={event} onOpen={setSelectedEvent} />
+                        <CalendarEventCard
+                          key={event.id}
+                          event={event}
+                          onOpen={(next) => {
+                            setSelectedEvent(next);
+                            setVisitStatus(next.visitStatus ?? "pending");
+                            setVisitNotes(next.notes ?? "");
+                          }}
+                        />
                       ))
                     ) : (
                       <p className="px-1 py-6 text-center text-xs text-muted-foreground">Sin citas</p>
@@ -438,6 +452,32 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
                 }))}
               />
             </div>
+            {listings.length ? (
+              <div className="space-y-2">
+                <Label htmlFor="calendar-listing">Inmueble</Label>
+                <AppSelect
+                  id="calendar-listing"
+                  aria-label="Inmueble"
+                  value={listingId}
+                  onValueChange={(value) => {
+                    setListingId(value);
+                    const selected = listings.find((item) => String(item.id) === value);
+                    if (selected && (purpose === "consulta" || purpose === "visita")) {
+                      setPurpose("visita");
+                      setTitle(`Visita: ${selected.code} · ${selected.title}`);
+                    }
+                  }}
+                  placeholder="Sin inmueble"
+                  options={[
+                    { value: "", label: "Sin inmueble" },
+                    ...listings.map((item) => ({
+                      value: String(item.id),
+                      label: `${item.code} · ${item.title}${item.city ? ` · ${item.city}` : ""}`,
+                    })),
+                  ]}
+                />
+              </div>
+            ) : null}
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-2 sm:col-span-1">
                 <Label htmlFor="calendar-date">Fecha</Label>
@@ -489,7 +529,16 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
               <div className="flex flex-wrap gap-2">
                 <Badge>{APPOINTMENT_PURPOSE_LABELS[selectedEvent.purpose]}</Badge>
                 <Badge variant="outline">{selectedEvent.status === "confirmed" ? "Confirmada" : "Pendiente"}</Badge>
+                {selectedEvent.visitStatus ? (
+                  <Badge variant="outline">{VISIT_STATUS_LABELS[selectedEvent.visitStatus]}</Badge>
+                ) : null}
               </div>
+              {selectedEvent.listingTitle ? (
+                <div className="rounded-xl border border-primary/15 p-3">
+                  <p className="text-xs text-muted-foreground">Inmueble</p>
+                  <p className="text-sm font-medium">{selectedEvent.listingTitle}</p>
+                </div>
+              ) : null}
               {selectedEvent.contactName ? (
                 <div className="flex items-center gap-3 rounded-xl border border-primary/15 p-3">
                   <Avatar size="sm">
@@ -502,6 +551,59 @@ export const CalendarBoard = ({ agenda, contacts, view, anchorDate }: CalendarBo
                 </div>
               ) : null}
               {selectedEvent.notes ? <p className="text-sm text-muted-foreground">{selectedEvent.notes}</p> : null}
+              {selectedEvent.appointmentId && (selectedEvent.listingId || isVisitPurpose(selectedEvent.purpose)) ? (
+                <div className="space-y-3 rounded-xl border border-primary/15 p-3">
+                  <p className="text-sm font-medium">Resultado de la visita</p>
+                  <AppSelect
+                    aria-label="Resultado de la visita"
+                    value={visitStatus}
+                    onValueChange={(value) => setVisitStatus(value as VisitStatus)}
+                    options={VISIT_STATUSES.map((item) => ({
+                      value: item,
+                      label: VISIT_STATUS_LABELS[item],
+                    }))}
+                  />
+                  <Input
+                    value={visitNotes}
+                    placeholder="Notas post-visita"
+                    onChange={(event) => setVisitNotes(event.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isPending}
+                    onClick={() => {
+                      const appointmentId = selectedEvent.appointmentId;
+                      if (!appointmentId) return;
+                      startTransition(async () => {
+                        const result = await updateAppointmentVisitAction({
+                          appointmentId,
+                          visitStatus,
+                          notes: visitNotes.trim() || undefined,
+                        });
+                        if (result.error) {
+                          toastActionError(result);
+                          return;
+                        }
+                        setLocalEvents((current) =>
+                          (current ?? agenda.events).map((item) =>
+                            item.id === selectedEvent.id
+                              ? { ...item, visitStatus, notes: visitNotes.trim() || item.notes }
+                              : item,
+                          ),
+                        );
+                        setSelectedEvent((current) =>
+                          current ? { ...current, visitStatus, notes: visitNotes.trim() || current.notes } : current,
+                        );
+                        toast.success(result.success ?? "Visita actualizada");
+                      });
+                    }}
+                  >
+                    {isPending ? <Loader2 className="animate-spin" /> : null}
+                    Guardar resultado
+                  </Button>
+                </div>
+              ) : null}
               <div>
                 <p className="mb-2 flex items-center gap-2 text-sm font-medium">
                   <UserRound className="size-4" />

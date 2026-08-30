@@ -2,6 +2,7 @@ import { z } from "zod";
 import { APPOINTMENT_PURPOSES, CALENDAR_TIME_ZONE } from "@/lib/calendar/constants";
 import type { AgentSettings } from "@/lib/agent/types";
 import { FULFILLMENT_TYPES } from "@/lib/commerce/types";
+import { LISTING_OPERATIONS, LISTING_STATUSES } from "@/lib/listings/types";
 import type { OrganizationModules } from "@/lib/modules/constants";
 
 export const createAppointmentArgsSchema = z.object({
@@ -12,6 +13,24 @@ export const createAppointmentArgsSchema = z.object({
   notes: z.string().trim().max(500).optional(),
   createMeet: z.boolean().optional(),
   confirmedByCustomer: z.boolean(),
+  listingId: z.preprocess(
+    (value) => (value === "" || value == null ? undefined : value),
+    z.coerce.number().int().positive().optional(),
+  ),
+});
+
+export const searchListingsArgsSchema = z.object({
+  query: z.string().trim().max(120).optional(),
+  operation: z.enum(LISTING_OPERATIONS).optional(),
+  city: z.string().trim().max(120).optional(),
+  bedrooms: z.coerce.number().int().nonnegative().max(20).optional(),
+  maxPrice: z.coerce.number().nonnegative().max(1_000_000_000).optional(),
+  status: z.enum(LISTING_STATUSES).optional(),
+});
+
+export const sendListingArgsSchema = z.object({
+  listingId: z.coerce.number().int().positive(),
+  caption: z.string().trim().max(400).optional(),
 });
 
 export const moveContactToStageArgsSchema = z.object({
@@ -116,6 +135,10 @@ export const buildAgentToolDeclarations = (
             type: "BOOLEAN",
             description: "true solo si el cliente confirmó explícitamente ese horario.",
           },
+          listingId: {
+            type: "INTEGER",
+            description: "ID del inmueble si la cita es una visita, tasación o firma. Sale de search_listings o del contexto.",
+          },
         },
         required: ["date", "startTime", "purpose", "confirmedByCustomer"],
       },
@@ -202,6 +225,48 @@ export const buildAgentToolDeclarations = (
           reason: { type: "STRING", description: "Por qué se cancela." },
         },
         required: ["orderId", "reason"],
+      },
+    });
+  }
+
+  if (modules?.listings) {
+    tools.push({
+      name: "search_listings",
+      description:
+        "Busca inmuebles del inventario interno. Úsala si el cliente pide zona, precio, habitaciones o un código. No inventes fichas que no salgan aquí.",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          query: { type: "STRING", description: "Texto libre: zona, barrio, código o título." },
+          operation: {
+            type: "STRING",
+            format: "enum",
+            enum: [...LISTING_OPERATIONS],
+            description: "sale, rent o both.",
+          },
+          city: { type: "STRING", description: "Ciudad o municipio." },
+          bedrooms: { type: "INTEGER", description: "Habitaciones mínimas." },
+          maxPrice: { type: "NUMBER", description: "Precio máximo en la moneda del inmueble." },
+          status: {
+            type: "STRING",
+            format: "enum",
+            enum: [...LISTING_STATUSES],
+            description: "Si omites, se buscan disponibles y reservados.",
+          },
+        },
+      },
+    });
+    tools.push({
+      name: "send_listing",
+      description:
+        "Envía la ficha de un inmueble y, si hay foto, una imagen. Máximo un inmueble y una foto por respuesta. Escribe también el mensaje en texto. No digas que está disponible si status no es available.",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          listingId: { type: "INTEGER", description: "ID del inmueble." },
+          caption: { type: "STRING", description: "Pie de foto corto opcional." },
+        },
+        required: ["listingId"],
       },
     });
   }

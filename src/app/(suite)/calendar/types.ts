@@ -8,4 +8,5 @@ export type {
   CalendarEventView,
   CalendarMetrics,
   CalendarViewMode,
+  VisitStatus,
 } from "@/lib/calendar/types";

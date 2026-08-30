@@ -78,6 +78,9 @@ export const CalendarEventCard = ({
         {event.contactName ? (
           <span className="truncate text-[11px] text-muted-foreground">{event.contactName}</span>
         ) : null}
+        {event.listingTitle ? (
+          <span className="truncate text-[11px] text-muted-foreground">{event.listingTitle}</span>
+        ) : null}
       </div>
     </article>
   );

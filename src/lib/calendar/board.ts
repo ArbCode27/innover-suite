@@ -8,7 +8,7 @@ import type {
   CalendarEventView,
   CalendarViewMode,
 } from "@/lib/calendar/types";
-import { inferAppointmentPurpose } from "@/lib/calendar/constants";
+import { inferAppointmentPurpose, isVisitStatus } from "@/lib/calendar/constants";
 import { getOrganizationGoogleCalendarSession } from "@/lib/integrations/google-calendar-credentials";
 import {
   listGoogleCalendarEvents,
@@ -32,6 +32,9 @@ type AppointmentRow = {
   attendees: unknown;
   notes: string | null;
   purpose: AppointmentPurpose | null;
+  listing_id: number | null;
+  visit_status: string | null;
+  listings?: { title?: string | null; code?: string | null } | { title?: string | null; code?: string | null }[] | null;
   contacts: { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
 };
 
@@ -83,6 +86,14 @@ const eventTiming = (event: GoogleCalendarEvent) => {
   };
 };
 
+const listingTitleFrom = (row: AppointmentRow) => {
+  const listing = Array.isArray(row.listings) ? row.listings[0] : row.listings;
+  const title = listing?.title?.trim();
+  const code = listing?.code?.trim();
+  if (title && code) return `${code} · ${title}`;
+  return title || code || null;
+};
+
 const toEventViewFromAppointment = (row: AppointmentRow): CalendarEventView => ({
   id: `appt-${row.id}`,
   appointmentId: row.id,
@@ -96,6 +107,9 @@ const toEventViewFromAppointment = (row: AppointmentRow): CalendarEventView => (
   notes: row.notes,
   meetingUrl: row.meeting_url,
   purpose: row.purpose ?? inferAppointmentPurpose(row.title),
+  listingId: row.listing_id ?? null,
+  listingTitle: listingTitleFrom(row),
+  visitStatus: isVisitStatus(row.visit_status) ? row.visit_status : row.listing_id ? "pending" : null,
   contactId: row.contact_id,
   contactName: contactNameFrom(row),
   attendees: parseStoredAttendees(row.attendees),
@@ -120,6 +134,15 @@ const toEventViewFromGoogle = (event: GoogleCalendarEvent, appointment?: Appoint
     notes: appointment?.notes || event.description || null,
     meetingUrl: resolveGoogleMeetingUrl(event) || appointment?.meeting_url || null,
     purpose: appointment?.purpose ?? inferAppointmentPurpose(event.summary || appointment?.title || ""),
+    listingId: appointment?.listing_id ?? null,
+    listingTitle: appointment ? listingTitleFrom(appointment) : null,
+    visitStatus: appointment
+      ? isVisitStatus(appointment.visit_status)
+        ? appointment.visit_status
+        : appointment.listing_id
+          ? "pending"
+          : null
+      : null,
     contactId: appointment?.contact_id ?? null,
     contactName: appointment ? contactNameFrom(appointment) : attendees[0]?.name || attendees[0]?.email || null,
     attendees,
@@ -143,38 +166,49 @@ export const loadCalendarAgenda = async (
     .is("revoked_at", null)
     .maybeSingle<{ email: string | null }>();
 
+  const appointmentSelectWithListing =
+    "id, contact_id, external_calendar_event_id, title, starts_at, ends_at, status, source, purpose, listing_id, visit_status, meeting_url, attendees, notes, contacts(full_name, email), listings(title, code)";
   const appointmentSelect =
     "id, contact_id, external_calendar_event_id, title, starts_at, ends_at, status, source, purpose, meeting_url, attendees, notes, contacts(full_name, email)";
   const appointmentSelectWithoutPurpose =
     "id, contact_id, external_calendar_event_id, title, starts_at, ends_at, status, source, meeting_url, attendees, notes, contacts(full_name, email)";
 
-  let appointmentRows: AppointmentRow[] | null = null;
-  const firstLoad = await supabase
-    .from("appointments")
-    .select(appointmentSelect)
-    .eq("organization_id", organizationId)
-    .gte("starts_at", range.timeMin)
-    .lt("starts_at", range.timeMax)
-    .neq("status", "cancelled")
-    .order("starts_at", { ascending: true });
-
-  if (firstLoad.error && firstLoad.error.message.toLowerCase().includes("purpose")) {
-    const fallbackLoad = await supabase
+  const loadAppointments = async (select: string) =>
+    supabase
       .from("appointments")
-      .select(appointmentSelectWithoutPurpose)
+      .select(select)
       .eq("organization_id", organizationId)
       .gte("starts_at", range.timeMin)
       .lt("starts_at", range.timeMax)
       .neq("status", "cancelled")
       .order("starts_at", { ascending: true });
+
+  let appointmentRows: AppointmentRow[] | null = null;
+  const firstLoad = await loadAppointments(appointmentSelectWithListing);
+
+  if (firstLoad.error && /listing|visit_status/i.test(firstLoad.error.message)) {
+    const secondLoad = await loadAppointments(appointmentSelect);
+    if (secondLoad.error && secondLoad.error.message.toLowerCase().includes("purpose")) {
+      const fallbackLoad = await loadAppointments(appointmentSelectWithoutPurpose);
+      if (fallbackLoad.error) {
+        throw new Error(`No se pudieron cargar las citas: ${fallbackLoad.error.message}`);
+      }
+      appointmentRows = (fallbackLoad.data ?? []) as unknown as AppointmentRow[];
+    } else if (secondLoad.error) {
+      throw new Error(`No se pudieron cargar las citas: ${secondLoad.error.message}`);
+    } else {
+      appointmentRows = (secondLoad.data ?? []) as unknown as AppointmentRow[];
+    }
+  } else if (firstLoad.error && firstLoad.error.message.toLowerCase().includes("purpose")) {
+    const fallbackLoad = await loadAppointments(appointmentSelectWithoutPurpose);
     if (fallbackLoad.error) {
       throw new Error(`No se pudieron cargar las citas: ${fallbackLoad.error.message}`);
     }
-    appointmentRows = (fallbackLoad.data ?? []) as AppointmentRow[];
+    appointmentRows = (fallbackLoad.data ?? []) as unknown as AppointmentRow[];
   } else if (firstLoad.error) {
     throw new Error(`No se pudieron cargar las citas: ${firstLoad.error.message}`);
   } else {
-    appointmentRows = (firstLoad.data ?? []) as AppointmentRow[];
+    appointmentRows = (firstLoad.data ?? []) as unknown as AppointmentRow[];
   }
 
   const appointments = appointmentRows ?? [];
