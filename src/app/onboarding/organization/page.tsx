@@ -18,14 +18,14 @@ const OrganizationOnboardingPage = async () => {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-      <Card className="w-full max-w-lg">
+      <Card className="w-full max-w-xl">
         <CardHeader className="space-y-3">
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">
             Onboarding de empresa
           </p>
           <CardTitle className="text-2xl">Crea tu organización</CardTitle>
           <CardDescription>
-            Este CRM agrupa tu equipo, canales, conversaciones y pedidos en una sola organización.
+            Elige cómo opera tu negocio. El menú, el embudo y la IA se configuran con esa plantilla.
           </CardDescription>
         </CardHeader>
         <CardContent>

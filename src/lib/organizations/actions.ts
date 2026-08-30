@@ -6,13 +6,16 @@ import { z } from "zod";
 import { getRequestOrigin } from "@/lib/auth/origin";
 import { sessionExpiredResult } from "@/lib/auth/session-result";
 import { recordAuditEvent } from "@/lib/organizations/audit";
+import { applyBusinessProfile } from "@/lib/organizations/business-profile";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getCurrentMembership, hasOrganizationRole, type OrganizationRole } from "@/lib/organizations/membership";
+import {
+  getCurrentMembership,
+  hasOrganizationRole,
+  loadMembershipForUser,
+  type OrganizationRole,
+} from "@/lib/organizations/membership";
+import { createOrganizationSchema } from "@/lib/organizations/schema";
 import { normalizeCurrencySettings } from "@/lib/organizations/currencies";
-
-const createOrganizationSchema = z.object({
-  name: z.string().trim().min(3, "El nombre de la organización debe tener al menos 3 caracteres"),
-});
 
 const inviteAdvisorSchema = z.object({
   email: z.email("Ingresa un correo válido"),
@@ -40,6 +43,29 @@ export const createOrganizationAction = async (rawValues: unknown) => {
 
   if (error) {
     return { error: error.message || "No se pudo crear la organización" };
+  }
+
+  const membership = await loadMembershipForUser(supabase, user.id);
+  if (membership) {
+    try {
+      await applyBusinessProfile({
+        supabase,
+        organizationId: membership.organizationId,
+        userId: user.id,
+        templateId: parsed.data.templateId,
+        currency: parsed.data.currency.toUpperCase(),
+        taxRate: parsed.data.taxRate,
+      });
+      await recordAuditEvent({
+        organizationId: membership.organizationId,
+        actorUserId: user.id,
+        action: "organization.create",
+        entity: "organization",
+        payload: { templateId: parsed.data.templateId },
+      });
+    } catch (profileError) {
+      console.error("[ONBOARDING] apply business profile failed", profileError);
+    }
   }
 
   redirect("/onboarding/setup");

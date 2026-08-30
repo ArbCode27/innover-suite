@@ -68,7 +68,8 @@ export const ModulesSettingsForm = ({ canManageOrganization, modules }: ModulesS
             <div>
               <CardTitle>Funciones del CRM</CardTitle>
               <CardDescription className="mt-1 leading-6">
-                Activa solo lo que usa este negocio. El menú y la IA se adaptan a estos interruptores.
+                Activa solo lo que usa este negocio. Cambiar plantilla aquí solo actualiza módulos; no borra
+                etapas del embudo ni el prompt de la IA.
               </CardDescription>
             </div>
           </div>

@@ -74,7 +74,11 @@ export const mapFunnelCard = (row: CardRow): FunnelCardView => ({
   listingTitle: listingTitleFromCard(row),
 });
 
-const ensureDefaultStages = async (supabase: FunnelSupabase, funnelId: number) => {
+const ensureDefaultStages = async (
+  supabase: FunnelSupabase,
+  funnelId: number,
+  stageNames: readonly string[] = DEFAULT_FUNNEL_STAGES,
+) => {
   const { count, error } = await supabase
     .from("funnel_stages")
     .select("id", { count: "exact", head: true })
@@ -89,7 +93,7 @@ const ensureDefaultStages = async (supabase: FunnelSupabase, funnelId: number) =
   }
 
   const { error: stagesError } = await supabase.from("funnel_stages").insert(
-    DEFAULT_FUNNEL_STAGES.map((name, orderIndex) => ({
+    stageNames.map((name, orderIndex) => ({
       funnel_id: funnelId,
       name,
       order_index: orderIndex,
@@ -101,7 +105,11 @@ const ensureDefaultStages = async (supabase: FunnelSupabase, funnelId: number) =
   }
 };
 
-export const ensureDefaultFunnel = async (supabase: FunnelSupabase, organizationId: number) => {
+export const ensureDefaultFunnel = async (
+  supabase: FunnelSupabase,
+  organizationId: number,
+  stageNames: readonly string[] = DEFAULT_FUNNEL_STAGES,
+) => {
   const { data: existing, error: existingError } = await supabase
     .from("funnels")
     .select("id, name")
@@ -115,7 +123,7 @@ export const ensureDefaultFunnel = async (supabase: FunnelSupabase, organization
   }
 
   if (existing?.id) {
-    await ensureDefaultStages(supabase, existing.id as number);
+    await ensureDefaultStages(supabase, existing.id as number, stageNames);
     return existing as FunnelRow;
   }
 
@@ -138,7 +146,7 @@ export const ensureDefaultFunnel = async (supabase: FunnelSupabase, organization
       .maybeSingle();
 
     if (raced?.id) {
-      await ensureDefaultStages(supabase, raced.id as number);
+      await ensureDefaultStages(supabase, raced.id as number, stageNames);
       return raced as FunnelRow;
     }
 
@@ -146,7 +154,7 @@ export const ensureDefaultFunnel = async (supabase: FunnelSupabase, organization
   }
 
   const { error: stagesError } = await supabase.from("funnel_stages").insert(
-    DEFAULT_FUNNEL_STAGES.map((name, orderIndex) => ({
+    stageNames.map((name, orderIndex) => ({
       funnel_id: created.id,
       name,
       order_index: orderIndex,
