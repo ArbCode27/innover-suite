@@ -31,7 +31,9 @@ const FIELD_LABELS: Record<string, string> = {
   startTime: "Hora de inicio",
   endTime: "Hora de fin",
   notes: "Notas",
-  body: "Nota",
+  accessToken: "Token de acceso",
+  phoneNumberId: "Phone Number ID",
+  wabaId: "WABA ID",
 };
 
 const quoteValue = (value: unknown) => {

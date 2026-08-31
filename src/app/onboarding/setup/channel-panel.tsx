@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Camera, MessageCircle, MessagesSquare } from "lucide-react";
 import { WhatsAppConnectButton } from "@/app/(suite)/settings/whatsapp-connect-button";
+import { WhatsAppManualConnectForm } from "@/app/(suite)/settings/whatsapp-manual-connect-form";
 import { oauthStartHref } from "@/lib/integrations/oauth-href";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,10 @@ const WHATSAPP_STATUS_LABELS: Record<string, string> = {
   sdk_failed: "No se pudo cargar el SDK de Facebook.",
   login_failed: "Facebook no completó el inicio de sesión.",
   signup_failed: "El alta de WhatsApp terminó con un error en Meta.",
+  invalid_token: "Meta rechazó el token de WhatsApp.",
+  invalid_phone: "No se pudo leer ese Phone Number ID.",
+  waba_mismatch: "Ese número no pertenece al WABA ID.",
+  waba_required: "Pega el WABA ID para completar la vinculación.",
 };
 
 type ChannelPanelProps = {
@@ -128,7 +133,10 @@ export const ChannelPanel = ({
               Cuenta conectada
             </p>
           ) : (
-            <WhatsAppConnectButton returnPath="/onboarding/setup?step=channel" />
+            <div className="space-y-3">
+              <WhatsAppConnectButton returnPath="/onboarding/setup?step=channel" />
+              <WhatsAppManualConnectForm />
+            </div>
           )}
         </ChannelCard>
 

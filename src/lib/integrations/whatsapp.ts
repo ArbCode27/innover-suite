@@ -314,9 +314,201 @@ export const parseWhatsAppAccountMetadata = (value: unknown) => {
 export type WhatsAppConnectStatus =
   | "connected"
   | "token_exchange_failed"
+  | "invalid_token"
+  | "invalid_phone"
+  | "waba_mismatch"
+  | "waba_required"
   | "no_numbers"
   | "persist_failed"
   | "subscription_failed";
+
+export type WhatsAppTokenProvider = "whatsapp_embedded_signup" | "whatsapp_system_user";
+
+type GraphDebugToken = {
+  data?: {
+    app_id?: string;
+    type?: string;
+    is_valid?: boolean;
+    expires_at?: number;
+    scopes?: string[];
+    granular_scopes?: Array<{ scope?: string; target_ids?: string[] }>;
+  };
+};
+
+type WhatsAppTokenInspection = {
+  isValid: boolean;
+  tokenKind: "system_user" | "user";
+  expiresAt: string | null;
+  wabaIds: string[];
+};
+
+const persistWhatsAppPhoneConnections = async (input: {
+  organizationId: number;
+  userId: string;
+  accessToken: string;
+  phones: WhatsAppPhoneNumber[];
+  wabaIdByPhoneId: Map<string, string>;
+  wabaIds: string[];
+  businessId?: string | null;
+  provider: WhatsAppTokenProvider;
+  tokenKind?: "system_user" | "user" | null;
+  tokenExpiresAt?: string | null;
+}): Promise<WhatsAppConnectStatus> => {
+  const admin = getSupabaseAdminClient();
+  const connectedAt = new Date().toISOString();
+  let persistedCount = 0;
+
+  for (const phone of input.phones) {
+    const wabaId = input.wabaIdByPhoneId.get(phone.id) ?? null;
+    const displayName = phone.verifiedName || phone.displayPhoneNumber || "WhatsApp";
+    const { error: channelAccountError } = await admin.from("channel_accounts").upsert(
+      {
+        organization_id: input.organizationId,
+        channel: "whatsapp",
+        external_account_id: phone.id,
+        display_name: displayName,
+        access_token: input.accessToken,
+        connected_by_user_id: input.userId,
+        metadata: {
+          provider: input.provider,
+          wabaId,
+          businessId: input.businessId ?? null,
+          displayPhoneNumber: phone.displayPhoneNumber,
+          verifiedName: phone.verifiedName,
+          qualityRating: phone.qualityRating,
+          tokenKind: input.tokenKind ?? null,
+          tokenExpiresAt: input.tokenExpiresAt ?? null,
+          connectedAt,
+        },
+      },
+      { onConflict: "channel,external_account_id" },
+    );
+
+    if (channelAccountError) {
+      console.error("[WA_CONNECT] upsert channel account failed", {
+        phoneNumberId: phone.id,
+        error: channelAccountError,
+      });
+      continue;
+    }
+
+    persistedCount += 1;
+  }
+
+  if (persistedCount === 0) {
+    return "persist_failed";
+  }
+
+  const uniqueWabaIds = [...new Set(input.wabaIds.filter(Boolean))];
+  let subscribedCount = 0;
+  for (const wabaId of uniqueWabaIds) {
+    const subscription = await subscribeWabaToAppWebhooks(wabaId, input.accessToken);
+    if (!subscription.ok) {
+      console.error("[WA_CONNECT] waba webhook subscription failed", {
+        wabaId,
+        status: subscription.status,
+        body: subscription.errorBody,
+      });
+      continue;
+    }
+    subscribedCount += 1;
+  }
+
+  if (uniqueWabaIds.length > 0 && subscribedCount === 0) {
+    return "subscription_failed";
+  }
+
+  return "connected";
+};
+
+export const inspectWhatsAppAccessToken = async (
+  accessToken: string,
+): Promise<WhatsAppTokenInspection | null> => {
+  if (!env.facebookAppId || !env.metaAppSecret) {
+    return null;
+  }
+
+  const url = new URL(`${FACEBOOK_GRAPH_BASE}/debug_token`);
+  url.searchParams.set("input_token", accessToken);
+  url.searchParams.set("access_token", `${env.facebookAppId}|${env.metaAppSecret}`);
+
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    console.error("[WA_CONNECT] debug_token failed", { status: response.status });
+    return null;
+  }
+
+  const json = (await response.json()) as GraphDebugToken;
+  const data = json.data;
+  if (!data) {
+    return null;
+  }
+
+  const wabaIds = new Set<string>();
+  for (const scope of data.granular_scopes ?? []) {
+    if (!scope.scope?.includes("whatsapp")) continue;
+    for (const targetId of scope.target_ids ?? []) {
+      const id = asString(targetId);
+      if (id) wabaIds.add(id);
+    }
+  }
+
+  const expiresAt =
+    typeof data.expires_at === "number" && data.expires_at > 0
+      ? new Date(data.expires_at * 1000).toISOString()
+      : null;
+
+  return {
+    isValid: data.is_valid !== false,
+    tokenKind: data.type === "SYSTEM" || data.expires_at === 0 ? "system_user" : "user",
+    expiresAt,
+    wabaIds: [...wabaIds],
+  };
+};
+
+export const discoverAssignedWabaIds = async (accessToken: string) => {
+  const me = await graphRequest<{ id?: string }>("/me?fields=id", accessToken);
+  if (!me.ok) {
+    return me;
+  }
+
+  const userId = asString(me.data.id);
+  if (!userId) {
+    return { ok: true as const, data: [] as string[] };
+  }
+
+  const assigned = await graphRequest<GraphListResponse<{ id?: string }>>(
+    `/${encodeURIComponent(userId)}/assigned_whatsapp_business_accounts?fields=id`,
+    accessToken,
+  );
+  if (!assigned.ok) {
+    return assigned;
+  }
+
+  const wabaIds = (assigned.data.data ?? [])
+    .map((row) => asString(row.id))
+    .filter((id): id is string => Boolean(id));
+
+  return { ok: true as const, data: wabaIds };
+};
+
+const findWabaIdForPhone = async (
+  phoneNumberId: string,
+  accessToken: string,
+  candidates: string[],
+) => {
+  for (const wabaId of [...new Set(candidates.filter(Boolean))]) {
+    const listed = await fetchWabaPhoneNumbers(wabaId, accessToken);
+    if (!listed.ok) {
+      continue;
+    }
+    if (listed.data.some((phone) => phone.id === phoneNumberId)) {
+      return wabaId;
+    }
+  }
+
+  return null;
+};
 
 export const completeWhatsAppEmbeddedSignup = async (input: {
   organizationId: number;
@@ -350,68 +542,90 @@ export const completeWhatsAppEmbeddedSignup = async (input: {
     return "no_numbers";
   }
 
-  const admin = getSupabaseAdminClient();
-  const connectedAt = new Date().toISOString();
-  let persistedCount = 0;
+  return persistWhatsAppPhoneConnections({
+    organizationId: input.organizationId,
+    userId: input.userId,
+    accessToken,
+    phones: numbers.data.phones,
+    wabaIdByPhoneId: numbers.data.wabaIdByPhoneId,
+    wabaIds: numbers.data.wabaIds,
+    businessId: session.businessId,
+    provider: "whatsapp_embedded_signup",
+    tokenKind: "user",
+  });
+};
 
-  for (const phone of numbers.data.phones) {
-    const wabaId = numbers.data.wabaIdByPhoneId.get(phone.id) ?? session.wabaId ?? null;
-    const displayName = phone.verifiedName || phone.displayPhoneNumber || "WhatsApp";
-    const { error: channelAccountError } = await admin.from("channel_accounts").upsert(
-      {
-        organization_id: input.organizationId,
-        channel: "whatsapp",
-        external_account_id: phone.id,
-        display_name: displayName,
-        access_token: accessToken,
-        connected_by_user_id: input.userId,
-        metadata: {
-          provider: "whatsapp_embedded_signup",
-          wabaId,
-          businessId: session.businessId ?? null,
-          displayPhoneNumber: phone.displayPhoneNumber,
-          verifiedName: phone.verifiedName,
-          qualityRating: phone.qualityRating,
-          connectedAt,
-        },
-      },
-      { onConflict: "channel,external_account_id" },
-    );
+export const completeWhatsAppManualTokenConnect = async (input: {
+  organizationId: number;
+  userId: string;
+  accessToken: string;
+  phoneNumberId: string;
+  wabaId?: string;
+}): Promise<WhatsAppConnectStatus> => {
+  const inspection = await inspectWhatsAppAccessToken(input.accessToken);
+  if (inspection && !inspection.isValid) {
+    return "invalid_token";
+  }
 
-    if (channelAccountError) {
-      console.error("[WA_EMBEDDED] upsert channel account failed", {
-        phoneNumberId: phone.id,
-        error: channelAccountError,
-      });
-      continue;
+  const phone = await fetchWhatsAppPhoneNumber(input.phoneNumberId, input.accessToken);
+  if (!phone.ok) {
+    console.error("[WA_CONNECT] phone lookup failed", {
+      status: phone.status,
+    });
+    if (phone.status === 401 || phone.status === 403) {
+      return "invalid_token";
     }
-
-    persistedCount += 1;
+    return "invalid_phone";
   }
 
-  if (persistedCount === 0) {
-    return "persist_failed";
+  const candidateWabaIds: string[] = [];
+  if (input.wabaId) {
+    candidateWabaIds.push(input.wabaId);
+  }
+  if (inspection?.wabaIds.length) {
+    candidateWabaIds.push(...inspection.wabaIds);
   }
 
-  const uniqueWabaIds = [...new Set(numbers.data.wabaIds.filter(Boolean))];
-  let subscribedCount = 0;
-  for (const wabaId of uniqueWabaIds) {
-    const subscription = await subscribeWabaToAppWebhooks(wabaId, accessToken);
-    if (!subscription.ok) {
-      console.error("[WA_EMBEDDED] waba webhook subscription failed", {
-        wabaId,
-        status: subscription.status,
-        body: subscription.errorBody,
-      });
-      continue;
+  const assigned = await discoverAssignedWabaIds(input.accessToken);
+  if (assigned.ok) {
+    candidateWabaIds.push(...assigned.data);
+  }
+
+  const owned = await discoverOwnedWabaIds(input.accessToken);
+  if (owned.ok) {
+    candidateWabaIds.push(...owned.data);
+  }
+
+  let wabaId = await findWabaIdForPhone(input.phoneNumberId, input.accessToken, candidateWabaIds);
+
+  if (!wabaId && input.wabaId) {
+    const listed = await fetchWabaPhoneNumbers(input.wabaId, input.accessToken);
+    if (listed.ok && !listed.data.some((row) => row.id === input.phoneNumberId)) {
+      return "waba_mismatch";
     }
-    subscribedCount += 1;
+    wabaId = input.wabaId;
   }
 
-  if (uniqueWabaIds.length > 0 && subscribedCount === 0) {
-    return "subscription_failed";
+  if (!wabaId && candidateWabaIds.length === 1) {
+    wabaId = candidateWabaIds[0] ?? null;
   }
 
-  return "connected";
+  if (!wabaId) {
+    return "waba_required";
+  }
+
+  const wabaIdByPhoneId = new Map<string, string>([[phone.data.id, wabaId]]);
+
+  return persistWhatsAppPhoneConnections({
+    organizationId: input.organizationId,
+    userId: input.userId,
+    accessToken: input.accessToken,
+    phones: [phone.data],
+    wabaIdByPhoneId,
+    wabaIds: [wabaId],
+    provider: "whatsapp_system_user",
+    tokenKind: inspection?.tokenKind ?? "system_user",
+    tokenExpiresAt: inspection?.expiresAt ?? null,
+  });
 };
 

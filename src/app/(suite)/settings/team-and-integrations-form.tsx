@@ -9,6 +9,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarDays, Camera, Loader2, MessageCircle, MessagesSquare, Unplug, UserPlus } from "lucide-react";
 import { WhatsAppConnectButton } from "./whatsapp-connect-button";
+import { WhatsAppManualConnectForm } from "./whatsapp-manual-connect-form";
 import { inviteAdvisorAction } from "@/lib/organizations/actions";
 import { CopyableText } from "@/components/auth/copyable-text";
 import { redirectIfSessionExpired } from "@/lib/auth/session-client";
@@ -124,6 +125,10 @@ const WHATSAPP_STATUS_LABELS: Record<string, string> = {
   sdk_failed: "No se pudo cargar el SDK de Facebook. Revisa el bloqueo de scripts e inténtalo de nuevo.",
   login_failed: "Facebook no completó el inicio de sesión de WhatsApp.",
   signup_failed: "El alta de WhatsApp terminó con un error en Meta.",
+  invalid_token: "Meta rechazó el token. Usa un token de System User con permisos de WhatsApp.",
+  invalid_phone: "No se pudo leer ese Phone Number ID con el token indicado.",
+  waba_mismatch: "Ese número no pertenece al WABA ID que pegaste.",
+  waba_required: "No se detectó la cuenta de WhatsApp Business. Pega el WABA ID.",
 };
 
 const readWhatsAppMetadata = (value: unknown) => {
@@ -377,7 +382,10 @@ export const TeamAndIntegrationsForm = ({
                 ) : null}
               </div>
             ) : canManageOrganization ? (
-              <WhatsAppConnectButton />
+              <div className="space-y-3">
+                <WhatsAppConnectButton />
+                <WhatsAppManualConnectForm />
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground">Pide a un admin que conecte WhatsApp.</p>
             )}
