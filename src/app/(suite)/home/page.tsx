@@ -20,14 +20,9 @@ export default async function HomePage() {
   const modules = await loadCachedOrganizationModules(membership.organizationId);
   const [board, orgResult] = await Promise.all([
     loadDashboardBoard(supabase, membership.organizationId, modules),
-    supabase
-      .from("organizations")
-      .select("onboarding_completed_at, plan")
-      .eq("id", membership.organizationId)
-      .maybeSingle(),
+    supabase.from("organizations").select("plan").eq("id", membership.organizationId).maybeSingle(),
   ]);
   const org = orgResult.data;
-  const showOnboarding = !org?.onboarding_completed_at;
 
   return (
     <ModuleShell
@@ -44,20 +39,6 @@ export default async function HomePage() {
         ) : null
       }
     >
-      {showOnboarding ? (
-        <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4">
-          <p className="font-medium">Completa la configuración inicial</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Módulos, catálogo, agente e integración de un canal. Toma unos minutos.
-          </p>
-          <Button asChild className="mt-3" size="sm">
-            <Link href="/onboarding/setup" prefetch={false}>
-              Continuar onboarding
-            </Link>
-          </Button>
-        </div>
-      ) : null}
-
       <HomeDashboard
         organizationName={membership.organizationName}
         board={board}

@@ -1,4 +1,5 @@
 import { env } from "@/lib/config/env";
+import { resolveIntegrationReturnPath } from "@/lib/integrations/oauth-href";
 
 type ShortLivedTokenResponse = {
   access_token: string;
@@ -20,8 +21,11 @@ const INSTAGRAM_AUTHORIZE_URL = "https://www.instagram.com/oauth/authorize";
 const INSTAGRAM_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
 const INSTAGRAM_GRAPH_BASE = "https://graph.instagram.com";
 
-export const getSettingsRedirectUrl = (status: string) => {
-  const redirectUrl = new URL("/settings", env.instagramRedirectUri || "http://localhost:3000");
+export const getSettingsRedirectUrl = (status: string, returnPath?: string | null) => {
+  const redirectUrl = new URL(
+    resolveIntegrationReturnPath(returnPath),
+    env.instagramRedirectUri || "http://localhost:3000",
+  );
   redirectUrl.searchParams.set("ig", status);
   return redirectUrl;
 };

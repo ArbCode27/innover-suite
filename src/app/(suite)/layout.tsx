@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { signOut } from "@/lib/auth/actions";
 import { loadCachedOrganizationModules } from "@/lib/modules/settings";
+import { redirectIfSetupIncomplete } from "@/lib/onboarding/guard";
 import {
   canManageCatalog,
   canManageOrders,
@@ -32,6 +33,7 @@ import {
   type MobileNavIcon,
 } from "@/components/suite/mobile-nav";
 import { ThemeToggle } from "@/components/suite/theme-toggle";
+import { MobileSuiteHeader } from "@/components/suite/mobile-suite-header";
 import { NotificationBellLoader } from "@/components/suite/notification-bell-loader";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -55,6 +57,8 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
   if (!membership) {
     redirect("/onboarding/organization");
   }
+
+  await redirectIfSetupIncomplete(membership);
 
   const modules = await loadCachedOrganizationModules(
     membership.organizationId,
@@ -121,6 +125,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
     },
   ];
   const items = navItems.filter((item) => item.show);
+  const mobileNavItems = items.filter((item) => item.href !== "/home" && item.href !== "/settings");
 
   return (
     <MobileChromeProvider>
@@ -187,19 +192,16 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
             </div>
           </aside>
           <main className="min-w-0 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0 md:pl-[94px]">
-            <div className="mb-3 flex items-center justify-end gap-2 md:hidden">
-              <ThemeToggle compact />
-              <div id="suite-notification-slot-mobile" />
-              <form action={signOut}>
-                <Button type="submit" variant="outline" size="icon" aria-label="Cerrar sesión">
-                  <LogOut />
-                </Button>
-              </form>
-            </div>
+            <MobileSuiteHeader
+              email={user.email ?? null}
+              roleLabel={ROLE_LABELS[membership.role as OrganizationRole]}
+              organizationName={membership.organizationName}
+              initials={initials}
+            />
             {children}
           </main>
           <MobileNav
-            items={items.map((item) => ({
+            items={mobileNavItems.map((item) => ({
               href: item.href,
               label: item.label,
               icon: item.iconKey,

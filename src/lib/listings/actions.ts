@@ -4,72 +4,15 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { sessionExpiredResult } from "@/lib/auth/session-result";
 import { nextListingCode } from "@/lib/listings/board";
-import {
-  LISTING_MEDIA_KINDS,
-  LISTING_OPERATIONS,
-  LISTING_STATUSES,
-  PROPERTY_TYPES,
-} from "@/lib/listings/types";
+import { listingSchema } from "@/lib/listings/schema";
+import { LISTING_MEDIA_KINDS } from "@/lib/listings/types";
 import { readCatalogImageFile } from "@/lib/media/image-upload";
 import { LISTING_IMAGES_BUCKET } from "@/lib/media/types";
 import { buildListingImagePath, removeStoredMedia, uploadPublicMedia } from "@/lib/media/storage";
 import { canManageListings, getCurrentMembership } from "@/lib/organizations/membership";
 import { loadOrganizationCurrencies, resolveOrganizationCurrency } from "@/lib/organizations/currencies";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-const optionalText = z.preprocess(
-  (value) => (typeof value === "string" && !value.trim() ? undefined : value),
-  z.string().trim().max(4000).optional(),
-);
-
-const optionalUrl = z.preprocess(
-  (value) => (typeof value === "string" && !value.trim() ? undefined : value),
-  z.string().trim().url().max(500).optional(),
-);
-
-const optionalNumber = z.preprocess((value) => {
-  if (value === "" || value == null) return undefined;
-  const parsed = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(parsed) ? parsed : value;
-}, z.number().nonnegative().max(1_000_000_000).optional());
-
-const optionalInt = z.preprocess((value) => {
-  if (value === "" || value == null) return undefined;
-  const parsed = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(parsed) ? parsed : value;
-}, z.number().int().nonnegative().max(50).optional());
-
-const listingSchema = z.object({
-  id: z.number().int().positive().optional(),
-  code: z.string().trim().max(40).optional(),
-  title: z.string().trim().min(3, "El título debe tener al menos 3 caracteres").max(160),
-  description: optionalText,
-  propertyType: z.enum(PROPERTY_TYPES),
-  operation: z.enum(LISTING_OPERATIONS),
-  status: z.enum(LISTING_STATUSES),
-  zone: optionalText,
-  neighborhood: optionalText,
-  city: optionalText,
-  areaM2: optionalNumber,
-  bedrooms: optionalInt,
-  bathrooms: optionalInt,
-  parking: optionalInt,
-  yearBuilt: z.preprocess((value) => {
-    if (value === "" || value == null) return undefined;
-    const parsed = typeof value === "number" ? value : Number(value);
-    return Number.isFinite(parsed) ? parsed : value;
-  }, z.number().int().min(1800).max(2100).optional()),
-  price: optionalNumber,
-  currency: z.string().trim().length(3).optional(),
-  amenities: z.array(z.string().trim().min(1).max(40)).max(24).optional(),
-  ownerContactId: z.preprocess((value) => {
-    if (value === "" || value == null || value === 0) return undefined;
-    return value;
-  }, z.number().int().positive().optional()),
-  exclusive: z.boolean().optional(),
-  videoUrl: optionalUrl,
-  tourUrl: optionalUrl,
-});
+import { zodErrorMessage } from "@/lib/validation/zod-es";
 
 type ActionResult = {
   success?: string;
@@ -93,7 +36,7 @@ const emptyToNull = (value?: string) => {
 export const upsertListingAction = async (rawValues: unknown): Promise<ActionResult> => {
   const parsed = listingSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Revisa los datos del inmueble." };
+    return { error: zodErrorMessage(parsed.error, "Revisa los datos del inmueble.") };
   }
 
   const access = await requireListingManager();
@@ -184,6 +127,7 @@ export const upsertListingAction = async (rawValues: unknown): Promise<ActionRes
   }
 
   revalidatePath("/listings");
+  revalidatePath("/onboarding/setup");
   return { success: "Inmueble creado.", listingId: data.id as number };
 };
 

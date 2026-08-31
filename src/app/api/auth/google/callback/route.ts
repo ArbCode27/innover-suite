@@ -7,6 +7,7 @@ import {
   getGoogleTokenExpiryDate,
   isGoogleOAuthConfigured,
 } from "@/lib/integrations/google-calendar";
+import { consumeOAuthReturnPath } from "@/lib/integrations/oauth-return";
 import { consumeGoogleOAuthState } from "@/lib/integrations/google-calendar-state";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -14,8 +15,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const returnPath = await consumeOAuthReturnPath();
+
   if (!isGoogleOAuthConfigured()) {
-    return NextResponse.redirect(getGoogleSettingsRedirectUrl("missing_env"));
+    return NextResponse.redirect(getGoogleSettingsRedirectUrl("missing_env", returnPath));
   }
 
   const oauthError = request.nextUrl.searchParams.get("error");
@@ -23,16 +26,16 @@ export async function GET(request: NextRequest) {
   const state = request.nextUrl.searchParams.get("state");
 
   if (oauthError === "access_denied") {
-    return NextResponse.redirect(getGoogleSettingsRedirectUrl("cancelled"));
+    return NextResponse.redirect(getGoogleSettingsRedirectUrl("cancelled", returnPath));
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(getGoogleSettingsRedirectUrl("invalid_callback"));
+    return NextResponse.redirect(getGoogleSettingsRedirectUrl("invalid_callback", returnPath));
   }
 
   const stateContext = await consumeGoogleOAuthState(state);
   if (!stateContext) {
-    return NextResponse.redirect(getGoogleSettingsRedirectUrl("invalid_state"));
+    return NextResponse.redirect(getGoogleSettingsRedirectUrl("invalid_state", returnPath));
   }
 
   const token = await exchangeGoogleAuthorizationCode(code);
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest) {
       status: token.status,
       body: token.errorBody,
     });
-    return NextResponse.redirect(getGoogleSettingsRedirectUrl("token_exchange_failed"));
+    return NextResponse.redirect(getGoogleSettingsRedirectUrl("token_exchange_failed", returnPath));
   }
 
   const profile = await fetchGoogleUserInfo(token.data.access_token);
@@ -50,13 +53,13 @@ export async function GET(request: NextRequest) {
       status: profile.status,
       body: profile.errorBody,
     });
-    return NextResponse.redirect(getGoogleSettingsRedirectUrl("profile_failed"));
+    return NextResponse.redirect(getGoogleSettingsRedirectUrl("profile_failed", returnPath));
   }
 
   const googleUserId = profile.data.id || profile.data.sub || null;
   const email = profile.data.email || null;
   if (!googleUserId || !email) {
-    return NextResponse.redirect(getGoogleSettingsRedirectUrl("profile_failed"));
+    return NextResponse.redirect(getGoogleSettingsRedirectUrl("profile_failed", returnPath));
   }
 
   const googleCalendarId = await fetchPrimaryGoogleCalendarId(token.data.access_token);
@@ -72,7 +75,7 @@ export async function GET(request: NextRequest) {
 
   const refreshToken = token.data.refresh_token || existing?.refresh_token || null;
   if (!refreshToken) {
-    return NextResponse.redirect(getGoogleSettingsRedirectUrl("missing_refresh_token"));
+    return NextResponse.redirect(getGoogleSettingsRedirectUrl("missing_refresh_token", returnPath));
   }
 
   const payload = {
@@ -95,8 +98,8 @@ export async function GET(request: NextRequest) {
 
   if (persist.error) {
     console.error("[GOOGLE_OAUTH] persist calendar_connections failed", persist.error);
-    return NextResponse.redirect(getGoogleSettingsRedirectUrl("persist_failed"));
+    return NextResponse.redirect(getGoogleSettingsRedirectUrl("persist_failed", returnPath));
   }
 
-  return NextResponse.redirect(getGoogleSettingsRedirectUrl("connected"));
+  return NextResponse.redirect(getGoogleSettingsRedirectUrl("connected", returnPath));
 }

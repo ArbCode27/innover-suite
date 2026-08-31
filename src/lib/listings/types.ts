@@ -99,7 +99,7 @@ export const toListingNumber = (value: unknown) => {
 };
 
 export const formatListingLocation = (listing: Pick<ListingRecord, "zone" | "neighborhood" | "city">) =>
-  [listing.neighborhood, listing.zone, listing.city].filter(Boolean).join(" · ") || "Sin ubicación";
+  [listing.neighborhood, listing.city, listing.zone].filter(Boolean).join(" · ") || "Sin ubicación";
 
 export const formatListingPrice = (listing: Pick<ListingRecord, "price" | "currency">) => {
   if (listing.price == null) return "Precio a consultar";

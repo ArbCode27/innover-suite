@@ -1,4 +1,5 @@
 import { z } from "zod";
+import "@/lib/validation/zod-es";
 
 export const loginSchema = z.object({
   email: z.email("Ingresa un correo válido"),

@@ -1,160 +1,132 @@
-import Link from "next/link";
-import { completeOnboardingAction } from "@/lib/organizations/actions";
-import { getCurrentMembership } from "@/lib/organizations/membership";
-import { loadOrganizationModules } from "@/lib/modules/settings";
-import { getBusinessTemplate, isBusinessTemplateId } from "@/lib/modules/constants";
-import { loadCatalog } from "@/lib/commerce/catalog";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { Metadata } from "next";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { SetupWizard } from "./setup-wizard";
+import { loadAgentSettings } from "@/lib/agent/settings";
+import { env } from "@/lib/config/env";
+import { getBusinessTemplate, isBusinessTemplateId } from "@/lib/modules/constants";
+import { loadOrganizationModules } from "@/lib/modules/settings";
+import {
+  buildSetupSteps,
+  loadOnboardingCompletedAt,
+  resolveSetupStep,
+  type OnboardingProgress,
+} from "@/lib/onboarding/progress";
+import { canManageOrganization, getCurrentMembership } from "@/lib/organizations/membership";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-type SetupStep = {
-  done: boolean;
-  title: string;
-  href: string;
-  hint: string;
+export const metadata: Metadata = {
+  title: "Configura tu CRM | Innover Suite",
+  description: "Completa la configuración inicial de tu organización.",
 };
 
-export default async function OnboardingSetupPage() {
+type OnboardingSetupPageProps = {
+  searchParams: Promise<{ step?: string }>;
+};
+
+const SetupWizardFallback = () => (
+  <div className="flex min-h-screen items-center justify-center bg-background">
+    <p className="text-sm text-muted-foreground">Cargando configuración…</p>
+  </div>
+);
+
+export default async function OnboardingSetupPage({ searchParams }: OnboardingSetupPageProps) {
   const membership = await getCurrentMembership();
   if (!membership) redirect("/onboarding/organization");
+  if (!canManageOrganization(membership)) redirect("/home");
 
+  const completedAt = await loadOnboardingCompletedAt(membership.organizationId);
+  if (completedAt) redirect("/home");
+
+  const { step: requestedStep } = await searchParams;
   const supabase = await createSupabaseServerClient();
   const modules = await loadOrganizationModules(supabase, membership.organizationId);
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("business_template")
-    .eq("id", membership.organizationId)
-    .maybeSingle();
+
+  const [
+    orgResult,
+    instagramResult,
+    messengerResult,
+    whatsappResult,
+    googleResult,
+    agentSettings,
+  ] = await Promise.all([
+    supabase
+      .from("organizations")
+      .select("business_template")
+      .eq("id", membership.organizationId)
+      .maybeSingle(),
+    supabase
+      .from("instagram_connections")
+      .select("instagram_username, instagram_user_id")
+      .eq("organization_id", membership.organizationId)
+      .is("revoked_at", null)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("channel_accounts")
+      .select("id")
+      .eq("organization_id", membership.organizationId)
+      .eq("channel", "messenger")
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("channel_accounts")
+      .select("id")
+      .eq("organization_id", membership.organizationId)
+      .eq("channel", "whatsapp")
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("calendar_connections")
+      .select("email")
+      .eq("organization_id", membership.organizationId)
+      .is("revoked_at", null)
+      .limit(1)
+      .maybeSingle(),
+    loadAgentSettings(membership.organizationId),
+  ]);
 
   const templateId =
-    typeof org?.business_template === "string" && isBusinessTemplateId(org.business_template)
-      ? org.business_template
+    typeof orgResult.data?.business_template === "string" && isBusinessTemplateId(orgResult.data.business_template)
+      ? orgResult.data.business_template
       : null;
   const template = templateId ? getBusinessTemplate(templateId) : null;
 
-  const [{ data: instagram }, { data: messenger }, { data: googleCalendar }, { count: productsCount }] =
-    await Promise.all([
-      supabase
-        .from("instagram_connections")
-        .select("id")
-        .eq("organization_id", membership.organizationId)
-        .is("revoked_at", null)
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("channel_accounts")
-        .select("id")
-        .eq("organization_id", membership.organizationId)
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("calendar_connections")
-        .select("id")
-        .eq("organization_id", membership.organizationId)
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("products")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", membership.organizationId),
-    ]);
+  const instagramConnected = Boolean(instagramResult.data);
+  const messengerConnected = Boolean(messengerResult.data);
+  const whatsappConnected = Boolean(whatsappResult.data);
+  const hasChannel = instagramConnected || messengerConnected || whatsappConnected;
 
-  let listingsCount = 0;
-  if (modules.listings) {
-    const { count, error } = await supabase
-      .from("listings")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", membership.organizationId);
-    listingsCount = error ? 0 : (count ?? 0);
-  }
+  const progress: OnboardingProgress = {
+    organizationName: membership.organizationName,
+    templateLabel: template?.label ?? null,
+    modules,
+    hasCalendar: Boolean(googleResult.data),
+    hasChannel,
+    agentReady: agentSettings.systemPrompt.trim().length >= 40,
+  };
 
-  let catalogCount = productsCount ?? 0;
-  if (catalogCount === 0 && modules.catalog) {
-    try {
-      catalogCount = (await loadCatalog(supabase, membership.organizationId)).length;
-    } catch {
-      catalogCount = 0;
-    }
-  }
-
-  const steps: SetupStep[] = [];
-
-  if (modules.catalog) {
-    steps.push({
-      done: catalogCount > 0,
-      title: "Catálogo",
-      href: "/inventory",
-      hint: "Carga productos o importa un CSV.",
-    });
-  }
-
-  if (modules.listings) {
-    steps.push({
-      done: listingsCount > 0,
-      title: "Inmuebles",
-      href: "/listings",
-      hint: "Carga fichas de propiedades para visitas y chat.",
-    });
-  }
-
-  if (modules.calendar) {
-    steps.push({
-      done: Boolean(googleCalendar),
-      title: "Google Calendar",
-      href: "/settings#google-calendar",
-      hint: "Conecta el calendario para que la IA pueda agendar.",
-    });
-  }
-
-  steps.push({
-    done: true,
-    title: "Agente IA",
-    href: "/settings#agent-ia",
-    hint: "El prompt ya se adaptó a tu negocio. Revísalo si quieres afinar el tono.",
-  });
-
-  steps.push({
-    done: Boolean(instagram || messenger),
-    title: "Canal de chat",
-    href: "/settings#integrations-heading",
-    hint: "Conecta Instagram, Messenger o WhatsApp.",
-  });
+  const steps = buildSetupSteps(progress);
+  const currentStep = resolveSetupStep(steps, requestedStep);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-      <Card className="w-full max-w-lg">
-        <CardHeader>
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">Onboarding</p>
-          <CardTitle>Configura {membership.organizationName}</CardTitle>
-          <CardDescription>
-            {template
-              ? `Quedó como ${template.label}. Completa estos pasos o saltalos y vuelve después.`
-              : "Completa estos pasos o saltalos y vuelve después."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ol className="space-y-3">
-            {steps.map((step, index) => (
-              <li key={step.title} className="rounded-xl border border-primary/15 p-3">
-                <p className="text-sm font-medium">
-                  {index + 1}. {step.title} {step.done ? "✓" : ""}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">{step.hint}</p>
-                <Button asChild size="sm" variant="outline" className="mt-2">
-                  <Link href={step.href}>Abrir</Link>
-                </Button>
-              </li>
-            ))}
-          </ol>
-          <form action={completeOnboardingAction}>
-            <Button type="submit" className="w-full">
-              Terminar y ir al inicio
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <Suspense fallback={<SetupWizardFallback />}>
+      <SetupWizard
+        steps={steps}
+        currentStep={currentStep}
+        progress={progress}
+        agentSettings={agentSettings}
+        geminiConfigured={Boolean(env.geminiApiKey)}
+        calendarEmail={googleResult.data?.email ?? null}
+        instagramLabel={
+          instagramResult.data?.instagram_username
+            ? `@${instagramResult.data.instagram_username}`
+            : instagramResult.data?.instagram_user_id ?? null
+        }
+        instagramConnected={instagramConnected}
+        messengerConnected={messengerConnected}
+        whatsappConnected={whatsappConnected}
+      />
+    </Suspense>
   );
 }

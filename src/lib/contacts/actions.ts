@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { zodErrorMessage } from "@/lib/validation/zod-es";
 
 type ActionResult = { success?: string; error?: string };
 
@@ -19,12 +20,12 @@ export const upsertContactAction = async (rawValues: unknown): Promise<ActionRes
   const parsed = z
     .object({
       id: z.number().int().positive().optional(),
-      fullName: z.string().trim().min(2).max(120),
-      phone: z.string().trim().max(40).optional(),
-      email: z.string().trim().email().optional().or(z.literal("")),
+      fullName: z.string().trim().min(2, "El nombre debe tener al menos 2 caracteres.").max(120, "El nombre no puede tener más de 120 caracteres."),
+      phone: z.string().trim().max(40, "El teléfono no puede tener más de 40 caracteres.").optional(),
+      email: z.string().trim().email("El correo no es válido. Revisa el @ y el dominio.").optional().or(z.literal("")),
     })
     .safeParse(rawValues);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  if (!parsed.success) return { error: zodErrorMessage(parsed.error, "Revisa el nombre, teléfono o correo del contacto.") };
 
   const access = await requireAgent();
   if ("error" in access) return access;

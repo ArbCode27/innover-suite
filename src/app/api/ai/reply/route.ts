@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { suggestReplyAction } from "@/lib/inbox/suggest";
+import { zodErrorMessage } from "@/lib/validation/zod-es";
 
 const inputSchema = z.object({
   conversationId: z.number().int().positive(),
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
   const parsed = inputSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message || "Invalid payload" },
+      { error: zodErrorMessage(parsed.error, "Los datos de la conversación no son válidos.") },
       { status: 400 },
     );
   }

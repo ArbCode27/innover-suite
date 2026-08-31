@@ -7,6 +7,7 @@ import {
   isWhatsAppEmbeddedSignupConfigured,
   isWhatsAppOAuthConfigured,
 } from "@/lib/integrations/whatsapp";
+import { consumeOAuthReturnPath } from "@/lib/integrations/oauth-return";
 import { consumeWhatsAppOAuthState } from "@/lib/integrations/whatsapp-state";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -25,8 +26,8 @@ const callbackSchema = z.object({
 const jsonStatus = (status: string, httpStatus: number) =>
   NextResponse.json({ status }, { status: httpStatus });
 
-const redirectToSettings = (status: string) =>
-  NextResponse.redirect(getWhatsAppSettingsRedirectUrl(status));
+const redirectToSettings = async (status: string) =>
+  NextResponse.redirect(getWhatsAppSettingsRedirectUrl(status, await consumeOAuthReturnPath()));
 
 const readQueryValue = (search: URLSearchParams, keys: string[]) => {
   for (const key of keys) {
@@ -79,19 +80,19 @@ const redirectToLoginToResume = (request: NextRequest) => {
 
 export async function GET(request: NextRequest) {
   if (!isWhatsAppOAuthConfigured()) {
-    return redirectToSettings("missing_env");
+    return await redirectToSettings("missing_env");
   }
 
   const search = request.nextUrl.searchParams;
   const oauthError = search.get("error");
 
   if (oauthError) {
-    return redirectToSettings(oauthError === "access_denied" ? "cancelled" : "signup_failed");
+    return await redirectToSettings(oauthError === "access_denied" ? "cancelled" : "signup_failed");
   }
 
   const code = search.get("code")?.trim();
   if (!code) {
-    return redirectToSettings("invalid_callback");
+    return await redirectToSettings("invalid_callback");
   }
 
   const actor = await resolveConnectActor(search.get("state")?.trim() || undefined);
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (actor.status !== "ok") {
-    return redirectToSettings("forbidden");
+    return await redirectToSettings("forbidden");
   }
 
   const status = await completeWhatsAppEmbeddedSignup({
@@ -115,7 +116,7 @@ export async function GET(request: NextRequest) {
     redirectUri: `${request.nextUrl.origin}${request.nextUrl.pathname}`,
   });
 
-  return redirectToSettings(status);
+  return await redirectToSettings(status);
 }
 
 export async function POST(request: NextRequest) {

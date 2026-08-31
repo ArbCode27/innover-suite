@@ -8,6 +8,7 @@ import {
   getExpiryDate,
   getSettingsRedirectUrl,
 } from "@/lib/integrations/instagram";
+import { consumeOAuthReturnPath } from "@/lib/integrations/oauth-return";
 import { consumeInstagramOAuthState } from "@/lib/integrations/instagram-state";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -15,8 +16,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const returnPath = await consumeOAuthReturnPath();
+
   if (!env.instagramAppId || !env.instagramAppSecret || !env.instagramRedirectUri) {
-    return NextResponse.redirect(getSettingsRedirectUrl("missing_env"));
+    return NextResponse.redirect(getSettingsRedirectUrl("missing_env", returnPath));
   }
 
   const oauthError = request.nextUrl.searchParams.get("error");
@@ -24,16 +27,16 @@ export async function GET(request: NextRequest) {
   const state = request.nextUrl.searchParams.get("state");
 
   if (oauthError === "access_denied") {
-    return NextResponse.redirect(getSettingsRedirectUrl("cancelled"));
+    return NextResponse.redirect(getSettingsRedirectUrl("cancelled", returnPath));
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(getSettingsRedirectUrl("invalid_callback"));
+    return NextResponse.redirect(getSettingsRedirectUrl("invalid_callback", returnPath));
   }
 
   const stateContext = await consumeInstagramOAuthState(state);
   if (!stateContext) {
-    return NextResponse.redirect(getSettingsRedirectUrl("invalid_state"));
+    return NextResponse.redirect(getSettingsRedirectUrl("invalid_state", returnPath));
   }
 
   const shortToken = await exchangeAuthorizationCode(code);
@@ -42,7 +45,7 @@ export async function GET(request: NextRequest) {
       status: shortToken.status,
       body: shortToken.errorBody,
     });
-    return NextResponse.redirect(getSettingsRedirectUrl("token_exchange_failed"));
+    return NextResponse.redirect(getSettingsRedirectUrl("token_exchange_failed", returnPath));
   }
 
   const longToken = await exchangeLongLivedToken(shortToken.data.access_token);
@@ -51,7 +54,7 @@ export async function GET(request: NextRequest) {
       status: longToken.status,
       body: longToken.errorBody,
     });
-    return NextResponse.redirect(getSettingsRedirectUrl("long_token_failed"));
+    return NextResponse.redirect(getSettingsRedirectUrl("long_token_failed", returnPath));
   }
 
   const profile = await fetchInstagramProfile(longToken.data.access_token);
@@ -83,7 +86,7 @@ export async function GET(request: NextRequest) {
 
   if (connectionError) {
     console.error("[IG_OAUTH] upsert instagram_connections failed", connectionError);
-    return NextResponse.redirect(getSettingsRedirectUrl("persist_failed"));
+    return NextResponse.redirect(getSettingsRedirectUrl("persist_failed", returnPath));
   }
 
   const { error: channelAccountError } = await admin.from("channel_accounts").upsert(
@@ -105,7 +108,7 @@ export async function GET(request: NextRequest) {
 
   if (channelAccountError) {
     console.error("[IG_OAUTH] upsert channel_accounts failed", channelAccountError);
-    return NextResponse.redirect(getSettingsRedirectUrl("persist_failed"));
+    return NextResponse.redirect(getSettingsRedirectUrl("persist_failed", returnPath));
   }
 
   await syncInstagramTokenToOrganizationAccounts(admin, stateContext.organizationId, {
@@ -114,5 +117,5 @@ export async function GET(request: NextRequest) {
     tokenExpiresAt,
   });
 
-  return NextResponse.redirect(getSettingsRedirectUrl("connected"));
+  return NextResponse.redirect(getSettingsRedirectUrl("connected", returnPath));
 }

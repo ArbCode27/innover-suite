@@ -11,6 +11,7 @@ import { loadOrganizationCurrencies, resolveOrganizationCurrency } from "@/lib/o
 import { readCatalogImageFile } from "@/lib/media/image-upload";
 import { buildProductImagePath, removeProductImage, uploadPublicMedia } from "@/lib/media/storage";
 import { PRODUCT_IMAGES_BUCKET } from "@/lib/media/types";
+import { zodErrorMessage } from "@/lib/validation/zod-es";
 
 type ActionResult = {
   success?: string;
@@ -42,34 +43,34 @@ const requirePaymentMembership = async () => {
   return { membership } as const;
 };
 
-const productSchema = z
-  .object({
-    name: z.string().trim().min(2).max(120),
-    description: z.string().trim().max(500).optional(),
-    sku: z.string().trim().max(60).optional(),
-    category: z.string().trim().max(80).optional(),
-    kind: z.enum(PRODUCT_KINDS),
-    price: z.number().nonnegative().max(10_000_000),
-    trackStock: z.boolean(),
-    initialStock: z.number().nonnegative().max(1_000_000).optional(),
-    reorderPoint: z.number().nonnegative().max(1_000_000).optional(),
-    currency: z.string().trim().length(3).optional(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.kind === "service") {
-      return;
-    }
+const productFields = z.object({
+  name: z.string().trim().min(2).max(120),
+  description: z.string().trim().max(500).optional(),
+  sku: z.string().trim().max(60).optional(),
+  category: z.string().trim().max(80).optional(),
+  kind: z.enum(PRODUCT_KINDS),
+  price: z.number().nonnegative().max(10_000_000),
+  trackStock: z.boolean(),
+  initialStock: z.number().nonnegative().max(1_000_000).optional(),
+  reorderPoint: z.number().nonnegative().max(1_000_000).optional(),
+  currency: z.string().trim().length(3).optional(),
+});
 
-    if (data.initialStock == null || Number.isNaN(data.initialStock)) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["initialStock"],
-        message: "Indica el stock inicial del producto.",
-      });
-    }
-  });
+const productSchema = productFields.superRefine((data, ctx) => {
+  if (data.kind === "service") {
+    return;
+  }
 
-const updateProductSchema = productSchema
+  if (data.initialStock == null || Number.isNaN(data.initialStock)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["initialStock"],
+      message: "Indica el stock inicial del producto.",
+    });
+  }
+});
+
+const updateProductSchema = productFields
   .omit({ initialStock: true })
   .extend({ id: z.number().int().positive(), active: z.boolean() });
 
@@ -100,7 +101,7 @@ const cancelOrderSchema = z.object({
 export const createProductAction = async (rawValues: unknown): Promise<ActionResult> => {
   const parsed = productSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Revisa los datos del producto." };
+    return { error: zodErrorMessage(parsed.error, "Revisa los datos del producto.") };
   }
 
   const access = await requireCatalogMembership();
@@ -298,14 +299,14 @@ export const saveProductAction = async (formData: FormData): Promise<ActionResul
   if (editingId) {
     const parsed = updateProductSchema.safeParse({ ...fields, id: editingId, active: true });
     if (!parsed.success) {
-      return { error: parsed.error.issues[0]?.message ?? "Revisa los datos del producto." };
+      return { error: zodErrorMessage(parsed.error, "Revisa los datos del producto.") };
     }
     const updated = await updateProductAction(parsed.data);
     if (updated.error) return updated;
   } else {
     const parsed = productSchema.safeParse(fields);
     if (!parsed.success) {
-      return { error: parsed.error.issues[0]?.message ?? "Revisa los datos del producto." };
+      return { error: zodErrorMessage(parsed.error, "Revisa los datos del producto.") };
     }
     const created = await createProductAction(parsed.data);
     if (created.error) return created;
@@ -378,6 +379,7 @@ export const saveProductAction = async (formData: FormData): Promise<ActionResul
   }
 
   revalidatePath("/inventory");
+  revalidatePath("/onboarding/setup");
   if (uploaded.file) {
     return { success: editingId ? "Producto e imagen actualizados." : "Producto agregado con imagen." };
   }
@@ -432,7 +434,7 @@ export const receiveStockAction = async (rawValues: unknown): Promise<ActionResu
 export const createPromotionAction = async (rawValues: unknown): Promise<ActionResult> => {
   const parsed = promotionSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Revisa la promoción." };
+    return { error: zodErrorMessage(parsed.error, "Revisa la promoción.") };
   }
 
   const access = await requireCatalogMembership();
@@ -618,7 +620,7 @@ const deliveryZoneSchema = z.object({
 export const createDeliveryZoneAction = async (rawValues: unknown): Promise<ActionResult> => {
   const parsed = deliveryZoneSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Revisa la zona de delivery." };
+    return { error: zodErrorMessage(parsed.error, "Revisa la zona de delivery.") };
   }
 
   const access = await requireCatalogMembership();

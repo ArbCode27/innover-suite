@@ -1,4 +1,5 @@
 import { env } from "@/lib/config/env";
+import { resolveIntegrationReturnPath } from "@/lib/integrations/oauth-href";
 
 type FacebookTokenResponse = {
   access_token: string;
@@ -33,8 +34,11 @@ const MESSENGER_SCOPES = [
 export const isMessengerOAuthConfigured = () =>
   Boolean(env.facebookAppId && env.metaAppSecret && env.facebookRedirectUri);
 
-export const getMessengerSettingsRedirectUrl = (status: string) => {
-  const redirectUrl = new URL("/settings", env.facebookRedirectUri || "http://localhost:3000");
+export const getMessengerSettingsRedirectUrl = (status: string, returnPath?: string | null) => {
+  const redirectUrl = new URL(
+    resolveIntegrationReturnPath(returnPath),
+    env.facebookRedirectUri || "http://localhost:3000",
+  );
   redirectUrl.searchParams.set("ms", status);
   return redirectUrl;
 };

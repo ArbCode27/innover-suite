@@ -95,8 +95,19 @@ const readSessionInfo = (event: MessageEvent): { eventName: string; session: Ses
   };
 };
 
-const redirectWithStatus = (status: string) => {
-  window.location.assign(`/settings?wa=${encodeURIComponent(status)}#whatsapp`);
+type WhatsAppConnectButtonProps = {
+  returnPath?: string;
+};
+
+const redirectWithStatus = (status: string, returnPath?: string) => {
+  if (!returnPath) {
+    window.location.assign(`/settings?wa=${encodeURIComponent(status)}#whatsapp`);
+    return;
+  }
+
+  const url = new URL(returnPath, window.location.origin);
+  url.searchParams.set("wa", status);
+  window.location.assign(`${url.pathname}${url.search}${url.hash}`);
 };
 
 const loadFacebookSdk = (appId: string, version: string) =>
@@ -187,7 +198,7 @@ const loginWithEmbeddedSignup = (sdk: FacebookSdk, configId: string) =>
     );
   });
 
-export const WhatsAppConnectButton = () => {
+export const WhatsAppConnectButton = ({ returnPath }: WhatsAppConnectButtonProps) => {
   const [isPending, setIsPending] = useState(false);
 
   const handleConnectWhatsApp = async () => {
@@ -197,7 +208,7 @@ export const WhatsAppConnectButton = () => {
       const startResponse = await fetch("/api/auth/whatsapp/start", { cache: "no-store" });
       const startPayload = (await startResponse.json().catch(() => null)) as StartPayload | null;
       if (!startResponse.ok || !startPayload?.appId || !startPayload.configId || !startPayload.state) {
-        redirectWithStatus(startPayload?.status || "state_error");
+        redirectWithStatus(startPayload?.status || "state_error", returnPath);
         return;
       }
 
@@ -216,14 +227,17 @@ export const WhatsAppConnectButton = () => {
         }),
       });
       const callbackPayload = (await callbackResponse.json().catch(() => null)) as { status?: string } | null;
-      redirectWithStatus(callbackPayload?.status || (callbackResponse.ok ? "connected" : "persist_failed"));
+      redirectWithStatus(
+        callbackPayload?.status || (callbackResponse.ok ? "connected" : "persist_failed"),
+        returnPath,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "login_failed";
       if (message === "cancelled" || message === "signup_failed" || message === "login_failed") {
-        redirectWithStatus(message);
+        redirectWithStatus(message, returnPath);
         return;
       }
-      redirectWithStatus("sdk_failed");
+      redirectWithStatus("sdk_failed", returnPath);
     }
   };
 

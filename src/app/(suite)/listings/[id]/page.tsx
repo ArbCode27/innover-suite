@@ -54,7 +54,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
       description={`${listing.code} · ficha interna para visitas y chat.`}
       eyebrow="Inmueble"
       actions={
-        <Button asChild variant="outline">
+        <Button asChild variant="outline" className="hidden md:inline-flex">
           <Link href="/listings">
             <ArrowLeft />
             Volver

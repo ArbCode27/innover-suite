@@ -10,6 +10,7 @@ import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/m
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { sessionExpiredResult } from "@/lib/auth/session-result";
+import { zodErrorMessage } from "@/lib/validation/zod-es";
 import type { MetaChannel } from "@/types/domain";
 import type { FileAttachmentKind, InboxMessage } from "./types";
 import { normalizeInboxMessage } from "./types";
@@ -155,7 +156,7 @@ export const sendConversationMessageAction = async (
 ): Promise<ActionResult<{ message: InboxMessage }>> => {
   const parsed = sendMessageSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos para enviar mensaje." };
+    return { error: zodErrorMessage(parsed.error, "Datos inválidos para enviar mensaje.") };
   }
 
   const text = parsed.data.content?.trim() ?? "";

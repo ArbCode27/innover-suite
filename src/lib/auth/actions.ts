@@ -20,6 +20,7 @@ import {
 } from "@/lib/auth/schema";
 import { RECOVERY_EXPIRED_CODE, sessionExpiredResult } from "@/lib/auth/session-result";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { zodErrorMessage } from "@/lib/validation/zod-es";
 
 const GENERIC_RESET_MESSAGE = "Si el correo está registrado, te enviamos un enlace para crear una nueva contraseña.";
 const GENERIC_RESEND_MESSAGE = "Si el correo está pendiente de confirmación, te enviamos otro enlace.";
@@ -34,7 +35,7 @@ export const signIn = async (rawValues: unknown, nextPath?: string | null) => {
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "Revisa los datos del formulario.",
+      error: zodErrorMessage(parsed.error, "Revisa los datos del formulario."),
     };
   }
 
@@ -59,7 +60,7 @@ export const requestPasswordReset = async (rawValues: unknown) => {
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "Ingresa un correo válido.",
+      error: zodErrorMessage(parsed.error, "Ingresa un correo válido."),
     };
   }
 
@@ -81,7 +82,7 @@ export const updatePassword = async (rawValues: unknown) => {
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "Revisa los datos del formulario.",
+      error: zodErrorMessage(parsed.error, "Revisa los datos del formulario."),
     };
   }
 
@@ -120,7 +121,7 @@ export const changePassword = async (rawValues: unknown) => {
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "Revisa los datos del formulario.",
+      error: zodErrorMessage(parsed.error, "Revisa los datos del formulario."),
     };
   }
 
@@ -157,7 +158,7 @@ export const resendConfirmation = async (rawValues: unknown) => {
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "Ingresa un correo válido.",
+      error: zodErrorMessage(parsed.error, "Ingresa un correo válido."),
     };
   }
 

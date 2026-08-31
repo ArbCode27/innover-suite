@@ -32,10 +32,10 @@ export const PriceCurrencyField = ({
   const showSelector = currencies.codes.length > 1;
 
   return (
-    <div className="space-y-1.5">
+    <div className="min-w-0 space-y-2">
       <Label htmlFor={id}>{showSelector ? label : `${label} (${currency})`}</Label>
       {showSelector ? (
-        <div className="grid grid-cols-[minmax(0,1fr)_8.5rem] gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Input
             id={id}
             type="number"
@@ -45,9 +45,11 @@ export const PriceCurrencyField = ({
             placeholder={placeholder}
             value={amount}
             onChange={(event) => onAmountChange(event.target.value)}
+            className="min-w-[9rem] flex-1"
           />
           <AppSelect
             aria-label="Moneda"
+            className="w-[8.5rem] shrink-0"
             value={currency}
             onValueChange={onCurrencyChange}
             options={currencies.codes.map((code) => ({

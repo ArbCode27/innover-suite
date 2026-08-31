@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createCalendarAppointmentAction } from "@/lib/calendar/actions";
 import { getZonedTimeParts } from "@/lib/calendar/range";
+import { zodErrorMessage } from "@/lib/validation/zod-es";
 
 const createEventSchema = z.object({
   contactId: z.number().int().positive(),
-  title: z.string().trim().min(3),
-  startsAt: z.string().datetime(),
-  endsAt: z.string().datetime(),
+  title: z.string().trim().min(3, "El título debe tener al menos 3 caracteres."),
+  startsAt: z.string().datetime("La fecha de inicio no es válida."),
+  endsAt: z.string().datetime("La fecha de fin no es válida."),
   notes: z.string().trim().optional(),
   createMeet: z.boolean().optional(),
 });
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
   const parsed = createEventSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message || "Invalid payload" },
+      { error: zodErrorMessage(parsed.error, "Los datos de la cita no son válidos.") },
       { status: 400 },
     );
   }

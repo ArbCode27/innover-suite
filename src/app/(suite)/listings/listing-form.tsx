@@ -6,6 +6,8 @@ import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { toastActionError } from "@/lib/auth/action-toast";
 import { upsertListingAction } from "@/lib/listings/actions";
+import { listingSchema } from "@/lib/listings/schema";
+import { zodErrorMessage, zodFieldErrors } from "@/lib/validation/zod-es";
 import {
   LISTING_OPERATIONS,
   LISTING_OPERATION_LABELS,
@@ -37,7 +39,9 @@ type ListingFormProps = {
   contacts: ListingContactOption[];
   currencies: OrganizationCurrencySettings;
   canManage: boolean;
+  compact?: boolean;
   onSaved?: (listingId: number) => void;
+  onBusyChange?: (busy: boolean) => void;
 };
 
 const toForm = (listing: ListingRecord | null | undefined, defaultCurrency: string) => ({
@@ -64,58 +68,82 @@ const toForm = (listing: ListingRecord | null | undefined, defaultCurrency: stri
   tourUrl: listing?.tourUrl ?? "",
 });
 
-const parseOptionalNumber = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : undefined;
-};
+const FieldMessage = ({ message }: { message?: string }) =>
+  message ? (
+    <p className="text-sm text-destructive" role="alert">
+      {message}
+    </p>
+  ) : null;
 
-export const ListingForm = ({ listing, contacts, currencies, canManage, onSaved }: ListingFormProps) => {
+export const ListingForm = ({
+  listing,
+  contacts,
+  currencies,
+  canManage,
+  compact = false,
+  onSaved,
+  onBusyChange,
+}: ListingFormProps) => {
   const router = useRouter();
   const [form, setForm] = useState(() => toForm(listing, currencies.defaultCode));
   const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
 
   const handleChange = (key: keyof typeof form, value: string | boolean) => {
     setForm((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
   };
+
+  const listingPayload = () => ({
+    id: listing?.id,
+    code: form.code.trim() || undefined,
+    title: form.title.trim(),
+    description: form.description.trim() || undefined,
+    propertyType: form.propertyType,
+    operation: form.operation,
+    status: form.status,
+    zone: form.zone.trim() || undefined,
+    neighborhood: form.neighborhood.trim() || undefined,
+    city: form.city.trim() || undefined,
+    areaM2: form.areaM2,
+    bedrooms: form.bedrooms,
+    bathrooms: form.bathrooms,
+    parking: form.parking,
+    yearBuilt: form.yearBuilt,
+    price: form.price,
+    currency: form.price.trim() ? form.currency : undefined,
+    amenities: parseAmenitiesInput(form.amenities),
+    ownerContactId: form.ownerContactId || undefined,
+    exclusive: form.exclusive,
+    videoUrl: form.videoUrl.trim() || undefined,
+    tourUrl: form.tourUrl.trim() || undefined,
+  });
 
   const handleSubmit = () => {
     if (!canManage) return;
-    if (form.title.trim().length < 3) {
-      setFormError("El título debe tener al menos 3 caracteres.");
+    const parsed = listingSchema.safeParse(listingPayload());
+    if (!parsed.success) {
+      const message = zodErrorMessage(parsed.error, "Revisa los datos del inmueble.");
+      setFieldErrors(zodFieldErrors(parsed.error));
+      setFormError(message);
       return;
     }
 
     setFormError(null);
+    setFieldErrors({});
+    const isCreate = !listing;
+    if (isCreate) onBusyChange?.(true);
     startTransition(async () => {
-      const result = await upsertListingAction({
-        id: listing?.id,
-        code: form.code.trim() || undefined,
-        title: form.title.trim(),
-        description: form.description.trim() || undefined,
-        propertyType: form.propertyType,
-        operation: form.operation,
-        status: form.status,
-        zone: form.zone.trim() || undefined,
-        neighborhood: form.neighborhood.trim() || undefined,
-        city: form.city.trim() || undefined,
-        areaM2: parseOptionalNumber(form.areaM2),
-        bedrooms: parseOptionalNumber(form.bedrooms),
-        bathrooms: parseOptionalNumber(form.bathrooms),
-        parking: parseOptionalNumber(form.parking),
-        yearBuilt: parseOptionalNumber(form.yearBuilt),
-        price: parseOptionalNumber(form.price),
-        currency: form.price.trim() ? form.currency : undefined,
-        amenities: parseAmenitiesInput(form.amenities),
-        ownerContactId: form.ownerContactId ? Number(form.ownerContactId) : undefined,
-        exclusive: form.exclusive,
-        videoUrl: form.videoUrl.trim() || undefined,
-        tourUrl: form.tourUrl.trim() || undefined,
-      });
+      const result = await upsertListingAction(parsed.data);
 
       if (result.error || !result.listingId) {
+        if (isCreate) onBusyChange?.(false);
         const message = result.error ?? "No se pudo guardar el inmueble.";
         setFormError(message);
         toastActionError(result);
@@ -126,13 +154,14 @@ export const ListingForm = ({ listing, contacts, currencies, canManage, onSaved 
       if (onSaved) {
         onSaved(result.listingId);
       } else {
+        if (isCreate) onBusyChange?.(false);
         router.refresh();
       }
     });
   };
 
   return (
-    <fieldset className="space-y-4" disabled={!canManage}>
+    <fieldset className="@container space-y-4" disabled={!canManage}>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-2 sm:col-span-2">
           <Label htmlFor="listing-title">Título</Label>
@@ -143,18 +172,21 @@ export const ListingForm = ({ listing, contacts, currencies, canManage, onSaved 
             disabled={!canManage}
             onChange={(event) => handleChange("title", event.target.value)}
           />
+          <FieldMessage message={fieldErrors.title} />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="listing-code">Código interno</Label>
-          <Input
-            id="listing-code"
-            value={form.code}
-            maxLength={40}
-            placeholder="Se genera si lo dejas vacío"
-            disabled={!canManage}
-            onChange={(event) => handleChange("code", event.target.value)}
-          />
-        </div>
+        {compact ? null : (
+          <div className="space-y-2">
+            <Label htmlFor="listing-code">Código interno</Label>
+            <Input
+              id="listing-code"
+              value={form.code}
+              maxLength={40}
+              placeholder="Se genera si lo dejas vacío"
+              disabled={!canManage}
+              onChange={(event) => handleChange("code", event.target.value)}
+            />
+          </div>
+        )}
         <div className="space-y-2">
           <Label htmlFor="listing-type">Tipo</Label>
           <AppSelect
@@ -178,10 +210,10 @@ export const ListingForm = ({ listing, contacts, currencies, canManage, onSaved 
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="listing-status">Estado</Label>
+          <Label htmlFor="listing-status">Disponibilidad</Label>
           <AppSelect
             id="listing-status"
-            aria-label="Estado"
+            aria-label="Disponibilidad"
             value={form.status}
             disabled={!canManage}
             onValueChange={(value) => handleChange("status", value)}
@@ -191,59 +223,114 @@ export const ListingForm = ({ listing, contacts, currencies, canManage, onSaved 
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="space-y-2">
-          <Label htmlFor="listing-city">Ciudad</Label>
-          <Input id="listing-city" value={form.city} disabled={!canManage} onChange={(event) => handleChange("city", event.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="listing-zone">Zona</Label>
-          <Input id="listing-zone" value={form.zone} disabled={!canManage} onChange={(event) => handleChange("zone", event.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="listing-neighborhood">Urbanización</Label>
+        <div className="min-w-0 space-y-2">
+          <Label htmlFor="listing-state">Estado</Label>
           <Input
-            id="listing-neighborhood"
+            id="listing-state"
+            placeholder="Miranda"
             value={form.neighborhood}
             disabled={!canManage}
             onChange={(event) => handleChange("neighborhood", event.target.value)}
           />
+          <FieldMessage message={fieldErrors.neighborhood} />
+        </div>
+        <div className="min-w-0 space-y-2">
+          <Label htmlFor="listing-city">Ciudad</Label>
+          <Input
+            id="listing-city"
+            placeholder="Caracas"
+            value={form.city}
+            disabled={!canManage}
+            onChange={(event) => handleChange("city", event.target.value)}
+          />
+          <FieldMessage message={fieldErrors.city} />
+        </div>
+        <div className="min-w-0 space-y-2">
+          <Label htmlFor="listing-zone">Zona</Label>
+          <Input
+            id="listing-zone"
+            placeholder="Las Mercedes"
+            value={form.zone}
+            disabled={!canManage}
+            onChange={(event) => handleChange("zone", event.target.value)}
+          />
+          <FieldMessage message={fieldErrors.zone} />
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
-        <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-4 @min-[40rem]:grid-cols-4">
+        <div className="min-w-0 space-y-2">
           <Label htmlFor="listing-area">m²</Label>
-          <Input id="listing-area" inputMode="decimal" value={form.areaM2} disabled={!canManage} onChange={(event) => handleChange("areaM2", event.target.value)} />
+          <Input
+            id="listing-area"
+            inputMode="decimal"
+            value={form.areaM2}
+            disabled={!canManage}
+            onChange={(event) => handleChange("areaM2", event.target.value)}
+          />
+          <FieldMessage message={fieldErrors.areaM2} />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label htmlFor="listing-beds">Habitaciones</Label>
-          <Input id="listing-beds" inputMode="numeric" value={form.bedrooms} disabled={!canManage} onChange={(event) => handleChange("bedrooms", event.target.value)} />
+          <Input
+            id="listing-beds"
+            inputMode="numeric"
+            value={form.bedrooms}
+            disabled={!canManage}
+            onChange={(event) => handleChange("bedrooms", event.target.value)}
+          />
+          <FieldMessage message={fieldErrors.bedrooms} />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label htmlFor="listing-baths">Baños</Label>
-          <Input id="listing-baths" inputMode="numeric" value={form.bathrooms} disabled={!canManage} onChange={(event) => handleChange("bathrooms", event.target.value)} />
+          <Input
+            id="listing-baths"
+            inputMode="numeric"
+            value={form.bathrooms}
+            disabled={!canManage}
+            onChange={(event) => handleChange("bathrooms", event.target.value)}
+          />
+          <FieldMessage message={fieldErrors.bathrooms} />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label htmlFor="listing-parking">Puestos</Label>
-          <Input id="listing-parking" inputMode="numeric" value={form.parking} disabled={!canManage} onChange={(event) => handleChange("parking", event.target.value)} />
+          <Input
+            id="listing-parking"
+            inputMode="numeric"
+            value={form.parking}
+            disabled={!canManage}
+            onChange={(event) => handleChange("parking", event.target.value)}
+          />
+          <FieldMessage message={fieldErrors.parking} />
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-4 @min-[40rem]:grid-cols-2">
+        <div className="min-w-0 space-y-2">
           <Label htmlFor="listing-year">Año</Label>
-          <Input id="listing-year" inputMode="numeric" value={form.yearBuilt} disabled={!canManage} onChange={(event) => handleChange("yearBuilt", event.target.value)} />
+          <Input
+            id="listing-year"
+            inputMode="numeric"
+            value={form.yearBuilt}
+            disabled={!canManage}
+            aria-invalid={Boolean(fieldErrors.yearBuilt)}
+            onChange={(event) => handleChange("yearBuilt", event.target.value)}
+          />
+          <FieldMessage message={fieldErrors.yearBuilt} />
         </div>
-        <PriceCurrencyField
-          id="listing-price"
-          label="Precio"
-          amount={form.price}
-          currency={form.currency}
-          currencies={currencies}
-          placeholder="A consultar"
-          onAmountChange={(value) => handleChange("price", value)}
-          onCurrencyChange={(value) => handleChange("currency", value)}
-        />
+        <div className="min-w-0 space-y-2">
+          <PriceCurrencyField
+            id="listing-price"
+            label="Precio"
+            amount={form.price}
+            currency={form.currency}
+            currencies={currencies}
+            placeholder="A consultar"
+            onAmountChange={(value) => handleChange("price", value)}
+            onCurrencyChange={(value) => handleChange("currency", value)}
+          />
+          <FieldMessage message={fieldErrors.price} />
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -259,6 +346,8 @@ export const ListingForm = ({ listing, contacts, currencies, canManage, onSaved 
         />
       </div>
 
+      {compact ? null : (
+        <>
       <div className="space-y-2">
         <Label htmlFor="listing-amenities">Amenidades</Label>
         <Input
@@ -305,6 +394,7 @@ export const ListingForm = ({ listing, contacts, currencies, canManage, onSaved 
             placeholder="https://"
             onChange={(event) => handleChange("videoUrl", event.target.value)}
           />
+          <FieldMessage message={fieldErrors.videoUrl} />
         </div>
         <div className="space-y-2">
           <Label htmlFor="listing-tour">Tour virtual</Label>
@@ -316,15 +406,22 @@ export const ListingForm = ({ listing, contacts, currencies, canManage, onSaved 
             placeholder="https://"
             onChange={(event) => handleChange("tourUrl", event.target.value)}
           />
+          <FieldMessage message={fieldErrors.tourUrl} />
         </div>
       </div>
+        </>
+      )}
 
-      {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+      {formError && Object.keys(fieldErrors).length === 0 ? (
+        <p className="text-sm text-destructive" role="alert">
+          {formError}
+        </p>
+      ) : null}
 
       {canManage ? (
         <Button type="button" onClick={handleSubmit} disabled={isPending}>
           {isPending ? <Loader2 className="animate-spin" /> : <Save />}
-          {listing ? "Guardar cambios" : "Crear inmueble"}
+          {listing ? (isPending ? "Guardando..." : "Guardar cambios") : isPending ? "Creando inmueble..." : "Crear inmueble"}
         </Button>
       ) : (
         <p className="text-sm text-muted-foreground">Solo owner, admin o asesor pueden editar inmuebles.</p>

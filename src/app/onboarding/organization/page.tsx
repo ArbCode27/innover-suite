@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCurrentMembership } from "@/lib/organizations/membership";
+import { loadOnboardingCompletedAt } from "@/lib/onboarding/progress";
+import { canManageOrganization, getCurrentMembership } from "@/lib/organizations/membership";
 import { CreateOrganizationForm } from "./create-organization-form";
 
 export const metadata: Metadata = {
@@ -13,6 +14,10 @@ const OrganizationOnboardingPage = async () => {
   const membership = await getCurrentMembership();
 
   if (membership) {
+    if (canManageOrganization(membership)) {
+      const completedAt = await loadOnboardingCompletedAt(membership.organizationId);
+      if (!completedAt) redirect("/onboarding/setup");
+    }
     redirect("/home");
   }
 

@@ -16,21 +16,22 @@ import {
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { sessionExpiredResult } from "@/lib/auth/session-result";
+import { zodErrorMessage } from "@/lib/validation/zod-es";
 
 const isoDateTime = z.string().refine((value) => Number.isFinite(Date.parse(value)), {
   message: "La fecha no es válida.",
 });
 
 const createAppointmentSchema = z.object({
-  contactId: z.number().int().positive(),
-  title: z.string().trim().min(3).max(160),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
-  notes: z.string().trim().max(1000).optional(),
+  contactId: z.number().int().positive("Elige un contacto para la cita."),
+  title: z.string().trim().min(3, "El título de la cita debe tener al menos 3 caracteres.").max(160, "El título no puede tener más de 160 caracteres."),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha debe tener el formato AAAA-MM-DD."),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, "La hora de inicio no es válida."),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, "La hora de fin no es válida."),
+  notes: z.string().trim().max(1000, "Las notas no pueden tener más de 1000 caracteres.").optional(),
   createMeet: z.boolean(),
-  purpose: z.enum(APPOINTMENT_PURPOSES).default("consulta"),
-  listingId: z.number().int().positive().optional(),
+  purpose: z.enum(APPOINTMENT_PURPOSES, { error: "Elige un motivo de cita válido." }).default("consulta"),
+  listingId: z.number().int().positive("El inmueble de la visita no es válido.").optional(),
 });
 
 const rescheduleAppointmentSchema = z.object({
@@ -68,7 +69,7 @@ export const createCalendarAppointmentAction = async (
 ): Promise<ActionResult<{ event: CalendarEventView }>> => {
   const parsed = createAppointmentSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Los datos de la cita no son válidos." };
+    return { error: zodErrorMessage(parsed.error, "Los datos de la cita no son válidos.") };
   }
 
   const access = await requireAgentMembership();

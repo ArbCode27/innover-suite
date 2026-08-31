@@ -4,6 +4,9 @@ import type { ReactNode } from "react";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { configureZodSpanish } from "@/lib/validation/zod-es";
+
+configureZodSpanish();
 
 type AppProvidersProps = {
   children: ReactNode;

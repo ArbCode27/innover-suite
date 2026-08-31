@@ -7,6 +7,7 @@ import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/m
 import { loadOrganizationCurrencies, resolveOrganizationCurrency } from "@/lib/organizations/currencies";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { sessionExpiredResult } from "@/lib/auth/session-result";
+import { zodErrorMessage } from "@/lib/validation/zod-es";
 import type { FunnelCardView } from "./types";
 
 const POSTGRES_UNIQUE_VIOLATION = "23505";
@@ -90,7 +91,7 @@ export const createFunnelCardAction = async (
 ): Promise<ActionResult<{ card: FunnelCardView }>> => {
   const parsed = createCardSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos para crear la oportunidad." };
+    return { error: zodErrorMessage(parsed.error, "Datos inválidos para crear la oportunidad.") };
   }
 
   const access = await requireAgentMembership();

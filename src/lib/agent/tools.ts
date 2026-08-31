@@ -237,7 +237,7 @@ export const buildAgentToolDeclarations = (
       parameters: {
         type: "OBJECT",
         properties: {
-          query: { type: "STRING", description: "Texto libre: zona, barrio, código o título." },
+          query: { type: "STRING", description: "Texto libre: estado, ciudad, zona, código o título." },
           operation: {
             type: "STRING",
             format: "enum",

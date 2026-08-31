@@ -1,28 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Filter, Plus, Search } from "lucide-react";
+import { Filter, Plus, Search } from "lucide-react";
 import {
   LISTING_OPERATIONS,
   LISTING_OPERATION_LABELS,
   LISTING_STATUSES,
   LISTING_STATUS_LABELS,
-  LISTING_STATUS_STYLES,
-  PROPERTY_TYPE_LABELS,
-  formatListingLocation,
-  formatListingPrice,
-  formatListingSummary,
   type ListingRecord,
   type ListingOperation,
   type ListingStatus,
 } from "@/lib/listings/types";
+import { ListingCard } from "./listing-card";
 import { ListingForm, type ListingContactOption } from "./listing-form";
+import { ListingCreateOverlay } from "./listing-create-overlay";
 import { AppSelect } from "@/components/ui/app-select";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Sheet,
@@ -42,11 +36,13 @@ type ListingsBoardProps = {
 
 export const ListingsBoard = ({ listings, contacts, currencies, canManage }: ListingsBoardProps) => {
   const router = useRouter();
+  const [isNavigating, startNavigation] = useTransition();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<ListingStatus | "all">("all");
   const [operationFilter, setOperationFilter] = useState<ListingOperation | "all">("all");
   const [showFilters, setShowFilters] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   const filtered = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -69,7 +65,7 @@ export const ListingsBoard = ({ listings, contacts, currencies, canManage }: Lis
           <Input
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Buscar por código, título o zona"
+            placeholder="Buscar por código, título, estado, ciudad o zona"
             className="pl-8"
             aria-label="Buscar inmuebles"
           />
@@ -112,38 +108,10 @@ export const ListingsBoard = ({ listings, contacts, currencies, canManage }: Lis
       ) : null}
 
       {filtered.length ? (
-        <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {filtered.map((listing) => (
             <li key={listing.id}>
-              <Link href={`/listings/${listing.id}`} className="block h-full">
-                <Card className="h-full overflow-hidden border-primary/15 bg-card/80 transition hover:border-primary/40">
-                  {listing.coverUrl ? (
-                    <img src={listing.coverUrl} alt="" className="h-40 w-full object-cover" />
-                  ) : (
-                    <div className="flex h-40 items-center justify-center bg-primary/10 text-primary">
-                      <Building2 className="size-8" aria-hidden />
-                    </div>
-                  )}
-                  <CardHeader className="p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <CardDescription className="text-[11px]">{listing.code}</CardDescription>
-                        <CardTitle className="mt-1 truncate text-base">{listing.title}</CardTitle>
-                      </div>
-                      <Badge className={LISTING_STATUS_STYLES[listing.status]}>{LISTING_STATUS_LABELS[listing.status]}</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2 p-4 pt-0 text-sm">
-                    <p className="font-medium">{formatListingPrice(listing)}</p>
-                    <p className="text-xs text-muted-foreground">{formatListingLocation(listing)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {PROPERTY_TYPE_LABELS[listing.propertyType]} · {LISTING_OPERATION_LABELS[listing.operation]}
-                      {formatListingSummary(listing) ? ` · ${formatListingSummary(listing)}` : ""}
-                    </p>
-                    {listing.exclusive ? <Badge variant="outline">Exclusiva</Badge> : null}
-                  </CardContent>
-                </Card>
-              </Link>
+              <ListingCard listing={listing} />
             </li>
           ))}
         </ul>
@@ -153,25 +121,35 @@ export const ListingsBoard = ({ listings, contacts, currencies, canManage }: Lis
         </p>
       )}
 
-      <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <SheetContent className="overflow-y-auto sm:max-w-xl">
+      <Sheet
+        open={isCreateOpen}
+        onOpenChange={(open) => {
+          if (isCreating) return;
+          setIsCreateOpen(open);
+        }}
+      >
+        <SheetContent className="overflow-y-auto sm:max-w-xl data-[side=right]:sm:max-w-xl">
           <SheetHeader>
             <SheetTitle>Nuevo inmueble</SheetTitle>
-            <SheetDescription>Zona, ciudad y urbanización van como texto. No hace falta mapa.</SheetDescription>
+            <SheetDescription>Estado, ciudad y zona van como texto. No hace falta mapa.</SheetDescription>
           </SheetHeader>
           <div className="px-4 pb-6">
             <ListingForm
               contacts={contacts}
               currencies={currencies}
               canManage={canManage}
+              onBusyChange={setIsCreating}
               onSaved={(listingId) => {
-                setIsCreateOpen(false);
-                router.push(`/listings/${listingId}`);
+                setIsCreating(true);
+                startNavigation(() => {
+                  router.push(`/listings/${listingId}`);
+                });
               }}
             />
           </div>
         </SheetContent>
       </Sheet>
+      <ListingCreateOverlay open={isCreating || isNavigating} />
     </div>
   );
 };

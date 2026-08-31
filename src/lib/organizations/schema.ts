@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BUSINESS_TEMPLATE_IDS } from "@/lib/modules/constants";
 import { isKnownCurrency } from "@/lib/organizations/currencies";
+import "@/lib/validation/zod-es";
 
 export const createOrganizationSchema = z.object({
   name: z.string().trim().min(3, "El nombre de la organización debe tener al menos 3 caracteres"),
@@ -12,7 +13,10 @@ export const createOrganizationSchema = z.object({
     .trim()
     .length(3)
     .refine((value) => isKnownCurrency(value.toUpperCase()), "Elige una moneda válida."),
-  taxRate: z.number().min(0).max(1),
+  taxRate: z
+    .number({ error: "El IVA debe ser un número." })
+    .min(0, "El IVA no puede ser negativo.")
+    .max(1, "El IVA no puede ser mayor a 100% (usa 0.16 para 16%)."),
 });
 
 export const createOrganizationWizardSchema = z.object({

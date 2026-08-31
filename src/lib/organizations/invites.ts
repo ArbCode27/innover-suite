@@ -8,6 +8,7 @@ import { EMAIL_NOT_CONFIRMED_CODE } from "@/lib/auth/session-result";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { recordAuditEvent } from "@/lib/organizations/audit";
+import { zodErrorMessage } from "@/lib/validation/zod-es";
 
 export type InvitePreview = {
   token: string;
@@ -109,7 +110,7 @@ export const acceptInviteAction = async (token: string) => {
 export const signUpAndAcceptInviteAction = async (rawValues: unknown) => {
   const parsed = inviteSignUpSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Revisa los datos." };
+    return { error: zodErrorMessage(parsed.error, "Revisa los datos de la invitación.") };
   }
 
   const invite = await loadInvitePreview(parsed.data.token);

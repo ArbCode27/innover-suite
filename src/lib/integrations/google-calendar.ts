@@ -1,4 +1,5 @@
 import { env } from "@/lib/config/env";
+import { resolveIntegrationReturnPath } from "@/lib/integrations/oauth-href";
 
 type GoogleTokenResponse = {
   access_token: string;
@@ -53,9 +54,9 @@ const asError = async (response: Response): Promise<GoogleApiError> => ({
 export const isGoogleOAuthConfigured = () =>
   Boolean(env.googleClientId && env.googleClientSecret && env.googleRedirectUri);
 
-export const getGoogleSettingsRedirectUrl = (status: string) => {
+export const getGoogleSettingsRedirectUrl = (status: string, returnPath?: string | null) => {
   const originSource = env.googleRedirectUri || env.instagramRedirectUri || "http://localhost:3000";
-  const redirectUrl = new URL("/settings", originSource);
+  const redirectUrl = new URL(resolveIntegrationReturnPath(returnPath), originSource);
   redirectUrl.searchParams.set("gc", status);
   return redirectUrl;
 };

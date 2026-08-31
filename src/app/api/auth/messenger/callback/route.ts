@@ -7,6 +7,7 @@ import {
   isMessengerOAuthConfigured,
   subscribePageToMessengerWebhooks,
 } from "@/lib/integrations/messenger";
+import { consumeOAuthReturnPath } from "@/lib/integrations/oauth-return";
 import { consumeMessengerOAuthState } from "@/lib/integrations/messenger-state";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -14,8 +15,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const returnPath = await consumeOAuthReturnPath();
+
   if (!isMessengerOAuthConfigured()) {
-    return NextResponse.redirect(getMessengerSettingsRedirectUrl("missing_env"));
+    return NextResponse.redirect(getMessengerSettingsRedirectUrl("missing_env", returnPath));
   }
 
   const oauthError = request.nextUrl.searchParams.get("error");
@@ -23,16 +26,16 @@ export async function GET(request: NextRequest) {
   const state = request.nextUrl.searchParams.get("state");
 
   if (oauthError === "access_denied") {
-    return NextResponse.redirect(getMessengerSettingsRedirectUrl("cancelled"));
+    return NextResponse.redirect(getMessengerSettingsRedirectUrl("cancelled", returnPath));
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(getMessengerSettingsRedirectUrl("invalid_callback"));
+    return NextResponse.redirect(getMessengerSettingsRedirectUrl("invalid_callback", returnPath));
   }
 
   const stateContext = await consumeMessengerOAuthState(state);
   if (!stateContext) {
-    return NextResponse.redirect(getMessengerSettingsRedirectUrl("invalid_state"));
+    return NextResponse.redirect(getMessengerSettingsRedirectUrl("invalid_state", returnPath));
   }
 
   const shortToken = await exchangeFacebookAuthorizationCode(code);
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest) {
       status: shortToken.status,
       body: shortToken.errorBody,
     });
-    return NextResponse.redirect(getMessengerSettingsRedirectUrl("token_exchange_failed"));
+    return NextResponse.redirect(getMessengerSettingsRedirectUrl("token_exchange_failed", returnPath));
   }
 
   const longToken = await exchangeLongLivedFacebookToken(shortToken.data.access_token);
@@ -50,7 +53,7 @@ export async function GET(request: NextRequest) {
       status: longToken.status,
       body: longToken.errorBody,
     });
-    return NextResponse.redirect(getMessengerSettingsRedirectUrl("long_token_failed"));
+    return NextResponse.redirect(getMessengerSettingsRedirectUrl("long_token_failed", returnPath));
   }
 
   const pages = await fetchFacebookPages(longToken.data.access_token);
@@ -59,12 +62,12 @@ export async function GET(request: NextRequest) {
       status: pages.status,
       body: pages.errorBody,
     });
-    return NextResponse.redirect(getMessengerSettingsRedirectUrl("pages_fetch_failed"));
+    return NextResponse.redirect(getMessengerSettingsRedirectUrl("pages_fetch_failed", returnPath));
   }
 
   const connectablePages = pages.data.filter((page) => page.id && page.access_token);
   if (!connectablePages.length) {
-    return NextResponse.redirect(getMessengerSettingsRedirectUrl("no_pages"));
+    return NextResponse.redirect(getMessengerSettingsRedirectUrl("no_pages", returnPath));
   }
 
   const admin = getSupabaseAdminClient();
@@ -110,13 +113,13 @@ export async function GET(request: NextRequest) {
         pageId: page.id,
         error: channelAccountError,
       });
-      return NextResponse.redirect(getMessengerSettingsRedirectUrl("persist_failed"));
+      return NextResponse.redirect(getMessengerSettingsRedirectUrl("persist_failed", returnPath));
     }
   }
 
   if (subscribedCount === 0) {
-    return NextResponse.redirect(getMessengerSettingsRedirectUrl("subscription_failed"));
+    return NextResponse.redirect(getMessengerSettingsRedirectUrl("subscription_failed", returnPath));
   }
 
-  return NextResponse.redirect(getMessengerSettingsRedirectUrl("connected"));
+  return NextResponse.redirect(getMessengerSettingsRedirectUrl("connected", returnPath));
 }

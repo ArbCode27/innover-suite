@@ -53,6 +53,8 @@ export const saveOrganizationModulesAction = async (rawValues: unknown): Promise
   revalidatePath("/funnels");
   revalidatePath("/calendar");
   revalidatePath("/listings");
+  revalidatePath("/onboarding/setup");
+  revalidatePath("/home");
   for (const key of MODULE_KEYS) {
     revalidatePath(`/${key}`);
   }

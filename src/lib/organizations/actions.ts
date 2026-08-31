@@ -16,6 +16,7 @@ import {
 } from "@/lib/organizations/membership";
 import { createOrganizationSchema } from "@/lib/organizations/schema";
 import { normalizeCurrencySettings } from "@/lib/organizations/currencies";
+import { zodErrorMessage } from "@/lib/validation/zod-es";
 
 const inviteAdvisorSchema = z.object({
   email: z.email("Ingresa un correo válido"),
@@ -25,7 +26,7 @@ const inviteAdvisorSchema = z.object({
 export const createOrganizationAction = async (rawValues: unknown) => {
   const parsed = createOrganizationSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+    return { error: zodErrorMessage(parsed.error, "Revisa los datos de la organización.") };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -74,7 +75,7 @@ export const createOrganizationAction = async (rawValues: unknown) => {
 export const inviteAdvisorAction = async (rawValues: unknown) => {
   const parsed = inviteAdvisorSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+    return { error: zodErrorMessage(parsed.error, "Revisa los datos de la organización.") };
   }
 
   const membership = await getCurrentMembership();
@@ -123,6 +124,7 @@ export const inviteAdvisorAction = async (rawValues: unknown) => {
     payload: { email: parsed.data.email.toLowerCase(), role: parsed.data.role },
   });
   revalidatePath("/settings");
+  revalidatePath("/onboarding/setup");
   return {
     success: "Invitación lista. Copia el enlace y envíalo al asesor.",
     inviteUrl,
@@ -142,6 +144,7 @@ export const completeOnboardingAction = async () => {
     .eq("id", membership.organizationId);
 
   revalidatePath("/home");
+  revalidatePath("/onboarding/setup");
   redirect("/home");
 };
 
@@ -178,7 +181,7 @@ export const updateOrganizationCurrenciesAction = async (rawValues: unknown) => 
     })
     .safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Revisa las monedas seleccionadas." };
+    return { error: zodErrorMessage(parsed.error, "Revisa las monedas seleccionadas.") };
   }
 
   const membership = await getCurrentMembership();

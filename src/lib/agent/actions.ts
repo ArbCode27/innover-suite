@@ -11,6 +11,7 @@ import { sessionExpiredResult } from "@/lib/auth/session-result";
 import { readCatalogImageFile } from "@/lib/media/image-upload";
 import { buildKnowledgeImagePath, uploadPublicMedia } from "@/lib/media/storage";
 import { KNOWLEDGE_IMAGES_BUCKET } from "@/lib/media/types";
+import { zodErrorMessage } from "@/lib/validation/zod-es";
 
 const weekdaySchema = z
   .object({
@@ -59,7 +60,7 @@ type ActionResult = {
 export const saveAgentSettingsAction = async (rawValues: unknown): Promise<ActionResult> => {
   const parsed = saveAgentSettingsSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Revisa el prompt del agente (mínimo 40 caracteres)." };
+    return { error: zodErrorMessage(parsed.error, "Revisa el prompt del agente (mínimo 40 caracteres).") };
   }
 
   const membership = await getCurrentMembership();
@@ -98,13 +99,14 @@ export const saveAgentSettingsAction = async (rawValues: unknown): Promise<Actio
   }
 
   revalidatePath("/settings");
+  revalidatePath("/onboarding/setup");
   return { success: "Configuración del agente guardada." };
 };
 
 export const saveOfficeHoursAction = async (rawValues: unknown): Promise<ActionResult> => {
   const parsed = saveOfficeHoursSchema.safeParse(rawValues);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Revisa el horario de oficina." };
+    return { error: zodErrorMessage(parsed.error, "Revisa el horario de oficina.") };
   }
 
   const membership = await getCurrentMembership();

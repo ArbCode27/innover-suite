@@ -1,4 +1,5 @@
 import { env } from "@/lib/config/env";
+import { resolveIntegrationReturnPath } from "@/lib/integrations/oauth-href";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const WHATSAPP_GRAPH_VERSION = "v26.0";
@@ -100,11 +101,14 @@ export const getWhatsAppOAuthRedirectUri = () => {
   return new URL("/api/auth/whatsapp/callback", originSource).toString();
 };
 
-export const getWhatsAppSettingsRedirectUrl = (status: string) => {
+export const getWhatsAppSettingsRedirectUrl = (status: string, returnPath?: string | null) => {
   const originSource = env.facebookRedirectUri || env.instagramRedirectUri || "http://localhost:3000";
-  const redirectUrl = new URL("/settings", originSource);
+  const path = resolveIntegrationReturnPath(returnPath);
+  const redirectUrl = new URL(path, originSource);
   redirectUrl.searchParams.set("wa", status);
-  redirectUrl.hash = "whatsapp";
+  if (path === "/settings" || path.startsWith("/settings?")) {
+    redirectUrl.hash = "whatsapp";
+  }
   return redirectUrl;
 };
 
