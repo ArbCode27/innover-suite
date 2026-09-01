@@ -43,10 +43,18 @@ import { createFunnelCardAction, moveFunnelCardAction } from "./actions";
 import type { FunnelBoardView, FunnelCardView, FunnelContactOption, FunnelMetrics, FunnelStageView } from "./types";
 import type { ListingOption } from "@/lib/listings/types";
 
+type FunnelProductOption = {
+  id: number;
+  name: string;
+  price: number;
+  currency: string;
+};
+
 type FunnelBoardProps = {
   initialBoard: FunnelBoardView;
   contacts: FunnelContactOption[];
   listings?: ListingOption[];
+  products?: FunnelProductOption[];
   currencies: OrganizationCurrencySettings;
 };
 
@@ -104,31 +112,41 @@ const collisionDetection: CollisionDetection = (args) => {
   return closestCorners(args);
 };
 
-const FunnelCardBody = ({ card, isOverlay = false }: { card: FunnelCardView; isOverlay?: boolean }) => (
-  <div className="flex items-start gap-2.5">
-    {isOverlay ? <GripVertical className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden /> : null}
-    <Avatar size="sm">
-      <AvatarFallback>{resolveInitials(card.contactName)}</AvatarFallback>
-    </Avatar>
-    <div className="min-w-0 flex-1">
-      <p className="truncate text-sm font-medium">{card.contactName}</p>
-      <p className="mt-0.5 truncate text-xs text-muted-foreground">{card.title}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {card.channel ? (
-          <Badge variant="outline" className={CHANNEL_BADGE_CLASSNAMES[card.channel]}>
-            {CHANNEL_LABELS[card.channel]}
-          </Badge>
-        ) : (
-          <Badge variant="outline">Manual</Badge>
+const FunnelCardBody = ({ card, isOverlay = false }: { card: FunnelCardView; isOverlay?: boolean }) => {
+  const titleIsContact =
+    card.title.trim().localeCompare(card.contactName.trim(), undefined, { sensitivity: "accent" }) === 0;
+  const productLabel = card.productName || card.listingTitle;
+  const price = card.productPrice ?? card.valueAmount;
+  const currency = card.productCurrency ?? card.currency ?? DEFAULT_CURRENCY;
+
+  return (
+    <div className="flex items-start gap-2.5">
+      {isOverlay ? <GripVertical className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden /> : null}
+      <Avatar size="sm">
+        <AvatarFallback>{resolveInitials(card.contactName)}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{card.contactName}</p>
+        {titleIsContact ? null : (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{card.title}</p>
         )}
-        {card.valueAmount ? (
-          <Badge variant="outline">{formatMoney(card.valueAmount, card.currency ?? DEFAULT_CURRENCY)}</Badge>
+        {productLabel || price != null ? (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {productLabel || "Producto"}
+            {price != null ? ` · ${formatMoney(price, currency)}` : ""}
+          </p>
         ) : null}
-        {card.listingTitle ? <Badge variant="outline">{card.listingTitle}</Badge> : null}
+        {card.channel ? (
+          <div className="mt-2">
+            <Badge variant="outline" className={CHANNEL_BADGE_CLASSNAMES[card.channel]}>
+              {CHANNEL_LABELS[card.channel]}
+            </Badge>
+          </div>
+        ) : null}
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const SortableFunnelCard = ({ card }: { card: FunnelCardView }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -219,7 +237,7 @@ const StageColumn = ({
   );
 };
 
-export const FunnelBoard = ({ initialBoard, contacts, listings = [], currencies }: FunnelBoardProps) => {
+export const FunnelBoard = ({ initialBoard, contacts, listings = [], products = [], currencies }: FunnelBoardProps) => {
   const [board, setBoard] = useState(initialBoard);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [contactId, setContactId] = useState(contacts[0]?.id ? String(contacts[0].id) : "");
@@ -228,6 +246,7 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], currencies 
   const [valueAmount, setValueAmount] = useState("");
   const [valueCurrency, setValueCurrency] = useState(currencies.defaultCode);
   const [listingId, setListingId] = useState("");
+  const [productId, setProductId] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [activeCard, setActiveCard] = useState<FunnelCardView | null>(null);
   const [overStageId, setOverStageId] = useState<number | null>(null);
@@ -241,6 +260,16 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], currencies 
     { label: "Contactos activos", value: String(metrics.contactCount), icon: Users },
     { label: "Etapas", value: String(metrics.stageCount), icon: KanbanSquare },
   ];
+
+  const handleProductChange = (nextProductId: string) => {
+    setProductId(nextProductId);
+    const selected = products.find((item) => String(item.id) === nextProductId);
+    if (!selected) return;
+    if (!valueAmount.trim()) {
+      setValueAmount(String(selected.price));
+    }
+    setValueCurrency(selected.currency || currencies.defaultCode);
+  };
 
   const handleContactChange = (nextContactId: string) => {
     setContactId(nextContactId);
@@ -274,6 +303,7 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], currencies 
         valueAmount: parsedValue,
         currency: parsedValue === undefined ? undefined : valueCurrency,
         listingId: listingId ? Number(listingId) : undefined,
+        productId: productId ? Number(productId) : undefined,
       });
 
       if (result.error || !result.data?.card) {
@@ -293,6 +323,8 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], currencies 
       setIsSheetOpen(false);
       setValueAmount("");
       setValueCurrency(currencies.defaultCode);
+      setProductId("");
+      setListingId("");
       toast.success("Oportunidad agregada al embudo");
     });
   };
@@ -504,6 +536,25 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], currencies 
               onAmountChange={setValueAmount}
               onCurrencyChange={setValueCurrency}
             />
+            {products.length ? (
+              <div className="space-y-2">
+                <Label htmlFor="funnel-product">Producto</Label>
+                <AppSelect
+                  id="funnel-product"
+                  aria-label="Producto"
+                  value={productId}
+                  onValueChange={handleProductChange}
+                  placeholder="Sin producto"
+                  options={[
+                    { value: "", label: "Sin producto" },
+                    ...products.map((item) => ({
+                      value: String(item.id),
+                      label: `${item.name} · ${formatMoney(item.price, item.currency)}`,
+                    })),
+                  ]}
+                />
+              </div>
+            ) : null}
             {listings.length ? (
               <div className="space-y-2">
                 <Label htmlFor="funnel-listing">Inmueble</Label>

@@ -3,7 +3,7 @@ import { cancelCommerceOrderForAgent, createCommerceOrderForAgent } from "@/lib/
 import { formatMoney, isFulfillmentType } from "@/lib/commerce/types";
 import { formatListingForAgent, loadListingForAgent, searchListingsForAgent } from "@/lib/listings/agent";
 import { LISTING_STATUS_LABELS } from "@/lib/listings/types";
-import { moveContactToFunnelStage } from "@/lib/funnels/agent";
+import { moveContactToFunnelStage, rememberFunnelInterest } from "@/lib/funnels/agent";
 import { insertSystemMessage } from "@/lib/inbox/agent-outbound";
 import type { OrganizationModules } from "@/lib/modules/constants";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -265,6 +265,26 @@ export const executeAgentTool = async (
       summary: created.summary,
     };
     await logToolRun(context, name, parsed.data, result, true);
+
+    const firstItem = parsed.data.items[0];
+    if (firstItem?.productId) {
+      const { data: product } = await getSupabaseAdminClient()
+        .from("products")
+        .select("name, price, currency")
+        .eq("id", firstItem.productId)
+        .eq("organization_id", context.organizationId)
+        .maybeSingle();
+      await rememberFunnelInterest({
+        organizationId: context.organizationId,
+        contactId: context.contactId,
+        conversationId: context.conversationId,
+        productId: firstItem.productId,
+        productName: typeof product?.name === "string" ? product.name : created.summary,
+        productPrice: product?.price == null ? created.total : Number(product.price),
+        productCurrency: typeof product?.currency === "string" ? product.currency : undefined,
+      });
+    }
+
     return { ok: true, result };
   }
 
@@ -378,6 +398,25 @@ export const executeAgentTool = async (
       title,
     };
     await logToolRun(context, name, parsed.data, result, true);
+
+    if (parsed.data.productId) {
+      const { data: product } = await admin
+        .from("products")
+        .select("name, price, currency")
+        .eq("id", parsed.data.productId)
+        .eq("organization_id", context.organizationId)
+        .maybeSingle();
+      await rememberFunnelInterest({
+        organizationId: context.organizationId,
+        contactId: context.contactId,
+        conversationId: context.conversationId,
+        productId: parsed.data.productId,
+        productName: title,
+        productPrice: product?.price == null ? undefined : Number(product.price),
+        productCurrency: typeof product?.currency === "string" ? product.currency : undefined,
+      });
+    }
+
     return {
       ok: true,
       result,
@@ -453,6 +492,15 @@ export const executeAgentTool = async (
       queuedPhoto: Boolean(listing.coverUrl),
     };
     await logToolRun(context, name, parsed.data, result, true);
+    await rememberFunnelInterest({
+      organizationId: context.organizationId,
+      contactId: context.contactId,
+      conversationId: context.conversationId,
+      listingId: listing.id,
+      productName: listing.title,
+      productPrice: listing.price ?? undefined,
+      productCurrency: listing.currency,
+    });
 
     if (listing.coverUrl) {
       context.imagesSentThisTurn.count += 1;

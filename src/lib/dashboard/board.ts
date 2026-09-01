@@ -40,7 +40,6 @@ export type DashboardReport = {
   conversationsAi: number;
   conversationsHuman: number;
   conversationsOpen: number;
-  audit: Array<{ id: number; action: string; entity: string; createdAt: string }>;
 };
 
 export type ChatChannelFunnel = {
@@ -623,7 +622,6 @@ export const loadDashboardBoard = async (
     messagesResult,
     ordersResult,
     membersResult,
-    auditResult,
     stagesResult,
     cardsResult,
     appointmentsResult,
@@ -668,12 +666,6 @@ export const loadDashboardBoard = async (
       .select("user_id, role")
       .eq("organization_id", organizationId)
       .eq("status", "active"),
-    supabase
-      .from("audit_events")
-      .select("id, action, entity, created_at")
-      .eq("organization_id", organizationId)
-      .order("created_at", { ascending: false })
-      .limit(12),
     modules.funnels
       ? supabase
           .from("funnels")
@@ -1011,12 +1003,6 @@ export const loadDashboardBoard = async (
     conversationsAi: conversationRows.filter((row) => row.mode === "ai").length,
     conversationsHuman: conversationRows.filter((row) => row.mode === "human").length,
     conversationsOpen: conversationRows.filter((row) => row.status !== "resolved").length,
-    audit: (auditResult.data ?? []).map((row) => ({
-      id: row.id as number,
-      action: row.action as string,
-      entity: row.entity as string,
-      createdAt: row.created_at as string,
-    })),
   };
 
   const sla: DashboardSla = {

@@ -20,6 +20,7 @@ const createCardSchema = z.object({
   currency: z.string().trim().length(3).optional(),
   conversationId: z.number().int().positive().optional(),
   listingId: z.number().int().positive().optional(),
+  productId: z.number().int().positive().optional(),
 });
 
 const moveCardSchema = z.object({
@@ -140,16 +141,18 @@ export const createFunnelCardAction = async (
 
   const position = await nextStagePosition(stageContext.stageId, access.membership.organizationId);
   const orgCurrencies = await loadOrganizationCurrencies(supabase, access.membership.organizationId);
-  const currency = parsed.data.valueAmount
+  let currency = parsed.data.valueAmount
     ? resolveOrganizationCurrency(parsed.data.currency, orgCurrencies)
     : null;
 
   let listingId: number | null = null;
   let listingTitle: string | null = null;
+  let listingPrice: number | null = null;
+  let listingCurrency: string | null = null;
   if (parsed.data.listingId) {
     const { data: listing } = await supabase
       .from("listings")
-      .select("id, title, code")
+      .select("id, title, code, price, currency")
       .eq("id", parsed.data.listingId)
       .eq("organization_id", access.membership.organizationId)
       .maybeSingle();
@@ -158,6 +161,34 @@ export const createFunnelCardAction = async (
     }
     listingId = listing.id as number;
     listingTitle = `${listing.code} · ${listing.title}`;
+    listingPrice = listing.price == null ? null : Number(listing.price);
+    listingCurrency = (listing.currency as string | null) ?? null;
+  }
+
+  let productName: string | null = listingTitle;
+  let productPrice: number | null = listingPrice ?? parsed.data.valueAmount ?? null;
+  let productCurrency: string | null = listingCurrency ?? currency;
+  const metadata: Record<string, unknown> = {};
+  if (parsed.data.productId) {
+    const { data: product } = await supabase
+      .from("products")
+      .select("id, name, price, currency, active")
+      .eq("id", parsed.data.productId)
+      .eq("organization_id", access.membership.organizationId)
+      .maybeSingle();
+    if (!product?.id || product.active === false) {
+      return { error: "El producto no existe o está inactivo." };
+    }
+    productName = (product.name as string) || "Producto";
+    productPrice = product.price == null ? productPrice : Number(product.price);
+    productCurrency = (product.currency as string | null) ?? productCurrency;
+    metadata.product_id = product.id;
+    metadata.product_name = productName;
+    metadata.product_price = productPrice;
+    metadata.product_currency = productCurrency;
+  }
+  if (!currency && productCurrency) {
+    currency = resolveOrganizationCurrency(productCurrency, orgCurrencies);
   }
 
   const insertPayload = {
@@ -167,11 +198,12 @@ export const createFunnelCardAction = async (
     contact_id: contact.id,
     conversation_id: conversationId,
     title: parsed.data.title,
-    value_amount: parsed.data.valueAmount ?? null,
+    value_amount: parsed.data.valueAmount ?? productPrice ?? null,
     currency,
     owner_user_id: user.id,
     position,
     listing_id: listingId,
+    ...(Object.keys(metadata).length ? { metadata } : {}),
   };
   const cardSelectWithListing =
     "id, stage_id, contact_id, conversation_id, title, value_amount, currency, owner_user_id, position, updated_at, listing_id, contacts(full_name, phone), conversations(channel), listings(title, code)";
@@ -249,6 +281,9 @@ export const createFunnelCardAction = async (
         channel: (inserted.conversations as { channel?: FunnelCardView["channel"] } | null)?.channel ?? null,
         listingId: ((inserted as { listing_id?: number | null }).listing_id as number | null) ?? listingId,
         listingTitle: listingTitle,
+        productName,
+        productPrice,
+        productCurrency,
       },
     },
   };

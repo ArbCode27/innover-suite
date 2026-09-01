@@ -29,6 +29,7 @@ type CardRow = {
   position: number;
   updated_at: string;
   listing_id?: number | null;
+  metadata?: unknown;
   contacts: {
     full_name: string;
     phone: string | null;
@@ -36,11 +37,31 @@ type CardRow = {
   conversations: {
     channel: MetaChannel;
   } | null;
-  listings?: { title?: string | null; code?: string | null } | { title?: string | null; code?: string | null }[] | null;
+  listings?:
+    | {
+        title?: string | null;
+        code?: string | null;
+        price?: number | string | null;
+        currency?: string | null;
+      }
+    | {
+        title?: string | null;
+        code?: string | null;
+        price?: number | string | null;
+        currency?: string | null;
+      }[]
+    | null;
 };
 
+const META_CHANNELS: MetaChannel[] = ["whatsapp", "instagram", "messenger"];
+
+const isMetaChannel = (value: unknown): value is MetaChannel =>
+  typeof value === "string" && META_CHANNELS.includes(value as MetaChannel);
+
+const listingFromCard = (row: CardRow) => (Array.isArray(row.listings) ? row.listings[0] : row.listings) ?? null;
+
 const listingTitleFromCard = (row: CardRow) => {
-  const listing = Array.isArray(row.listings) ? row.listings[0] : row.listings;
+  const listing = listingFromCard(row);
   const title = listing?.title?.trim();
   const code = listing?.code?.trim();
   if (title && code) return `${code} · ${title}`;
@@ -56,23 +77,50 @@ const asNumber = (value: number | string | null) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-export const mapFunnelCard = (row: CardRow): FunnelCardView => ({
-  id: row.id,
-  stageId: row.stage_id,
-  contactId: row.contact_id,
-  conversationId: row.conversation_id,
-  title: row.title,
-  valueAmount: asNumber(row.value_amount),
-  currency: row.currency ?? null,
-  ownerUserId: row.owner_user_id,
-  position: row.position,
-  updatedAt: row.updated_at,
-  contactName: row.contacts?.full_name || row.title,
-  contactPhone: row.contacts?.phone ?? null,
-  channel: row.conversations?.channel ?? null,
-  listingId: row.listing_id ?? null,
-  listingTitle: listingTitleFromCard(row),
-});
+const productFromMetadata = (metadata: unknown) => {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return { productName: null as string | null, productPrice: null as number | null, productCurrency: null as string | null };
+  }
+  const row = metadata as Record<string, unknown>;
+  const productName = typeof row.product_name === "string" && row.product_name.trim() ? row.product_name.trim() : null;
+  const productPrice = asNumber(
+    typeof row.product_price === "number" || typeof row.product_price === "string" ? row.product_price : null,
+  );
+  const productCurrency =
+    typeof row.product_currency === "string" && row.product_currency.trim() ? row.product_currency.trim() : null;
+  return { productName, productPrice, productCurrency };
+};
+
+export const mapFunnelCard = (row: CardRow): FunnelCardView => {
+  const listing = listingFromCard(row);
+  const listingTitle = listingTitleFromCard(row);
+  const fromMetadata = productFromMetadata(row.metadata);
+  const listingPrice = asNumber(listing?.price ?? null);
+  const productName = fromMetadata.productName || listingTitle;
+  const productPrice = fromMetadata.productPrice ?? listingPrice ?? (productName ? asNumber(row.value_amount) : null);
+  const productCurrency = fromMetadata.productCurrency || listing?.currency || row.currency || null;
+
+  return {
+    id: row.id,
+    stageId: row.stage_id,
+    contactId: row.contact_id,
+    conversationId: row.conversation_id,
+    title: row.title,
+    valueAmount: asNumber(row.value_amount),
+    currency: row.currency ?? null,
+    ownerUserId: row.owner_user_id,
+    position: row.position,
+    updatedAt: row.updated_at,
+    contactName: row.contacts?.full_name || row.title,
+    contactPhone: row.contacts?.phone ?? null,
+    channel: row.conversations?.channel ?? null,
+    listingId: row.listing_id ?? null,
+    listingTitle,
+    productName,
+    productPrice,
+    productCurrency,
+  };
+};
 
 const ensureDefaultStages = async (
   supabase: FunnelSupabase,
@@ -103,6 +151,142 @@ const ensureDefaultStages = async (
   if (stagesError) {
     throw stagesError;
   }
+};
+
+const parseToolProductId = (args: unknown) => {
+  if (!args || typeof args !== "object") return null;
+  const row = args as Record<string, unknown>;
+  const raw = row.productId ?? row.product_id;
+  const parsed = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+const enrichFunnelCards = async (
+  supabase: FunnelSupabase,
+  organizationId: number,
+  cards: FunnelCardView[],
+): Promise<FunnelCardView[]> => {
+  if (!cards.length) return cards;
+
+  const contactIds = [...new Set(cards.map((card) => card.contactId))];
+  const needsChannel = cards.some((card) => !card.channel);
+  const needsProduct = cards.some((card) => !card.productName);
+
+  const conversationByContact = new Map<number, { id: number; channel: MetaChannel }>();
+  if (needsChannel || needsProduct) {
+    const { data: conversationRows } = await supabase
+      .from("conversations")
+      .select("id, contact_id, channel, updated_at")
+      .eq("organization_id", organizationId)
+      .in("contact_id", contactIds)
+      .order("updated_at", { ascending: false });
+
+    for (const row of conversationRows ?? []) {
+      const contactId = row.contact_id as number;
+      if (conversationByContact.has(contactId)) continue;
+      if (!isMetaChannel(row.channel)) continue;
+      conversationByContact.set(contactId, { id: row.id as number, channel: row.channel });
+    }
+  }
+
+  const productByContact = new Map<number, { name: string; price: number | null; currency: string | null }>();
+  if (needsProduct) {
+    const { data: orderRows } = await supabase
+      .from("orders")
+      .select("contact_id, created_at, order_items(name_snapshot, unit_price)")
+      .eq("organization_id", organizationId)
+      .in("contact_id", contactIds)
+      .neq("status", "cancelled")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    for (const row of orderRows ?? []) {
+      const contactId = row.contact_id as number | null;
+      if (!contactId || productByContact.has(contactId)) continue;
+      const items = Array.isArray(row.order_items) ? row.order_items : [];
+      const first = items[0] as { name_snapshot?: string | null; unit_price?: number | string | null } | undefined;
+      const name = first?.name_snapshot?.trim();
+      if (!name) continue;
+      productByContact.set(contactId, {
+        name,
+        price: asNumber(first?.unit_price ?? null),
+        currency: null,
+      });
+    }
+
+    const conversationIds = [
+      ...new Set(
+        cards
+          .map((card) => card.conversationId ?? conversationByContact.get(card.contactId)?.id ?? null)
+          .filter((id): id is number => typeof id === "number"),
+      ),
+    ];
+
+    if (conversationIds.length) {
+      const { data: toolRows } = await supabase
+        .from("agent_tool_runs")
+        .select("conversation_id, arguments, created_at")
+        .eq("organization_id", organizationId)
+        .eq("tool_name", "send_image")
+        .eq("ok", true)
+        .in("conversation_id", conversationIds)
+        .order("created_at", { ascending: false })
+        .limit(120);
+
+      const productIdByConversation = new Map<number, number>();
+      for (const row of toolRows ?? []) {
+        const conversationId = row.conversation_id as number;
+        if (productIdByConversation.has(conversationId)) continue;
+        const productId = parseToolProductId(row.arguments);
+        if (productId) productIdByConversation.set(conversationId, productId);
+      }
+
+      const productIds = [...new Set(productIdByConversation.values())];
+      if (productIds.length) {
+        const { data: productRows } = await supabase
+          .from("products")
+          .select("id, name, price, currency")
+          .eq("organization_id", organizationId)
+          .in("id", productIds);
+
+        const products = new Map(
+          (productRows ?? []).map((row) => [
+            row.id as number,
+            {
+              name: (row.name as string) || "Producto",
+              price: asNumber(row.price as number | string | null),
+              currency: (row.currency as string | null) ?? null,
+            },
+          ]),
+        );
+
+        const conversationToContact = new Map<number, number>();
+        for (const card of cards) {
+          const conversationId = card.conversationId ?? conversationByContact.get(card.contactId)?.id;
+          if (conversationId) conversationToContact.set(conversationId, card.contactId);
+        }
+
+        for (const [conversationId, productId] of productIdByConversation) {
+          const contactId = conversationToContact.get(conversationId);
+          const product = products.get(productId);
+          if (!contactId || !product || productByContact.has(contactId)) continue;
+          productByContact.set(contactId, product);
+        }
+      }
+    }
+  }
+
+  return cards.map((card) => {
+    const conversation = conversationByContact.get(card.contactId);
+    const product = productByContact.get(card.contactId);
+    return {
+      ...card,
+      channel: card.channel ?? conversation?.channel ?? null,
+      productName: card.productName || product?.name || null,
+      productPrice: card.productPrice ?? product?.price ?? null,
+      productCurrency: card.productCurrency || product?.currency || card.currency,
+    };
+  });
 };
 
 export const ensureDefaultFunnel = async (
@@ -188,9 +372,9 @@ export const loadFunnelBoard = async (
   const stageIds = stages.map((stage) => stage.id);
 
   const cardSelectWithListing =
-    "id, stage_id, contact_id, conversation_id, title, value_amount, currency, owner_user_id, position, updated_at, listing_id, contacts(full_name, phone), conversations(channel), listings(title, code)";
+    "id, stage_id, contact_id, conversation_id, title, value_amount, currency, owner_user_id, position, updated_at, listing_id, metadata, contacts(full_name, phone), conversations(channel), listings(title, code, price, currency)";
   const cardSelectWithCurrency =
-    "id, stage_id, contact_id, conversation_id, title, value_amount, currency, owner_user_id, position, updated_at, contacts(full_name, phone), conversations(channel)";
+    "id, stage_id, contact_id, conversation_id, title, value_amount, currency, owner_user_id, position, updated_at, metadata, contacts(full_name, phone), conversations(channel)";
   const cardSelect =
     "id, stage_id, contact_id, conversation_id, title, value_amount, owner_user_id, position, updated_at, contacts(full_name, phone), conversations(channel)";
 
@@ -244,11 +428,14 @@ export const loadFunnelBoard = async (
     throw cardsError;
   }
 
+  const cards = ((cardRows ?? []) as CardRow[]).map(mapFunnelCard);
+  const enriched = await enrichFunnelCards(supabase, organizationId, cards);
+
   const cardsByStage = new Map<number, FunnelCardView[]>();
-  ((cardRows ?? []) as CardRow[]).forEach((row) => {
-    const current = cardsByStage.get(row.stage_id) ?? [];
-    current.push(mapFunnelCard(row));
-    cardsByStage.set(row.stage_id, current);
+  enriched.forEach((card) => {
+    const current = cardsByStage.get(card.stageId) ?? [];
+    current.push(card);
+    cardsByStage.set(card.stageId, current);
   });
 
   const mappedStages: FunnelStageView[] = stages.map((stage) => ({

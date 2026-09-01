@@ -155,3 +155,61 @@ export const moveContactToFunnelStage = async (params: {
     previousStageId: null,
   };
 };
+
+const asMetadataRecord = (value: unknown) =>
+  value && typeof value === "object" && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {};
+
+export const rememberFunnelInterest = async (params: {
+  organizationId: number;
+  contactId: number;
+  conversationId: number;
+  productId?: number;
+  productName?: string;
+  productPrice?: number;
+  productCurrency?: string;
+  listingId?: number;
+}) => {
+  const productName = params.productName?.trim();
+  if (!productName && params.listingId == null) return;
+
+  const admin = getSupabaseAdminClient();
+  const { data: funnel } = await admin
+    .from("funnels")
+    .select("id")
+    .eq("organization_id", params.organizationId)
+    .maybeSingle();
+
+  if (!funnel?.id) return;
+
+  const { data: card } = await admin
+    .from("funnel_cards")
+    .select("id, metadata, value_amount, listing_id")
+    .eq("organization_id", params.organizationId)
+    .eq("funnel_id", funnel.id)
+    .eq("contact_id", params.contactId)
+    .maybeSingle();
+
+  if (!card?.id) return;
+
+  const metadata = {
+    ...asMetadataRecord(card.metadata),
+    ...(params.productId != null ? { product_id: params.productId } : {}),
+    ...(productName ? { product_name: productName } : {}),
+    ...(params.productPrice != null ? { product_price: params.productPrice } : {}),
+    ...(params.productCurrency ? { product_currency: params.productCurrency } : {}),
+  };
+
+  const patch: Record<string, unknown> = {
+    conversation_id: params.conversationId,
+    metadata,
+  };
+  if (params.productPrice != null && card.value_amount == null) {
+    patch.value_amount = params.productPrice;
+    if (params.productCurrency) patch.currency = params.productCurrency;
+  }
+  if (params.listingId != null && card.listing_id == null) {
+    patch.listing_id = params.listingId;
+  }
+
+  await admin.from("funnel_cards").update(patch).eq("id", card.id).eq("organization_id", params.organizationId);
+};

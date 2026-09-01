@@ -7,7 +7,6 @@ import { loadDashboardBoard } from "@/lib/dashboard/board";
 import { loadCachedOrganizationModules } from "@/lib/modules/settings";
 import {
   canUseInbox,
-  canViewReports,
   loadCurrentMemberSession,
 } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -42,7 +41,6 @@ export default async function HomePage() {
       <HomeDashboard
         organizationName={membership.organizationName}
         board={board}
-        showAudit={canViewReports(membership)}
         canUseInbox={canUseInbox(membership)}
       />
     </ModuleShell>

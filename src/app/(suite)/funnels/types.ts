@@ -31,6 +31,9 @@ export type FunnelCardView = {
   channel: MetaChannel | null;
   listingId: number | null;
   listingTitle: string | null;
+  productName: string | null;
+  productPrice: number | null;
+  productCurrency: string | null;
 };
 
 export type FunnelStageView = {

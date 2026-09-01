@@ -21,20 +21,10 @@ import { HomeServicesMetrics } from "./home-services";
 type HomeDashboardProps = {
   organizationName: string;
   board: DashboardBoard;
-  showAudit: boolean;
   canUseInbox: boolean;
 };
 
-const formatTime = (value: string | null) => {
-  if (!value) return "Sin actividad";
-  return new Intl.DateTimeFormat("es-VE", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: CALENDAR_TIME_ZONE,
-  }).format(new Date(value));
-};
-
-export const HomeDashboard = ({ organizationName, board, showAudit, canUseInbox }: HomeDashboardProps) => {
+export const HomeDashboard = ({ organizationName, board, canUseInbox }: HomeDashboardProps) => {
   const { report, modules, agents, ai, stageFunnel, finance, activity, alerts } = board;
   const activeModuleLabels = MODULE_CATALOG.filter((item) => modules[item.key]).map((item) => item.label);
   const criticalAlerts = alerts.filter((alert) => alert.severity === "critical");
@@ -113,23 +103,6 @@ export const HomeDashboard = ({ organizationName, board, showAudit, canUseInbox 
               <p className="mt-1 text-2xl font-semibold">{item.value}</p>
             </div>
           ))}
-          {showAudit ? (
-            <div className="col-span-3 space-y-2">
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Auditoría</p>
-              {report.audit.length ? (
-                report.audit.slice(0, 5).map((event) => (
-                  <p key={event.id} className="flex justify-between gap-3 text-xs text-muted-foreground">
-                    <span>
-                      {event.action} · {event.entity}
-                    </span>
-                    <span>{formatTime(event.createdAt)}</span>
-                  </p>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">Sin eventos recientes.</p>
-              )}
-            </div>
-          ) : null}
         </CardContent>
       </Card>
 
