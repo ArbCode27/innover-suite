@@ -6,6 +6,7 @@ import { OfficeHoursForm } from "./office-hours-form";
 import { ModulesSettingsForm } from "./modules-settings-form";
 import { CurrencySettingsForm } from "./currency-settings-form";
 import { BrowserNotificationsCard } from "./browser-notifications-card";
+import { AppearanceSettingsCard } from "./appearance-settings-card";
 import { SecuritySettingsForm } from "./security-settings-form";
 import { loadCurrentMemberSession, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -129,6 +130,7 @@ export default async function SettingsPage() {
           />
         </Suspense>
         <BrowserNotificationsCard />
+        <AppearanceSettingsCard />
         <ModulesSettingsForm canManageOrganization={canManageOrganization} modules={modules} />
         <CurrencySettingsForm canManageOrganization={canManageOrganization} currencies={currencies} />
         <AgentSettingsForm

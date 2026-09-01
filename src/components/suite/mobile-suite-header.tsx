@@ -6,6 +6,7 @@ import { ChartColumn, ChevronRight, LogOut, Settings, Sparkles } from "lucide-re
 import { signOut } from "@/lib/auth/actions";
 import { SuiteHeaderBackButton } from "@/components/suite/suite-header-back-button";
 import { ThemeToggle } from "@/components/suite/theme-toggle";
+import { PalettePicker } from "@/components/suite/palette-picker";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -87,8 +88,9 @@ export const MobileSuiteHeader = ({
                   </div>
                 </div>
               </section>
-              <div className="rounded-2xl border border-primary/15 px-3 py-3">
+              <div className="space-y-3 rounded-2xl border border-primary/15 px-3 py-3">
                 <ThemeToggle row />
+                <PalettePicker />
               </div>
               <SheetClose asChild>
                 <Link
