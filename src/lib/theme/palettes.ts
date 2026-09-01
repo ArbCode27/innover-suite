@@ -22,15 +22,21 @@ export const APP_PALETTES = [
   },
   {
     id: "rose",
-    label: "Rosa y durazno",
-    swatchPrimaryClass: "bg-[oklch(0.58_0.18_12)]",
-    swatchSecondaryClass: "bg-[oklch(0.72_0.14_50)]",
+    label: "Rosa y crema",
+    swatchPrimaryClass: "bg-[oklch(0.62_0.18_12)]",
+    swatchSecondaryClass: "bg-[oklch(0.86_0.05_75)]",
   },
   {
     id: "candy",
-    label: "Rosado y amarillo",
+    label: "Rosado y salvia",
     swatchPrimaryClass: "bg-[oklch(0.62_0.19_350)]",
-    swatchSecondaryClass: "bg-[oklch(0.84_0.16_95)]",
+    swatchSecondaryClass: "bg-[oklch(0.62_0.08_155)]",
+  },
+  {
+    id: "amber",
+    label: "Amarillo y navy",
+    swatchPrimaryClass: "bg-[oklch(0.82_0.16_92)]",
+    swatchSecondaryClass: "bg-[oklch(0.38_0.08_250)]",
   },
 ] as const;
 
