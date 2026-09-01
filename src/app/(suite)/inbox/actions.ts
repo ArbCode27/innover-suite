@@ -481,4 +481,53 @@ export const markConversationReadAction = async (conversationId: number): Promis
   return { success: "Conversación leída." };
 };
 
+export const deleteConversationAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = z.object({ conversationId: z.number().int().positive() }).safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: "La conversación no es válida." };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin", "agent"])) {
+    return { error: "No tienes permisos para borrar conversaciones." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: conversation, error: fetchError } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("id", parsed.data.conversationId)
+    .eq("organization_id", membership.organizationId)
+    .maybeSingle();
+
+  if (fetchError || !conversation?.id) {
+    return { error: fetchError?.message || "La conversación no existe." };
+  }
+
+  const admin = getSupabaseAdminClient();
+  const { error: messagesError } = await admin
+    .from("messages")
+    .delete()
+    .eq("conversation_id", parsed.data.conversationId)
+    .eq("organization_id", membership.organizationId);
+
+  if (messagesError) {
+    return { error: messagesError.message || "No se pudieron borrar los mensajes." };
+  }
+
+  const { error: conversationError } = await admin
+    .from("conversations")
+    .delete()
+    .eq("id", parsed.data.conversationId)
+    .eq("organization_id", membership.organizationId);
+
+  if (conversationError) {
+    return { error: conversationError.message || "No se pudo borrar el chat." };
+  }
+
+  revalidatePath("/inbox");
+  revalidatePath("/home");
+  return { success: "Chat borrado." };
+};
+
 

@@ -34,6 +34,7 @@ import {
   Smile,
   Sparkles,
   Square,
+  Trash2,
   UserPlus,
   Video,
 } from "lucide-react";
@@ -63,7 +64,13 @@ import { MESSAGE_ATTACHMENTS_BUCKET } from "@/lib/media/types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { createFunnelCardFromConversationAction } from "../funnels/actions";
-import { sendConversationMessageAction, setConversationModeAction, assignConversationAction, markConversationReadAction } from "./actions";
+import {
+  assignConversationAction,
+  deleteConversationAction,
+  markConversationReadAction,
+  sendConversationMessageAction,
+  setConversationModeAction,
+} from "./actions";
 import { suggestReplyAction } from "@/lib/inbox/suggest";
 import { mapConversationListRow, mergeInboxConversations, previewFromMessageRow, type ConversationListRow } from "@/lib/inbox/board";
 import { MessageMedia } from "./message-media";
@@ -426,6 +433,25 @@ export const InboxPanel = ({
           filter: `organization_id=eq.${organizationId}`,
         },
         (payload) => {
+          if (payload.eventType === "DELETE") {
+            const oldRow = payload.old;
+            if (!oldRow || typeof oldRow !== "object" || !("id" in oldRow)) return;
+            const deletedId = Number((oldRow as { id: unknown }).id);
+            if (!Number.isInteger(deletedId) || deletedId <= 0) return;
+
+            setConversations((current) => current.filter((conversation) => conversation.id !== deletedId));
+            setMessagesByConversation((current) => {
+              const next = { ...current };
+              delete next[deletedId];
+              return next;
+            });
+            if (activeConversationIdRef.current === deletedId) {
+              setSelectedConversationId(null);
+              setIsMobileThreadOpen(false);
+            }
+            return;
+          }
+
           const row = payload.new;
           if (!row || typeof row !== "object" || !("id" in row)) return;
           void applyConversationChange(row as ConversationListRow);
@@ -740,6 +766,42 @@ export const InboxPanel = ({
         ),
       );
       if (result.success) toast.success(result.success);
+    });
+  };
+
+  const handleDeleteConversation = () => {
+    if (!activeConversationId || !selectedConversation) return;
+
+    const confirmed = window.confirm(
+      `¿Borrar el chat con ${selectedConversation.contactName}? Se eliminará el historial. Si escribe de nuevo, se abrirá un chat nuevo.`,
+    );
+    if (!confirmed) return;
+
+    const conversationId = activeConversationId;
+    startTransition(async () => {
+      const result = await deleteConversationAction({ conversationId });
+      if (result.error) {
+        toastActionError(result);
+        return;
+      }
+
+      setConversations((current) => current.filter((conversation) => conversation.id !== conversationId));
+      setMessagesByConversation((current) => {
+        const next = { ...current };
+        delete next[conversationId];
+        return next;
+      });
+      setSelectedConversationId(null);
+      setIsMobileThreadOpen(false);
+      setComposerError(null);
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has("conversation")) {
+          url.searchParams.delete("conversation");
+          window.history.replaceState({ inboxThread: null }, "", url);
+        }
+      }
+      toast.success(result.success ?? "Chat borrado.");
     });
   };
 
@@ -1092,6 +1154,15 @@ export const InboxPanel = ({
                         </Link>
                       </DropdownMenuItem>
                     ) : null}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      disabled={isPending}
+                      onClick={handleDeleteConversation}
+                    >
+                      <Trash2 />
+                      Borrar chat
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
