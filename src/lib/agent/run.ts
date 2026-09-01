@@ -26,7 +26,7 @@ import {
   trailingInboundIds,
   trailingInboundText,
 } from "@/lib/agent/history";
-import { isIncompleteAgentReply, resolveAgentReplyText } from "@/lib/agent/reply-text";
+import { isIncompleteAgentReply, needsAgentReplyRepair, resolveAgentReplyText } from "@/lib/agent/reply-text";
 import { areAdvisorsAvailable, isAfterHoursAiCoverage } from "@/lib/agent/hours";
 import { formatKnowledgeContext, loadAgentSettings, loadKnowledgeArticles } from "@/lib/agent/settings";
 import { buildAgentToolDeclarations } from "@/lib/agent/tools";
@@ -94,7 +94,7 @@ const IMAGE_FAILED_HINT =
   "La imagen no se pudo enviar. Responde solo en texto: planes, precios y la siguiente pregunta. Frases completas. No vuelvas a llamar send_image.";
 
 const INCOMPLETE_REPLY_HINT =
-  "Tu mensaje al cliente está incompleto (frase cortada). Reescribe el mensaje entero en español, 3 o 4 frases cerradas, con planes o precios si aplica. No menciones tools ni IDs. No llames send_image.";
+  "Tu mensaje al cliente está incompleto (frase o nombre de producto cortado, por ejemplo «Nuestro Kit»). Reescribe el mensaje entero en español, 3 o 4 frases cerradas, con planes o precios si aplica. No menciones tools ni IDs. No llames send_image.";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -716,6 +716,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
     const toolDeclarations = buildAgentToolDeclarations(settings, modules);
     let functionCallsPending = true;
     let draftText = "";
+    let draftTruncated = false;
     let finalText = "";
     let handoff = false;
     let imageFailed = false;
@@ -739,10 +740,11 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
       return outcome;
     };
 
-    const rememberDraft = (text: string) => {
+    const rememberDraft = (text: string, truncated = false) => {
       const trimmed = text.trim();
       if (trimmed) {
         draftText = trimmed;
+        draftTruncated = truncated;
       }
     };
 
@@ -787,7 +789,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
         return;
       }
 
-      rememberDraft(generation.text);
+      rememberDraft(generation.text, generation.truncated);
 
       if (!generation.functionCalls.length) {
         finalText = generation.text;
@@ -855,7 +857,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
           if (superseded) await followUpIfNeeded();
           return;
         }
-        rememberDraft(fallback.text);
+        rememberDraft(fallback.text, fallback.truncated);
         finalText = fallback.text;
         functionCallsPending = false;
         break;
@@ -876,7 +878,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
           if (superseded) await followUpIfNeeded();
           return;
         }
-        rememberDraft(closing.text);
+        rememberDraft(closing.text, closing.truncated);
         finalText = closing.text;
         functionCallsPending = false;
       }
@@ -884,11 +886,17 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
 
     finalText = resolveAgentReplyText(draftText, finalText);
 
-    if (isIncompleteAgentReply(finalText) || (!finalText && !pendingImage && draftText)) {
+    if (
+      needsAgentReplyRepair(finalText, draftTruncated) ||
+      (!finalText && !pendingImage && draftText)
+    ) {
       const repaired = await generateTextOnly(INCOMPLETE_REPLY_HINT);
       if (repaired.ok) {
-        rememberDraft(repaired.text);
+        rememberDraft(repaired.text, repaired.truncated);
         finalText = resolveAgentReplyText(draftText, repaired.text);
+        if (!needsAgentReplyRepair(finalText, repaired.truncated)) {
+          draftTruncated = false;
+        }
       }
     }
 

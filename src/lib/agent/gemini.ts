@@ -2,6 +2,8 @@ import { env } from "@/lib/config/env";
 import {
   AGENT_FALLBACK_ATTEMPTS,
   AGENT_FALLBACK_MODELS,
+  AGENT_GEMINI_TIMEOUT_MS,
+  AGENT_MAX_OUTPUT_TOKENS,
   AGENT_MODEL,
   AGENT_PRIMARY_ATTEMPTS,
   RETIRED_AGENT_MODELS,
@@ -29,6 +31,7 @@ export type GeminiTurnSuccess = {
   text: string;
   functionCalls: GeminiFunctionCall[];
   modelParts: GeminiPart[];
+  truncated: boolean;
 };
 
 export type GeminiTurnFailure = {
@@ -43,6 +46,7 @@ export type GeminiTurnOutcome = GeminiTurnSuccess | GeminiTurnFailure;
 
 type GeminiApiPart = {
   text?: string;
+  thought?: boolean;
   thoughtSignature?: string;
   thought_signature?: string;
   inlineData?: { mimeType?: string; data?: string };
@@ -52,6 +56,8 @@ type GeminiApiPart = {
 
 type GeminiGenerateResponse = {
   candidates?: Array<{
+    finishReason?: string;
+    finish_reason?: string;
     content?: {
       role?: string;
       parts?: GeminiApiPart[];
@@ -61,7 +67,12 @@ type GeminiGenerateResponse = {
 };
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const GEMINI_TIMEOUT_MS = 12_000;
+
+const isTruncatedFinishReason = (value: unknown) => {
+  if (typeof value !== "string" || !value.trim()) return false;
+  const normalized = value.trim().toUpperCase().replace(/^FINISH_REASON_/, "");
+  return normalized === "MAX_TOKENS";
+};
 
 export const isGeminiConfigured = () => Boolean(env.geminiApiKey);
 
@@ -88,11 +99,11 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const createTimeoutSignal = () => {
   if (typeof AbortSignal.timeout === "function") {
-    return AbortSignal.timeout(GEMINI_TIMEOUT_MS);
+    return AbortSignal.timeout(AGENT_GEMINI_TIMEOUT_MS);
   }
 
   const controller = new AbortController();
-  setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+  setTimeout(() => controller.abort(), AGENT_GEMINI_TIMEOUT_MS);
   return controller.signal;
 };
 
@@ -186,7 +197,7 @@ export const mapGeminiApiParts = (parts: GeminiApiPart[]): GeminiPart[] => {
       continue;
     }
 
-    const text = part.text?.trim() ?? "";
+    const text = part.thought ? "" : (part.text?.trim() ?? "");
     if (text || thoughtSignature) {
       mapped.push(withThoughtSignature({ text }, thoughtSignature));
     }
@@ -217,7 +228,7 @@ const generateGeminiTurnOnce = async (params: {
     contents: params.contents,
     generationConfig: {
       temperature: 0.4,
-      maxOutputTokens: 1024,
+      maxOutputTokens: AGENT_MAX_OUTPUT_TOKENS,
     },
   };
 
@@ -247,7 +258,8 @@ const generateGeminiTurnOnce = async (params: {
       };
     }
 
-    const modelParts = mapGeminiApiParts(json.candidates?.[0]?.content?.parts ?? []);
+    const candidate = json.candidates?.[0];
+    const modelParts = mapGeminiApiParts(candidate?.content?.parts ?? []);
     const functionCalls = modelParts.flatMap((part) =>
       "functionCall" in part && part.functionCall.name
         ? [{ name: part.functionCall.name, args: part.functionCall.args ?? {} }]
@@ -259,7 +271,14 @@ const generateGeminiTurnOnce = async (params: {
       .join("\n")
       .trim();
 
-    return { ok: true, model: params.model, text, functionCalls, modelParts };
+    return {
+      ok: true,
+      model: params.model,
+      text,
+      functionCalls,
+      modelParts,
+      truncated: isTruncatedFinishReason(candidate?.finishReason ?? candidate?.finish_reason),
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo contactar a Gemini.";
     return {

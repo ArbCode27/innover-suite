@@ -7,6 +7,8 @@ export const RETIRED_AGENT_MODELS = new Set([
 ]);
 export const AGENT_HISTORY_LIMIT = 20;
 export const AGENT_MAX_TOOL_TURNS = 4;
+export const AGENT_MAX_OUTPUT_TOKENS = 8192;
+export const AGENT_GEMINI_TIMEOUT_MS = 25_000;
 export const AGENT_MAX_RETRIES = 3;
 export const AGENT_PRIMARY_ATTEMPTS = 1;
 export const AGENT_FALLBACK_ATTEMPTS = 1;
