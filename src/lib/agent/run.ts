@@ -39,7 +39,7 @@ import {
   formatListingsContext,
   loadAgentListingsSnapshot,
 } from "@/lib/listings/agent";
-import { loadAgentFunnelSnapshot } from "@/lib/funnels/agent";
+import { ensureConversationFunnelCard, loadAgentFunnelSnapshot } from "@/lib/funnels/agent";
 import {
   escalateConversationToHuman,
   insertSystemMessage,
@@ -628,7 +628,16 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
     }
 
     const funnel = modules.funnels
-      ? await loadAgentFunnelSnapshot(job.organizationId, conversation.contact_id as number)
+      ? await (async () => {
+          if (conversation.contact_id && settings.toolsFunnel) {
+            await ensureConversationFunnelCard({
+              organizationId: job.organizationId,
+              contactId: conversation.contact_id as number,
+              conversationId: job.conversationId,
+            });
+          }
+          return loadAgentFunnelSnapshot(job.organizationId, conversation.contact_id as number);
+        })()
       : { funnelName: null, stages: [] as Array<{ id: number; name: string }>, currentStage: null };
 
     const appointmentRows = modules.calendar

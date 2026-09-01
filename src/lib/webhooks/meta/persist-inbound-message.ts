@@ -9,6 +9,8 @@ import { resolveInstagramCredentials } from "@/lib/integrations/instagram-creden
 import { fetchSocialUserProfile, resolveProfileDisplayName } from "@/lib/integrations/meta-profile";
 import { mergeAttachmentMetadata, resolveMessagePreview } from "@/lib/media/parse";
 import { buildConversationPreviewPatch, updateConversationWithPreview } from "@/lib/inbox/conversation-preview";
+import { ensureConversationFunnelCard } from "@/lib/funnels/agent";
+import { loadOrganizationModulesAdmin } from "@/lib/modules/settings";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logMetaWebhook, maskIdentifier } from "@/lib/webhooks/meta/logger";
 import type { InboundMessageEvent, PersistResult } from "@/lib/webhooks/meta/types";
@@ -404,6 +406,24 @@ const persistInboundMessage = async (
     organizationContext.channelAccountId,
     contactId,
   );
+
+  try {
+    const modules = await loadOrganizationModulesAdmin(organizationContext.organizationId);
+    if (modules.funnels) {
+      await ensureConversationFunnelCard({
+        organizationId: organizationContext.organizationId,
+        contactId,
+        conversationId,
+      });
+    }
+  } catch (error) {
+    logMetaWebhook("warn", "persist.funnel_ensure_failed", {
+      organizationId: organizationContext.organizationId,
+      conversationId,
+      contactId,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
 
   const now = new Date().toISOString();
   const messageMetadata: Record<string, unknown> = {

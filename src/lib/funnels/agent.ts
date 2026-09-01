@@ -58,6 +58,174 @@ export const loadAgentFunnelSnapshot = async (organizationId: number, contactId:
   };
 };
 
+const loadFirstFunnelStage = async (organizationId: number) => {
+  const admin = getSupabaseAdminClient();
+  const { data: funnel } = await admin
+    .from("funnels")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (!funnel?.id) return null;
+
+  const { data: firstStage } = await admin
+    .from("funnel_stages")
+    .select("id, name")
+    .eq("funnel_id", funnel.id)
+    .order("order_index", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (!firstStage?.id) return null;
+
+  return {
+    funnelId: funnel.id as number,
+    stageId: firstStage.id as number,
+    stageName: firstStage.name as string,
+  };
+};
+
+const conversationIsOpen = async (conversationId: number, organizationId: number) => {
+  const admin = getSupabaseAdminClient();
+  const { data } = await admin
+    .from("conversations")
+    .select("id")
+    .eq("id", conversationId)
+    .eq("organization_id", organizationId)
+    .in("status", ["open", "in_progress"])
+    .maybeSingle();
+  return Boolean(data?.id);
+};
+
+export const ensureConversationFunnelCard = async (params: {
+  organizationId: number;
+  contactId: number;
+  conversationId: number;
+}) => {
+  const first = await loadFirstFunnelStage(params.organizationId);
+  if (!first) return null;
+
+  const admin = getSupabaseAdminClient();
+  const { data: existing } = await admin
+    .from("funnel_cards")
+    .select("id, stage_id, conversation_id")
+    .eq("organization_id", params.organizationId)
+    .eq("funnel_id", first.funnelId)
+    .eq("contact_id", params.contactId)
+    .maybeSingle();
+
+  if (!existing?.id) {
+    const { data: contact } = await admin
+      .from("contacts")
+      .select("full_name")
+      .eq("id", params.contactId)
+      .eq("organization_id", params.organizationId)
+      .maybeSingle();
+
+    const position = await nextStagePosition(first.stageId, params.organizationId);
+    const { error: insertError } = await admin.from("funnel_cards").insert({
+      organization_id: params.organizationId,
+      funnel_id: first.funnelId,
+      stage_id: first.stageId,
+      contact_id: params.contactId,
+      conversation_id: params.conversationId,
+      title: (contact?.full_name as string) || "Oportunidad",
+      position,
+      metadata: {
+        source: "conversation_start",
+        last_agent_reason: "Nuevo chat",
+        last_agent_move_at: new Date().toISOString(),
+      },
+    });
+
+    if (insertError && insertError.code !== POSTGRES_UNIQUE_VIOLATION) {
+      return null;
+    }
+
+    return { stageId: first.stageId, stageName: first.stageName, created: true as const };
+  }
+
+  const linkedId = typeof existing.conversation_id === "number" ? existing.conversation_id : null;
+  const sameConversation = linkedId === params.conversationId;
+  const linkedStillOpen = linkedId ? await conversationIsOpen(linkedId, params.organizationId) : false;
+  const shouldRestart = !sameConversation && !linkedStillOpen;
+
+  if (shouldRestart) {
+    const position = await nextStagePosition(first.stageId, params.organizationId);
+    await admin
+      .from("funnel_cards")
+      .update({
+        stage_id: first.stageId,
+        conversation_id: params.conversationId,
+        value_amount: null,
+        position,
+        metadata: {
+          source: "conversation_restart",
+          last_agent_reason: "Nuevo chat",
+          last_agent_move_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", existing.id)
+      .eq("organization_id", params.organizationId);
+
+    return { stageId: first.stageId, stageName: first.stageName, created: true as const };
+  }
+
+  if (!linkedId) {
+    await admin
+      .from("funnel_cards")
+      .update({ conversation_id: params.conversationId })
+      .eq("id", existing.id)
+      .eq("organization_id", params.organizationId);
+  }
+
+  return { stageId: existing.stage_id as number, stageName: first.stageName, created: false as const };
+};
+
+export const releaseFunnelCardForConversation = async (params: {
+  organizationId: number;
+  conversationId: number;
+  contactId: number | null;
+}) => {
+  const admin = getSupabaseAdminClient();
+  const { data: cards } = await admin
+    .from("funnel_cards")
+    .select("id, contact_id")
+    .eq("organization_id", params.organizationId)
+    .eq("conversation_id", params.conversationId);
+
+  for (const card of cards ?? []) {
+    const contactId = (typeof card.contact_id === "number" ? card.contact_id : params.contactId) ?? null;
+    let otherConversationId: number | null = null;
+    if (contactId) {
+      const { data: other } = await admin
+        .from("conversations")
+        .select("id")
+        .eq("organization_id", params.organizationId)
+        .eq("contact_id", contactId)
+        .neq("id", params.conversationId)
+        .in("status", ["open", "in_progress"])
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      otherConversationId = typeof other?.id === "number" ? other.id : null;
+    }
+
+    if (otherConversationId) {
+      await admin
+        .from("funnel_cards")
+        .update({ conversation_id: otherConversationId })
+        .eq("id", card.id)
+        .eq("organization_id", params.organizationId);
+      continue;
+    }
+
+    await admin.from("funnel_cards").delete().eq("id", card.id).eq("organization_id", params.organizationId);
+  }
+};
+
 export const moveContactToFunnelStage = async (params: {
   organizationId: number;
   contactId: number;

@@ -12,6 +12,7 @@ import {
   updateConversationWithPreview,
 } from "@/lib/inbox/conversation-preview";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
+import { releaseFunnelCardForConversation } from "@/lib/funnels/agent";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { sessionExpiredResult } from "@/lib/auth/session-result";
@@ -511,7 +512,7 @@ export const deleteConversationAction = async (rawValues: unknown): Promise<Acti
   const supabase = await createSupabaseServerClient();
   const { data: conversation, error: fetchError } = await supabase
     .from("conversations")
-    .select("id")
+    .select("id, contact_id")
     .eq("id", parsed.data.conversationId)
     .eq("organization_id", membership.organizationId)
     .maybeSingle();
@@ -531,6 +532,12 @@ export const deleteConversationAction = async (rawValues: unknown): Promise<Acti
     return { error: messagesError.message || "No se pudieron borrar los mensajes." };
   }
 
+  await releaseFunnelCardForConversation({
+    organizationId: membership.organizationId,
+    conversationId: parsed.data.conversationId,
+    contactId: typeof conversation.contact_id === "number" ? conversation.contact_id : null,
+  });
+
   const { error: conversationError } = await admin
     .from("conversations")
     .delete()
@@ -543,6 +550,7 @@ export const deleteConversationAction = async (rawValues: unknown): Promise<Acti
 
   revalidatePath("/inbox");
   revalidatePath("/home");
+  revalidatePath("/funnels");
   return { success: "Chat borrado." };
 };
 

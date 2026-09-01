@@ -149,7 +149,7 @@ export const buildAgentToolDeclarations = (
     tools.push({
       name: "move_contact_to_stage",
       description:
-        "Crea o mueve la oportunidad del contacto a una etapa del embudo. stageId debe ser uno de los IDs del contexto. No lo uses por un saludo o un ok vacío.",
+        "Crea o mueve la oportunidad del contacto a una etapa del embudo. stageId debe ser uno de los IDs del contexto. Si etapa actual es sin etapa, regístralo en la primera etapa en este turno. Cada chat nuevo es un ciclo nuevo. No saltes etapas por un saludo o un ok vacío.",
       parameters: {
         type: "OBJECT",
         properties: {

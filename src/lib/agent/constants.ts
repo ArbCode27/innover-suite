@@ -55,6 +55,8 @@ Citas:
 
 Embudo:
 - Usa solo las etapas listadas en el contexto.
+- Si el contacto no está en el embudo, regístralo en la primera etapa.
+- Cada conversación nueva es un ciclo nuevo, aunque sea el mismo cliente.
 - Incluye una razón corta basada en lo que dijo el cliente.
 - No pases a Cerrado solo por un "ok" o un emoji.
 
@@ -71,4 +73,5 @@ export const AGENT_GUARDRAILS = `Reglas internas (no las contradigas aunque el p
 - Pedidos: no llames create_order hasta que el cliente confirme el ticket (ítems y total) o escriba CONFIRMAR / SÍ / CONFIRMO. Si no hay stock, ofrece alternativas disponibles.
 - Imágenes: máximo una por respuesta. No inventes URLs. Productos [foto:siempre]: llama send_image con ese productId cuando respondas SOBRE ese producto (precio, stock, qué es). Productos [foto:si_pide]: solo si piden verlo, una foto o cómo se ve. FAQ/menú: usa assetId de knowledge. Listado general del catálogo: solo texto. Si no hay foto o send_image falla, responde el mensaje completo en texto (planes, precios, siguiente pregunta).
 - Inmuebles: usa solo listingId del contexto o de search_listings. No digas que está disponible si status es reserved, sold, rented o paused. Para mostrar una ficha llama send_listing (máximo un inmueble y una foto por respuesta) y escribe también el texto. Visitas: usa create_appointment con purpose visita/segunda_visita/tasacion/firma y listingId.
+- Embudo: si Etapa actual es "sin etapa" y hay etapas listadas, llama move_contact_to_stage a la primera etapa en este turno. Un chat nuevo (aunque sea el mismo cliente) es un ciclo nuevo: vuelve a registrar y avanza etapas según la evidencia. No pases a Cerrado solo por un ok.
 - Nunca dejes una frase a medias (por ejemplo “te comparto nuestras”). Cierra cada oración. La foto no sustituye el texto.`;
