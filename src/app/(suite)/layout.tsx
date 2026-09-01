@@ -129,9 +129,9 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
 
   return (
     <MobileChromeProvider>
-      <div className="min-h-screen bg-background text-foreground">
-        <div className="relative mx-auto min-h-screen w-full max-w-[1800px] p-3 md:p-5">
-          <aside className="group/sidebar fixed top-3 left-3 z-50 hidden h-[calc(100vh-1.5rem)] w-[78px] min-w-0 overflow-x-hidden overflow-y-auto rounded-3xl border border-primary/20 bg-card/80 p-3 shadow-2xl shadow-primary/15 backdrop-blur transition-all duration-300 hover:w-72 md:flex md:flex-col md:top-5 md:left-5 md:h-[calc(100vh-2.5rem)]">
+      <div className="h-full overflow-hidden bg-background text-foreground">
+        <div className="relative mx-auto flex h-full min-h-0 w-full max-w-[1800px] flex-col p-3 md:p-5">
+          <aside className="group/sidebar app-scroll fixed top-3 left-3 z-50 hidden h-[calc(100vh-1.5rem)] w-[78px] min-w-0 overflow-x-hidden overflow-y-auto rounded-3xl border border-primary/20 bg-card/80 p-3 shadow-2xl shadow-primary/15 backdrop-blur transition-all duration-300 hover:w-72 md:flex md:flex-col md:top-5 md:left-5 md:h-[calc(100vh-2.5rem)]">
             <Link
               href="/home"
               prefetch={false}
@@ -190,14 +190,16 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
               </form>
             </div>
           </aside>
-          <main className="min-w-0 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0 md:pl-[94px]">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0 md:pl-[94px]">
             <MobileSuiteHeader
               email={user.email ?? null}
               roleLabel={ROLE_LABELS[membership.role as OrganizationRole]}
               organizationName={membership.organizationName}
               initials={initials}
             />
-            {children}
+            <div className="app-scroll flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
+              {children}
+            </div>
           </main>
           <MobileNav
             items={mobileNavItems.map((item) => ({

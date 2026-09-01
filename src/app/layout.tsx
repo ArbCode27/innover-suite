@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           dangerouslySetInnerHTML={{ __html: getPaletteBootstrapScript() }}
         />
       </head>
-      <body className="min-h-full bg-background text-foreground">
+      <body className="h-full min-h-full overflow-x-hidden bg-background text-foreground">
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

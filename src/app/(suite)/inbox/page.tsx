@@ -111,7 +111,7 @@ export default async function InboxPage({
     isScheduleEnabled(agentSettings.businessHours) && !areAdvisorsAvailable(agentSettings.businessHours);
 
   return (
-    <section>
+    <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <InboxPanel
         organizationId={membership.organizationId}
         organizationName={membership.organizationName}

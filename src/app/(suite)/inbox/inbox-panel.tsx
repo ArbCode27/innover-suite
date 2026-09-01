@@ -959,14 +959,14 @@ export const InboxPanel = ({
   const hasComposerMeta = Boolean(composerAttachment || composerError || isRecording);
 
   return (
-    <div className="grid h-[calc(100dvh-5.75rem)] max-h-[100dvh] gap-3 overflow-hidden md:h-[calc(100vh-2.5rem)] lg:grid-cols-[330px_1fr]">
+    <div className="grid h-full min-h-0 gap-3 overflow-hidden lg:grid-cols-[330px_1fr]">
       <Card
         className={cn(
           "flex h-full min-h-0 flex-col border-primary/15 bg-card/70",
           isMobileThreadOpen && "max-lg:hidden",
         )}
       >
-        <CardHeader className="space-y-3 p-3">
+        <CardHeader className="shrink-0 space-y-3 p-3">
           <div className="flex items-start justify-between gap-2">
             <div>
               <CardTitle>Conversaciones</CardTitle>
@@ -1008,9 +1008,9 @@ export const InboxPanel = ({
           </div>
         </CardHeader>
 
-        <CardContent className="min-h-0 flex-1 p-0">
+        <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
           {filteredConversations.length ? (
-            <ScrollArea className="h-full">
+            <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-1 p-2">
                 {filteredConversations.map((conversation) => {
                   const isSelected = activeConversationId === conversation.id;
@@ -1084,7 +1084,7 @@ export const InboxPanel = ({
             !isMobileThreadOpen && "max-lg:hidden",
           )}
         >
-          <CardHeader className="border-b border-primary/10 p-3">
+          <CardHeader className="shrink-0 border-b border-primary/10 p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <Button
@@ -1177,7 +1177,7 @@ export const InboxPanel = ({
             </div>
           </CardHeader>
 
-          <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
             <ScrollArea className="min-h-0 flex-1 bg-[radial-gradient(circle_at_top,rgba(0,0,0,0.02),transparent_30rem)] px-3 py-3">
               {isLoadingMessages ? (
                 <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
@@ -1250,7 +1250,7 @@ export const InboxPanel = ({
             </ScrollArea>
 
             <div
-              className={`border-t border-primary/10 px-2 ${
+              className={`shrink-0 border-t border-primary/10 px-2 ${
                 hasComposerMeta ? "py-2" : "py-1.5"
               }`}
             >
