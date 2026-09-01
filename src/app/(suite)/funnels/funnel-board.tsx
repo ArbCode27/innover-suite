@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type MouseEvent, type PointerEvent } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -17,7 +17,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { DollarSign, GripVertical, KanbanSquare, Loader2, Plus, Target, Users } from "lucide-react";
+import { DollarSign, GripVertical, KanbanSquare, Loader2, Plus, Target, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { toastActionError } from "@/lib/auth/action-toast";
 import { CHANNEL_BADGE_CLASSNAMES, CHANNEL_LABELS } from "@/lib/contacts/display";
@@ -39,7 +39,7 @@ import {
 import { formatMoney } from "@/lib/commerce/types";
 import { PriceCurrencyField } from "@/components/ui/price-currency-field";
 import { DEFAULT_CURRENCY, type OrganizationCurrencySettings } from "@/lib/organizations/currencies";
-import { createFunnelCardAction, moveFunnelCardAction } from "./actions";
+import { createFunnelCardAction, deleteFunnelCardAction, moveFunnelCardAction } from "./actions";
 import type { FunnelBoardView, FunnelCardView, FunnelContactOption, FunnelMetrics, FunnelStageView } from "./types";
 import type { ListingOption } from "@/lib/listings/types";
 
@@ -148,11 +148,29 @@ const FunnelCardBody = ({ card, isOverlay = false }: { card: FunnelCardView; isO
   );
 };
 
-const SortableFunnelCard = ({ card }: { card: FunnelCardView }) => {
+const SortableFunnelCard = ({
+  card,
+  isDeleting,
+  onDelete,
+}: {
+  card: FunnelCardView;
+  isDeleting: boolean;
+  onDelete: (card: FunnelCardView) => void;
+}) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: cardDndId(card.id),
     data: { type: "card", cardId: card.id, stageId: card.stageId },
   });
+
+  const handleDeletePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+  };
+
+  const handleDeleteClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    event.preventDefault();
+    onDelete(card);
+  };
 
   return (
     <article
@@ -161,13 +179,31 @@ const SortableFunnelCard = ({ card }: { card: FunnelCardView }) => {
         transform: CSS.Transform.toString(transform),
         transition,
       }}
-      className={`cursor-grab rounded-xl border border-primary/15 bg-background p-3 shadow-sm active:cursor-grabbing ${
+      className={`rounded-xl border border-primary/15 bg-background p-3 shadow-sm ${
         isDragging ? "opacity-30" : ""
       }`}
-      {...attributes}
-      {...listeners}
     >
-      <FunnelCardBody card={card} />
+      <div className="flex items-start gap-1">
+        <div
+          className="min-w-0 flex-1 cursor-grab active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+        >
+          <FunnelCardBody card={card} />
+        </div>
+        <Button
+          type="button"
+          size="icon-xs"
+          variant="ghost"
+          className="shrink-0 text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
+          disabled={isDeleting}
+          aria-label={`Quitar a ${card.contactName} del embudo`}
+          onPointerDown={handleDeletePointerDown}
+          onClick={handleDeleteClick}
+        >
+          {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
+        </Button>
+      </div>
     </article>
   );
 };
@@ -176,10 +212,14 @@ const StageColumn = ({
   stage,
   colorClass,
   isDropTarget,
+  deletingCardId,
+  onDeleteCard,
 }: {
   stage: FunnelStageView;
   colorClass: string;
   isDropTarget: boolean;
+  deletingCardId: number | null;
+  onDeleteCard: (card: FunnelCardView) => void;
 }) => {
   const { setNodeRef } = useDroppable({
     id: stageDndId(stage.id),
@@ -217,7 +257,14 @@ const StageColumn = ({
         <SortableContext items={stage.cards.map((card) => cardDndId(card.id))} strategy={verticalListSortingStrategy}>
           <div className="flex min-h-full flex-col gap-2">
             {stage.cards.length ? (
-              stage.cards.map((card) => <SortableFunnelCard key={card.id} card={card} />)
+              stage.cards.map((card) => (
+                <SortableFunnelCard
+                  key={card.id}
+                  card={card}
+                  isDeleting={deletingCardId === card.id}
+                  onDelete={onDeleteCard}
+                />
+              ))
             ) : (
               <div
                 className={`flex min-h-32 flex-1 flex-col items-center justify-center rounded-xl border border-dashed p-4 text-center transition-colors ${
@@ -250,6 +297,7 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], products = 
   const [formError, setFormError] = useState<string | null>(null);
   const [activeCard, setActiveCard] = useState<FunnelCardView | null>(null);
   const [overStageId, setOverStageId] = useState<number | null>(null);
+  const [deletingCardId, setDeletingCardId] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -429,6 +477,37 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], products = 
     persistMove(destinationStage.id, `Oportunidad movida a ${destinationStage.name}`, previousBoard);
   };
 
+  const handleDeleteCard = (card: FunnelCardView) => {
+    const confirmed = window.confirm(
+      `¿Quitar a ${card.contactName} del embudo? El contacto no se borra; solo se elimina esta oportunidad.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingCardId(card.id);
+    startTransition(async () => {
+      try {
+        const result = await deleteFunnelCardAction({ cardId: card.id });
+        if (result.error) {
+          toastActionError(result);
+          return;
+        }
+        setBoard((current) => ({
+          ...current,
+          stages: current.stages.map((stage) =>
+            stage.id === card.stageId
+              ? { ...stage, cards: stage.cards.filter((item) => item.id !== card.id) }
+              : stage,
+          ),
+        }));
+        toast.success(result.success ?? "Oportunidad quitada del embudo");
+      } catch {
+        toast.error("No se pudo quitar la oportunidad del embudo.");
+      } finally {
+        setDeletingCardId(null);
+      }
+    });
+  };
+
   return (
     <div className="flex min-h-0 flex-col gap-4">
       <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
@@ -469,6 +548,8 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], products = 
               stage={stage}
               colorClass={STAGE_DOT_COLORS[index % STAGE_DOT_COLORS.length]!}
               isDropTarget={activeCard !== null && overStageId === stage.id}
+              deletingCardId={deletingCardId}
+              onDeleteCard={handleDeleteCard}
             />
           ))}
         </div>

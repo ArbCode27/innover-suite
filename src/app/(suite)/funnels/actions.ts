@@ -29,6 +29,10 @@ const moveCardSchema = z.object({
   position: z.number().int().nonnegative(),
 });
 
+const deleteCardSchema = z.object({
+  cardId: z.number().int().positive(),
+});
+
 const conversationCardSchema = z.object({
   conversationId: z.number().int().positive(),
 });
@@ -322,6 +326,39 @@ export const moveFunnelCardAction = async (rawValues: unknown): Promise<ActionRe
 
   revalidatePath("/funnels");
   return { success: "Oportunidad movida" };
+};
+
+export const deleteFunnelCardAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = deleteCardSchema.safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: "La oportunidad indicada no es válida." };
+  }
+
+  const access = await requireAgentMembership();
+  if ("error" in access) {
+    return { error: access.error };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("funnel_cards")
+    .delete()
+    .eq("id", parsed.data.cardId)
+    .eq("organization_id", access.membership.organizationId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return { error: error.message || "No se pudo quitar la oportunidad del embudo." };
+  }
+
+  if (!data?.id) {
+    return { error: "La oportunidad no existe o no pertenece a tu organización." };
+  }
+
+  revalidatePath("/funnels");
+  revalidatePath("/home");
+  return { success: "Oportunidad quitada del embudo" };
 };
 
 export const createFunnelCardFromConversationAction = async (
