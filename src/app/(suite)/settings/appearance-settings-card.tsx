@@ -17,7 +17,7 @@ export const AppearanceSettingsCard = () => (
           <div>
             <CardTitle>Apariencia</CardTitle>
             <CardDescription className="mt-1 leading-6">
-              Elige modo claro u oscuro y el color de acento. Se guarda en este dispositivo.
+              Elige modo claro u oscuro y una paleta de dos colores. Se guarda en este dispositivo.
             </CardDescription>
           </div>
         </div>

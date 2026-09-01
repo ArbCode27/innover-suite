@@ -19,7 +19,7 @@ export const ModuleShell = ({
   return (
     <section className="space-y-6">
       <header className="relative overflow-hidden rounded-2xl border border-primary/20 bg-card/75 px-5 py-4">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklch,var(--primary)_20%,transparent),transparent_20rem),radial-gradient(circle_at_85%_20%,color-mix(in_oklch,var(--primary)_14%,transparent),transparent_22rem)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklch,var(--primary)_20%,transparent),transparent_20rem),radial-gradient(circle_at_85%_20%,color-mix(in_oklch,var(--brand-secondary)_16%,transparent),transparent_22rem)]" />
         <div className="relative flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="max-w-3xl">
             <Badge className="mb-2" variant="outline">

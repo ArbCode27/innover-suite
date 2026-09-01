@@ -33,7 +33,6 @@ import {
   type MobileNavIcon,
 } from "@/components/suite/mobile-nav";
 import { ThemeToggle } from "@/components/suite/theme-toggle";
-import { PalettePicker } from "@/components/suite/palette-picker";
 import { MobileSuiteHeader } from "@/components/suite/mobile-suite-header";
 import { NotificationBellLoader } from "@/components/suite/notification-bell-loader";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -181,7 +180,6 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
                 </div>
               </div>
               <ThemeToggle labelClassName="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover/sidebar:max-w-28 group-hover/sidebar:opacity-100" />
-              <PalettePicker compact />
               <form action={signOut}>
                 <Button className="w-full" type="submit" variant="outline">
                   <LogOut />

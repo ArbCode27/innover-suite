@@ -5,11 +5,7 @@ import { APP_PALETTES } from "@/lib/theme/palettes";
 import { usePalette } from "@/lib/theme/use-palette";
 import { cn } from "@/lib/utils";
 
-type PalettePickerProps = {
-  compact?: boolean;
-};
-
-export const PalettePicker = ({ compact = false }: PalettePickerProps) => {
+export const PalettePicker = () => {
   const { palette, setPalette, mounted } = usePalette();
   const labelId = useId();
   const selectedId = mounted ? palette : "default";
@@ -44,22 +40,15 @@ export const PalettePicker = ({ compact = false }: PalettePickerProps) => {
   };
 
   return (
-    <div className={cn(compact ? "flex justify-center group-hover/sidebar:justify-start" : "space-y-2")}>
-      {compact ? null : (
-        <p id={labelId} className="text-sm">
-          Color de acento
-        </p>
-      )}
+    <div className="space-y-2">
+      <p id={labelId} className="text-sm">
+        Paleta
+      </p>
       <div
         role="radiogroup"
-        aria-labelledby={compact ? undefined : labelId}
-        aria-label={compact ? "Color de acento" : undefined}
+        aria-labelledby={labelId}
         onKeyDown={handleKeyDown}
-        className={cn(
-          compact
-            ? "grid w-fit grid-cols-2 gap-1.5 group-hover/sidebar:flex group-hover/sidebar:flex-wrap"
-            : "flex flex-wrap items-center gap-2",
-        )}
+        className="grid gap-2 sm:grid-cols-2"
       >
         {APP_PALETTES.map((item) => {
           const selected = selectedId === item.id;
@@ -76,13 +65,22 @@ export const PalettePicker = ({ compact = false }: PalettePickerProps) => {
               title={item.label}
               onClick={() => setPalette(item.id)}
               className={cn(
-                "shrink-0 rounded-full border border-black/10 shadow-sm transition outline-none",
+                "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition outline-none",
                 "focus-visible:ring-3 focus-visible:ring-ring/50",
-                compact ? "size-6" : "size-8",
-                selected ? "ring-2 ring-ring ring-offset-2 ring-offset-background" : "hover:scale-105",
-                item.swatchClass,
+                selected
+                  ? "border-primary bg-primary/8 ring-2 ring-ring/40"
+                  : "border-primary/15 hover:border-primary/35 hover:bg-muted/50",
               )}
-            />
+            >
+              <span
+                className="relative size-9 shrink-0 overflow-hidden rounded-full border border-black/10 shadow-sm"
+                aria-hidden
+              >
+                <span className={cn("absolute inset-y-0 left-0 w-1/2", item.swatchPrimaryClass)} />
+                <span className={cn("absolute inset-y-0 right-0 w-1/2", item.swatchSecondaryClass)} />
+              </span>
+              <span className="text-sm font-medium">{item.label}</span>
+            </button>
           );
         })}
       </div>

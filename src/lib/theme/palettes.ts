@@ -4,23 +4,33 @@ export const PALETTE_ATTRIBUTE = "data-palette";
 export const APP_PALETTES = [
   {
     id: "default",
-    label: "Azul",
-    swatchClass: "bg-[oklch(0.58_0.16_240)]",
+    label: "Azul y cian",
+    swatchPrimaryClass: "bg-[oklch(0.58_0.16_240)]",
+    swatchSecondaryClass: "bg-[oklch(0.72_0.12_200)]",
   },
   {
     id: "violet",
-    label: "Violeta",
-    swatchClass: "bg-[oklch(0.54_0.18_304)]",
+    label: "Violeta e índigo",
+    swatchPrimaryClass: "bg-[oklch(0.54_0.18_304)]",
+    swatchSecondaryClass: "bg-[oklch(0.52_0.16_272)]",
   },
   {
     id: "emerald",
-    label: "Esmeralda",
-    swatchClass: "bg-[oklch(0.52_0.14_162)]",
+    label: "Esmeralda y teal",
+    swatchPrimaryClass: "bg-[oklch(0.52_0.14_162)]",
+    swatchSecondaryClass: "bg-[oklch(0.58_0.11_195)]",
   },
   {
     id: "rose",
-    label: "Rosa",
-    swatchClass: "bg-[oklch(0.58_0.18_12)]",
+    label: "Rosa y durazno",
+    swatchPrimaryClass: "bg-[oklch(0.58_0.18_12)]",
+    swatchSecondaryClass: "bg-[oklch(0.72_0.14_50)]",
+  },
+  {
+    id: "candy",
+    label: "Rosado y amarillo",
+    swatchPrimaryClass: "bg-[oklch(0.62_0.19_350)]",
+    swatchSecondaryClass: "bg-[oklch(0.84_0.16_95)]",
   },
 ] as const;
 
