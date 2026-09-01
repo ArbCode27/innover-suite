@@ -83,7 +83,7 @@ export const LeadRecoveryForm = ({
             <div>
               <CardTitle>Recuperar chats olvidados</CardTitle>
               <CardDescription className="mt-1 leading-6">
-                Si un lead lleva horas sin respuesta, la IA retoma el chat con un follow-up breve.
+                Si el cliente no contesta después de que ya le respondieron, la IA envía un follow-up breve.
               </CardDescription>
             </div>
           </div>
@@ -116,7 +116,7 @@ export const LeadRecoveryForm = ({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="lead-recovery-idle">Horas sin responder</Label>
+            <Label htmlFor="lead-recovery-idle">Horas sin que el cliente conteste</Label>
             <Input
               id="lead-recovery-idle"
               type="number"
@@ -128,7 +128,7 @@ export const LeadRecoveryForm = ({
             />
             <p className="text-xs text-muted-foreground">
               Entre {LEAD_RECOVERY_IDLE_HOURS_MIN} y {LEAD_RECOVERY_IDLE_HOURS_MAX}. El último mensaje debe ser del
-              cliente.
+              equipo o de la IA.
             </p>
           </div>
           <div className="space-y-1.5">

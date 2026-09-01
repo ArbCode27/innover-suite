@@ -32,7 +32,17 @@ export const historyThroughInbound = <T extends { id: number }>(rows: T[], inbou
   return rows.slice(0, index + 1);
 };
 
-export const ensureGeminiHistoryForGenerate = (contents: GeminiContent[]): GeminiContent[] => {
+const mapPlainHistoryRows = (rows: Array<{ direction: string; content?: string | null }>): GeminiContent[] =>
+  rows.flatMap((row): GeminiContent[] => {
+    const text = typeof row.content === "string" ? row.content.trim() : "";
+    if (row.direction === "inbound") {
+      return [{ role: "user", parts: [{ text: text || EMPTY_INBOUND_PLACEHOLDER }] }];
+    }
+    if (!text) return [];
+    return [{ role: "model", parts: [{ text }] }];
+  });
+
+const mergeAdjacentGeminiContents = (contents: GeminiContent[]): GeminiContent[] => {
   const next: GeminiContent[] = [];
   for (const item of contents) {
     if (!item.parts.length) continue;
@@ -43,6 +53,11 @@ export const ensureGeminiHistoryForGenerate = (contents: GeminiContent[]): Gemin
     }
     next.push({ role: item.role, parts: [...item.parts] });
   }
+  return next;
+};
+
+export const ensureGeminiHistoryForGenerate = (contents: GeminiContent[]): GeminiContent[] => {
+  const next = mergeAdjacentGeminiContents(contents);
   while (next.length > 0 && next[0]?.role === "model") {
     next.shift();
   }
@@ -54,17 +69,23 @@ export const ensureGeminiHistoryForGenerate = (contents: GeminiContent[]): Gemin
 
 export const contentsFromPlainHistory = (
   rows: Array<{ direction: string; content?: string | null }>,
-): GeminiContent[] =>
-  ensureGeminiHistoryForGenerate(
-    rows.flatMap((row): GeminiContent[] => {
-      const text = typeof row.content === "string" ? row.content.trim() : "";
-      if (row.direction === "inbound") {
-        return [{ role: "user", parts: [{ text: text || EMPTY_INBOUND_PLACEHOLDER }] }];
-      }
-      if (!text) return [];
-      return [{ role: "model", parts: [{ text }] }];
-    }),
-  );
+): GeminiContent[] => ensureGeminiHistoryForGenerate(mapPlainHistoryRows(rows));
+
+export const contentsWithTrailingUserNudge = (
+  rows: Array<{ direction: string; content?: string | null }>,
+  nudge: string,
+): GeminiContent[] => {
+  const next = mergeAdjacentGeminiContents(mapPlainHistoryRows(rows));
+  while (next.length > 0 && next[0]?.role === "model") {
+    next.shift();
+  }
+  const trimmed = nudge.trim();
+  if (!next.length || !trimmed) {
+    return [];
+  }
+  next.push({ role: "user", parts: [{ text: trimmed }] });
+  return next;
+};
 
 export const trailingInboundText = (rows: AgentHistoryRow[]) => {
   const trailing: string[] = [];

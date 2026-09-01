@@ -29,7 +29,9 @@ export const LEAD_RECOVERY_COOLDOWN_HOURS_MIN = 6;
 export const LEAD_RECOVERY_COOLDOWN_HOURS_MAX = 168;
 export const LEAD_RECOVERY_COOLDOWN_HOURS_DEFAULT = 24;
 export const LEAD_RECOVERY_PROMPT_MAX_CHARS = 2000;
-export const LEAD_RECOVERY_DEFAULT_PROMPT = `Escribes un follow-up breve a un lead que no recibió respuesta. Español venezolano, 1 o 2 frases. Retoma el hilo; no vuelvas a vender desde cero. Una sola pregunta. No menciones que eres una IA ni el retraso interno.`;
+export const LEAD_RECOVERY_DEFAULT_PROMPT = `Escribes un follow-up breve a un lead que no contestó después de que ya le respondieron. Español venezolano, 1 o 2 frases. Retoma el hilo; no vuelvas a vender desde cero. Una sola pregunta. No menciones que eres una IA ni el retraso interno.`;
+export const LEAD_RECOVERY_USER_NUDGE =
+  "El cliente no ha respondido después del último mensaje del equipo. Escribe solo el follow-up para el cliente.";
 
 export const DEFAULT_AGENT_PROMPT = `Eres el asesor virtual de la organización. Atiendes leads por chat (WhatsApp, Instagram o Messenger) en español venezolano, claro y breve. Tu referencia principal es Caracas, Venezuela.
 

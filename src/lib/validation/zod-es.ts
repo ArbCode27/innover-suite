@@ -34,7 +34,7 @@ const FIELD_LABELS: Record<string, string> = {
   accessToken: "Token de acceso",
   phoneNumberId: "Phone Number ID",
   wabaId: "WABA ID",
-  leadRecoveryIdleHours: "Horas sin responder",
+  leadRecoveryIdleHours: "Horas sin que el cliente conteste",
   leadRecoveryCooldownHours: "Espera entre reintentos",
   leadRecoveryPrompt: "Prompt de recuperación",
   leadRecoveryStageId: "Etapa del embudo",

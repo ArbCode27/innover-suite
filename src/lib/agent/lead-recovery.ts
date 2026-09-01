@@ -1,9 +1,10 @@
 import {
   LEAD_RECOVERY_DEFAULT_PROMPT,
   LEAD_RECOVERY_IDLE_HOURS_DEFAULT,
+  LEAD_RECOVERY_USER_NUDGE,
 } from "@/lib/agent/constants";
 import { generateGeminiTurn } from "@/lib/agent/gemini";
-import { contentsFromPlainHistory } from "@/lib/agent/history";
+import { contentsWithTrailingUserNudge } from "@/lib/agent/history";
 import { areAdvisorsAvailable } from "@/lib/agent/hours";
 import { loadAgentSettings } from "@/lib/agent/settings";
 import type { AgentSettings } from "@/lib/agent/types";
@@ -125,6 +126,7 @@ const loadIdleConversations = async (
     .eq("organization_id", organizationId)
     .in("id", conversationIds)
     .neq("status", "resolved")
+    .eq("last_message_direction", "outbound")
     .lte("last_message_at", idleBefore)
     .limit(MAX_PER_ORG * 2);
 
@@ -164,11 +166,11 @@ const recoverConversation = async (
     .limit(HISTORY_LIMIT);
 
   const history = [...(messageRows ?? [])].reverse();
-  if (!history.length || history[history.length - 1]?.direction !== "inbound") {
+  if (!history.length || history[history.length - 1]?.direction !== "outbound") {
     return "skipped";
   }
 
-  const contents = contentsFromPlainHistory(history);
+  const contents = contentsWithTrailingUserNudge(history, LEAD_RECOVERY_USER_NUDGE);
 
   if (!contents.length) {
     return "skipped";
@@ -214,7 +216,7 @@ Responde solo el mensaje para el cliente.`,
   await insertSystemMessage({
     organizationId: settings.organizationId,
     conversationId: conversation.id,
-    content: "La IA retomó el chat por inactividad.",
+    content: "La IA escribió un follow-up porque el cliente no respondió.",
   });
 
   const sent = await sendAiOutboundMessage({
@@ -304,7 +306,7 @@ export const recoverIdleLeadConversations = async (): Promise<{
     );
 
     const eligible = ((conversationsResult.data ?? []) as ConversationRow[]).filter((conversation) => {
-      if (conversation.last_message_direction && conversation.last_message_direction !== "inbound") {
+      if (conversation.last_message_direction && conversation.last_message_direction !== "outbound") {
         return false;
       }
       if (isWithinCooldown(conversation.metadata, settings.leadRecoveryCooldownHours)) {
