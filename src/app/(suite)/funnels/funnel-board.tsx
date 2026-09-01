@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -17,7 +17,8 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { DollarSign, GripVertical, KanbanSquare, Loader2, Plus, Target, Trash2, Users } from "lucide-react";
+import { DollarSign, GripVertical, KanbanSquare, Loader2, MessageCircle, Package, Plus, Target, Trash2, Users } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { toastActionError } from "@/lib/auth/action-toast";
 import { CHANNEL_BADGE_CLASSNAMES, CHANNEL_LABELS } from "@/lib/contacts/display";
@@ -28,6 +29,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -112,12 +121,26 @@ const collisionDetection: CollisionDetection = (args) => {
   return closestCorners(args);
 };
 
-const FunnelCardBody = ({ card, isOverlay = false }: { card: FunnelCardView; isOverlay?: boolean }) => {
-  const titleIsContact =
-    card.title.trim().localeCompare(card.contactName.trim(), undefined, { sensitivity: "accent" }) === 0;
+const formatCardDate = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return new Intl.DateTimeFormat("es-VE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
+};
+
+const resolveCardProduct = (card: FunnelCardView) => {
   const productLabel = card.productName || card.listingTitle;
   const price = card.productPrice ?? card.valueAmount;
   const currency = card.productCurrency ?? card.currency ?? DEFAULT_CURRENCY;
+  return { productLabel, price, currency };
+};
+
+const FunnelCardBody = ({ card, isOverlay = false }: { card: FunnelCardView; isOverlay?: boolean }) => {
+  const titleIsContact =
+    card.title.trim().localeCompare(card.contactName.trim(), undefined, { sensitivity: "accent" }) === 0;
+  const { productLabel, price, currency } = resolveCardProduct(card);
 
   return (
     <div className="flex items-start gap-2.5">
@@ -130,12 +153,13 @@ const FunnelCardBody = ({ card, isOverlay = false }: { card: FunnelCardView; isO
         {titleIsContact ? null : (
           <p className="mt-0.5 truncate text-xs text-muted-foreground">{card.title}</p>
         )}
-        {productLabel || price != null ? (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {productLabel || "Producto"}
-            {price != null ? ` · ${formatMoney(price, currency)}` : ""}
-          </p>
-        ) : null}
+        <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs">
+          <Package className="size-3.5 shrink-0 text-primary" aria-hidden />
+          <span className={productLabel ? "truncate font-medium" : "truncate text-muted-foreground"}>
+            {productLabel || "Sin producto"}
+            {productLabel && price != null ? ` · ${formatMoney(price, currency)}` : ""}
+          </span>
+        </p>
         {card.channel ? (
           <div className="mt-2">
             <Badge variant="outline" className={CHANNEL_BADGE_CLASSNAMES[card.channel]}>
@@ -152,15 +176,22 @@ const SortableFunnelCard = ({
   card,
   isDeleting,
   onDelete,
+  onOpen,
 }: {
   card: FunnelCardView;
   isDeleting: boolean;
   onDelete: (card: FunnelCardView) => void;
+  onOpen: (card: FunnelCardView) => void;
 }) => {
+  const draggedRef = useRef(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: cardDndId(card.id),
     data: { type: "card", cardId: card.id, stageId: card.stageId },
   });
+
+  useEffect(() => {
+    if (isDragging) draggedRef.current = true;
+  }, [isDragging]);
 
   const handleDeletePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -170,6 +201,25 @@ const SortableFunnelCard = ({
     event.stopPropagation();
     event.preventDefault();
     onDelete(card);
+  };
+
+  const handleOpenCard = () => {
+    if (draggedRef.current) {
+      draggedRef.current = false;
+      return;
+    }
+    onOpen(card);
+  };
+
+  const handleCardClick = (event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    handleOpenCard();
+  };
+
+  const handleCardKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    handleOpenCard();
   };
 
   return (
@@ -185,9 +235,12 @@ const SortableFunnelCard = ({
     >
       <div className="flex items-start gap-1">
         <div
-          className="min-w-0 flex-1 cursor-grab active:cursor-grabbing"
+          className="min-w-0 flex-1 cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           {...attributes}
           {...listeners}
+          aria-label={`Ver detalle de ${card.contactName}`}
+          onClick={handleCardClick}
+          onKeyDown={handleCardKeyDown}
         >
           <FunnelCardBody card={card} />
         </div>
@@ -214,12 +267,14 @@ const StageColumn = ({
   isDropTarget,
   deletingCardId,
   onDeleteCard,
+  onOpenCard,
 }: {
   stage: FunnelStageView;
   colorClass: string;
   isDropTarget: boolean;
   deletingCardId: number | null;
   onDeleteCard: (card: FunnelCardView) => void;
+  onOpenCard: (card: FunnelCardView) => void;
 }) => {
   const { setNodeRef } = useDroppable({
     id: stageDndId(stage.id),
@@ -263,6 +318,7 @@ const StageColumn = ({
                   card={card}
                   isDeleting={deletingCardId === card.id}
                   onDelete={onDeleteCard}
+                  onOpen={onOpenCard}
                 />
               ))
             ) : (
@@ -298,8 +354,9 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], products = 
   const [activeCard, setActiveCard] = useState<FunnelCardView | null>(null);
   const [overStageId, setOverStageId] = useState<number | null>(null);
   const [deletingCardId, setDeletingCardId] = useState<number | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const metrics = useMemo(() => computeMetrics(board.stages), [board.stages]);
   const metricItems = [
@@ -477,6 +534,23 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], products = 
     persistMove(destinationStage.id, `Oportunidad movida a ${destinationStage.name}`, previousBoard);
   };
 
+  const selectedCard = useMemo(
+    () => board.stages.flatMap((stage) => stage.cards).find((card) => card.id === selectedCardId) ?? null,
+    [board.stages, selectedCardId],
+  );
+  const selectedStageName = selectedCard
+    ? (board.stages.find((stage) => stage.id === selectedCard.stageId)?.name ?? null)
+    : null;
+  const selectedProduct = selectedCard ? resolveCardProduct(selectedCard) : null;
+
+  const handleOpenCard = (card: FunnelCardView) => {
+    setSelectedCardId(card.id);
+  };
+
+  const handleDetailOpenChange = (open: boolean) => {
+    if (!open) setSelectedCardId(null);
+  };
+
   const handleDeleteCard = (card: FunnelCardView) => {
     const confirmed = window.confirm(
       `¿Quitar a ${card.contactName} del embudo? El contacto no se borra; solo se elimina esta oportunidad.`,
@@ -500,6 +574,7 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], products = 
           ),
         }));
         toast.success(result.success ?? "Oportunidad quitada del embudo");
+        if (selectedCardId === card.id) setSelectedCardId(null);
       } catch {
         toast.error("No se pudo quitar la oportunidad del embudo.");
       } finally {
@@ -550,6 +625,7 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], products = 
               isDropTarget={activeCard !== null && overStageId === stage.id}
               deletingCardId={deletingCardId}
               onDeleteCard={handleDeleteCard}
+              onOpenCard={handleOpenCard}
             />
           ))}
         </div>
@@ -561,6 +637,100 @@ export const FunnelBoard = ({ initialBoard, contacts, listings = [], products = 
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      <Dialog open={Boolean(selectedCard)} onOpenChange={handleDetailOpenChange}>
+        <DialogContent>
+          {selectedCard ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3 pr-6">
+                  <Avatar size="sm">
+                    <AvatarFallback>{resolveInitials(selectedCard.contactName)}</AvatarFallback>
+                  </Avatar>
+                  <span className="truncate">{selectedCard.contactName}</span>
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedStageName ? `Etapa: ${selectedStageName}` : "Detalle de la oportunidad"}
+                </DialogDescription>
+              </DialogHeader>
+              <dl className="grid gap-3">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Producto solicitado</dt>
+                  <dd className="mt-0.5 flex items-start gap-2 text-sm font-medium">
+                    <Package className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+                    <span>
+                      {selectedProduct?.productLabel || "Sin producto indicado"}
+                      {selectedProduct?.productLabel && selectedProduct.price != null
+                        ? ` · ${formatMoney(selectedProduct.price, selectedProduct.currency)}`
+                        : ""}
+                    </span>
+                  </dd>
+                </div>
+                {selectedCard.listingTitle && selectedCard.listingTitle !== selectedCard.productName ? (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Inmueble</dt>
+                    <dd className="mt-0.5 text-sm">{selectedCard.listingTitle}</dd>
+                  </div>
+                ) : null}
+                {selectedCard.title.trim() !== selectedCard.contactName.trim() ? (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Título</dt>
+                    <dd className="mt-0.5 text-sm">{selectedCard.title}</dd>
+                  </div>
+                ) : null}
+                {selectedCard.contactPhone ? (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Teléfono</dt>
+                    <dd className="mt-0.5 text-sm">{selectedCard.contactPhone}</dd>
+                  </div>
+                ) : null}
+                {selectedCard.channel ? (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Canal</dt>
+                    <dd className="mt-1">
+                      <Badge variant="outline" className={CHANNEL_BADGE_CLASSNAMES[selectedCard.channel]}>
+                        {CHANNEL_LABELS[selectedCard.channel]}
+                      </Badge>
+                    </dd>
+                  </div>
+                ) : null}
+                {selectedCard.valueAmount != null ? (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Valor estimado</dt>
+                    <dd className="mt-0.5 text-sm">
+                      {formatMoney(selectedCard.valueAmount, selectedCard.currency ?? currencies.defaultCode)}
+                    </dd>
+                  </div>
+                ) : null}
+                {selectedCard.lastAgentReason ? (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Último movimiento</dt>
+                    <dd className="mt-0.5 text-sm">{selectedCard.lastAgentReason}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt className="text-xs text-muted-foreground">Actualizado</dt>
+                  <dd className="mt-0.5 text-sm">{formatCardDate(selectedCard.updatedAt)}</dd>
+                </div>
+              </dl>
+              <DialogFooter>
+                {selectedCard.conversationId ? (
+                  <Button asChild>
+                    <Link href={`/inbox?conversation=${selectedCard.conversationId}`}>
+                      <MessageCircle />
+                      Ver chat
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" onClick={() => handleDetailOpenChange(false)}>
+                    Cerrar
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetContent>

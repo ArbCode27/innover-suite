@@ -79,7 +79,12 @@ const asNumber = (value: number | string | null) => {
 
 const productFromMetadata = (metadata: unknown) => {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return { productName: null as string | null, productPrice: null as number | null, productCurrency: null as string | null };
+    return {
+      productName: null as string | null,
+      productPrice: null as number | null,
+      productCurrency: null as string | null,
+      lastAgentReason: null as string | null,
+    };
   }
   const row = metadata as Record<string, unknown>;
   const productName = typeof row.product_name === "string" && row.product_name.trim() ? row.product_name.trim() : null;
@@ -88,7 +93,9 @@ const productFromMetadata = (metadata: unknown) => {
   );
   const productCurrency =
     typeof row.product_currency === "string" && row.product_currency.trim() ? row.product_currency.trim() : null;
-  return { productName, productPrice, productCurrency };
+  const lastAgentReason =
+    typeof row.last_agent_reason === "string" && row.last_agent_reason.trim() ? row.last_agent_reason.trim() : null;
+  return { productName, productPrice, productCurrency, lastAgentReason };
 };
 
 export const mapFunnelCard = (row: CardRow): FunnelCardView => {
@@ -119,6 +126,7 @@ export const mapFunnelCard = (row: CardRow): FunnelCardView => {
     productName,
     productPrice,
     productCurrency,
+    lastAgentReason: fromMetadata.lastAgentReason,
   };
 };
 
@@ -157,6 +165,21 @@ const parseToolProductId = (args: unknown) => {
   if (!args || typeof args !== "object") return null;
   const row = args as Record<string, unknown>;
   const raw = row.productId ?? row.product_id;
+  const parsed = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+const parseCreateOrderProductId = (args: unknown) => {
+  if (!args || typeof args !== "object") return null;
+  const items = (args as { items?: unknown }).items;
+  if (!Array.isArray(items) || !items[0]) return null;
+  return parseToolProductId(items[0]);
+};
+
+const parseListingId = (args: unknown) => {
+  if (!args || typeof args !== "object") return null;
+  const row = args as Record<string, unknown>;
+  const raw = row.listingId ?? row.listing_id;
   const parsed = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 };
@@ -225,19 +248,28 @@ const enrichFunnelCards = async (
     if (conversationIds.length) {
       const { data: toolRows } = await supabase
         .from("agent_tool_runs")
-        .select("conversation_id, arguments, created_at")
+        .select("conversation_id, tool_name, arguments, created_at")
         .eq("organization_id", organizationId)
-        .eq("tool_name", "send_image")
+        .in("tool_name", ["send_image", "create_order", "send_listing"])
         .eq("ok", true)
         .in("conversation_id", conversationIds)
         .order("created_at", { ascending: false })
-        .limit(120);
+        .limit(180);
 
       const productIdByConversation = new Map<number, number>();
+      const listingIdByConversation = new Map<number, number>();
       for (const row of toolRows ?? []) {
         const conversationId = row.conversation_id as number;
+        const toolName = row.tool_name as string;
+        if (toolName === "send_listing") {
+          if (listingIdByConversation.has(conversationId)) continue;
+          const listingId = parseListingId(row.arguments);
+          if (listingId) listingIdByConversation.set(conversationId, listingId);
+          continue;
+        }
         if (productIdByConversation.has(conversationId)) continue;
-        const productId = parseToolProductId(row.arguments);
+        const productId =
+          toolName === "create_order" ? parseCreateOrderProductId(row.arguments) : parseToolProductId(row.arguments);
         if (productId) productIdByConversation.set(conversationId, productId);
       }
 
@@ -271,6 +303,39 @@ const enrichFunnelCards = async (
           const product = products.get(productId);
           if (!contactId || !product || productByContact.has(contactId)) continue;
           productByContact.set(contactId, product);
+        }
+      }
+
+      const listingIds = [...new Set(listingIdByConversation.values())];
+      if (listingIds.length) {
+        const { data: listingRows } = await supabase
+          .from("listings")
+          .select("id, title, code, price, currency")
+          .eq("organization_id", organizationId)
+          .in("id", listingIds);
+
+        const listings = new Map(
+          (listingRows ?? []).map((row) => [
+            row.id as number,
+            {
+              name: [row.code, row.title].filter(Boolean).join(" · ") || "Inmueble",
+              price: asNumber(row.price as number | string | null),
+              currency: (row.currency as string | null) ?? null,
+            },
+          ]),
+        );
+
+        const conversationToContact = new Map<number, number>();
+        for (const card of cards) {
+          const conversationId = card.conversationId ?? conversationByContact.get(card.contactId)?.id;
+          if (conversationId) conversationToContact.set(conversationId, card.contactId);
+        }
+
+        for (const [conversationId, listingId] of listingIdByConversation) {
+          const contactId = conversationToContact.get(conversationId);
+          const listing = listings.get(listingId);
+          if (!contactId || !listing || productByContact.has(contactId)) continue;
+          productByContact.set(contactId, listing);
         }
       }
     }

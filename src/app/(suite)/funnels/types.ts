@@ -34,6 +34,7 @@ export type FunnelCardView = {
   productName: string | null;
   productPrice: number | null;
   productCurrency: string | null;
+  lastAgentReason: string | null;
 };
 
 export type FunnelStageView = {

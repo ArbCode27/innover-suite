@@ -288,6 +288,7 @@ export const createFunnelCardAction = async (
         productName,
         productPrice,
         productCurrency,
+        lastAgentReason: null,
       },
     },
   };
