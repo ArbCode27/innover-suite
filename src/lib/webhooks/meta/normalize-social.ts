@@ -1,6 +1,6 @@
 import type { MetaChannel } from "@/types/domain";
 import { createMessageAttachment, type MessageAttachment, type MessageAttachmentKind } from "@/lib/media/types";
-import { asArray, asNumber, asRecord, asString, toIsoTimestamp } from "@/lib/webhooks/meta/json";
+import { asArray, asNumber, asRecord, asString, firstMetaTimestamp } from "@/lib/webhooks/meta/json";
 import type { InboundMessageEvent } from "@/lib/webhooks/meta/types";
 
 const SOCIAL_CHANNEL_BY_OBJECT: Record<string, MetaChannel> = {
@@ -111,7 +111,7 @@ const toSocialEvent = (
     text: extractSocialText(item, attachment),
     mediaUrl: attachment?.sourceUrl ?? null,
     attachment,
-    timestamp: toIsoTimestamp(item.timestamp),
+    timestamp: firstMetaTimestamp(item.timestamp, message?.timestamp, postback?.timestamp, item.time),
     rawPayload: item,
   };
 };

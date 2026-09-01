@@ -75,7 +75,7 @@ import { suggestReplyAction } from "@/lib/inbox/suggest";
 import { mapConversationListRow, mergeInboxConversations, previewFromMessageRow, type ConversationListRow } from "@/lib/inbox/board";
 import { MessageMedia } from "./message-media";
 import type { FileAttachmentKind, InboxConversation, InboxFilter, InboxMessage } from "./types";
-import { normalizeInboxMessage } from "./types";
+import { normalizeInboxMessage, sortInboxMessages, upsertInboxMessage } from "./types";
 
 type InboxPanelProps = {
   organizationId: number;
@@ -348,6 +348,7 @@ export const InboxPanel = ({
       .select("id, conversation_id, direction, sender_type, content, media_url, metadata, created_at")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .limit(250);
 
     if (error) {
@@ -358,7 +359,7 @@ export const InboxPanel = ({
 
     setMessagesByConversation((current) => ({
       ...current,
-      [conversationId]: (data ?? []).map(normalizeInboxMessage),
+      [conversationId]: sortInboxMessages((data ?? []).map(normalizeInboxMessage)),
     }));
     setIsLoadingMessages(false);
   }, []);
@@ -400,12 +401,7 @@ export const InboxPanel = ({
 
           setMessagesByConversation((current) => {
             const existing = current[activeConversationId] ?? [];
-            const index = existing.findIndex((item) => item.id === message.id);
-            const next =
-              index >= 0
-                ? existing.map((item) => (item.id === message.id ? message : item))
-                : [...existing, message];
-            return { ...current, [activeConversationId]: next };
+            return { ...current, [activeConversationId]: upsertInboxMessage(existing, message) };
           });
 
           const preview =
@@ -697,7 +693,7 @@ export const InboxPanel = ({
           const sentMessage = result.data.message;
           setMessagesByConversation((current) => ({
             ...current,
-            [selectedConversation.id]: [...(current[selectedConversation.id] ?? []), sentMessage],
+            [selectedConversation.id]: upsertInboxMessage(current[selectedConversation.id] ?? [], sentMessage),
           }));
           setConversations((current) =>
             current.map((conversation) =>
@@ -927,7 +923,7 @@ export const InboxPanel = ({
 
       setMessagesByConversation((current) => ({
         ...current,
-        [selectedConversation.id]: [...(current[selectedConversation.id] ?? []), sentMessage],
+        [selectedConversation.id]: upsertInboxMessage(current[selectedConversation.id] ?? [], sentMessage),
       }));
 
       setConversations((current) =>

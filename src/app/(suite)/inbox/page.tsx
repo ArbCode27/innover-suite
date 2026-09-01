@@ -5,7 +5,7 @@ import { areAdvisorsAvailable, isScheduleEnabled } from "@/lib/agent/hours";
 import { loadAgentSettings } from "@/lib/agent/settings";
 import { mapConversationListRow } from "@/lib/inbox/board";
 import { InboxPanel } from "./inbox-panel";
-import { normalizeInboxMessage, type InboxConversation, type InboxMessage } from "./types";
+import { normalizeInboxMessage, sortInboxMessages, type InboxConversation, type InboxMessage } from "./types";
 
 type ConversationRow = {
   id: number;
@@ -91,6 +91,7 @@ export default async function InboxPage({
         .select("id, conversation_id, direction, sender_type, content, media_url, metadata, created_at")
         .eq("conversation_id", requestedId)
         .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
         .limit(250)
     : { data: [] as MessageRow[] };
 
@@ -101,8 +102,8 @@ export default async function InboxPage({
 
   const initialMessagesByConversation: Record<number, InboxMessage[]> = {};
   if (requestedId) {
-    initialMessagesByConversation[requestedId] = (initialMessagesResult.data ?? []).map((row) =>
-      normalizeInboxMessage(row as MessageRow),
+    initialMessagesByConversation[requestedId] = sortInboxMessages(
+      (initialMessagesResult.data ?? []).map((row) => normalizeInboxMessage(row as MessageRow)),
     );
   }
 

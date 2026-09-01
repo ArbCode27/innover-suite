@@ -79,3 +79,21 @@ export const normalizeInboxMessage = (row: {
     deliveryStatus: parseDeliveryStatus(metadata),
   };
 };
+
+export const compareInboxMessages = (left: InboxMessage, right: InboxMessage) => {
+  const leftTime = Date.parse(left.createdAt);
+  const rightTime = Date.parse(right.createdAt);
+  const leftMs = Number.isFinite(leftTime) ? leftTime : 0;
+  const rightMs = Number.isFinite(rightTime) ? rightTime : 0;
+  if (leftMs !== rightMs) return leftMs - rightMs;
+  return left.id - right.id;
+};
+
+export const sortInboxMessages = (messages: InboxMessage[]) => [...messages].sort(compareInboxMessages);
+
+export const upsertInboxMessage = (messages: InboxMessage[], incoming: InboxMessage) => {
+  const index = messages.findIndex((item) => item.id === incoming.id);
+  const next =
+    index >= 0 ? messages.map((item) => (item.id === incoming.id ? incoming : item)) : [...messages, incoming];
+  return sortInboxMessages(next);
+};

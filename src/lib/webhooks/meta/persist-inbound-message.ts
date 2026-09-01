@@ -410,6 +410,7 @@ const persistInboundMessage = async (
     channel: event.channel,
     accountId: event.accountId,
     externalUserId: event.externalUserId,
+    provider_sent_at: event.timestamp,
   };
   if (event.attachment) {
     Object.assign(messageMetadata, mergeAttachmentMetadata({}, event.attachment));
@@ -460,6 +461,7 @@ const persistInboundMessage = async (
         unread_count: unreadCount + 1,
       },
     }),
+    updated_at: now,
   };
   if (event.phone) {
     conversationUpdate.customer_phone = event.phone;
