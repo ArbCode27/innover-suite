@@ -8,6 +8,7 @@ import {
 import { resolveInstagramCredentials } from "@/lib/integrations/instagram-credentials";
 import { fetchSocialUserProfile, resolveProfileDisplayName } from "@/lib/integrations/meta-profile";
 import { mergeAttachmentMetadata, resolveMessagePreview } from "@/lib/media/parse";
+import { buildConversationPreviewPatch, updateConversationWithPreview } from "@/lib/inbox/conversation-preview";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logMetaWebhook, maskIdentifier } from "@/lib/webhooks/meta/logger";
 import type { InboundMessageEvent, PersistResult } from "@/lib/webhooks/meta/types";
@@ -449,24 +450,30 @@ const persistInboundMessage = async (
     mediaUrl: event.mediaUrl,
     metadata: messageMetadata,
   });
-
   const conversationUpdate: Record<string, unknown> = {
-    updated_at: now,
-    last_message_at: event.timestamp || now,
-    metadata: {
-      ...currentMetadata,
-      unread_count: unreadCount + 1,
-      last_message_preview: preview.slice(0, 180),
-    },
+    ...buildConversationPreviewPatch({
+      preview,
+      direction: "inbound",
+      at: event.timestamp || now,
+      metadata: {
+        ...currentMetadata,
+        unread_count: unreadCount + 1,
+      },
+    }),
   };
   if (event.phone) {
     conversationUpdate.customer_phone = event.phone;
   }
 
-  const { error: conversationError } = await supabase
-    .from("conversations")
-    .update(conversationUpdate)
-    .eq("id", conversationId);
+  const { error: conversationError } = await updateConversationWithPreview(
+    (patch) =>
+      supabase
+        .from("conversations")
+        .update(patch)
+        .eq("id", conversationId)
+        .eq("organization_id", organizationContext.organizationId),
+    conversationUpdate,
+  );
 
   if (conversationError) {
     throw conversationError;

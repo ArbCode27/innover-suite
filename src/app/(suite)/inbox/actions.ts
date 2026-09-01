@@ -6,6 +6,11 @@ import { resolveInstagramCredentials } from "@/lib/integrations/instagram-creden
 import { sendMetaOutboundMessage } from "@/lib/integrations/meta-send";
 import { createMessageAttachment } from "@/lib/media/types";
 import { mergeAttachmentMetadata } from "@/lib/media/parse";
+import {
+  buildConversationPreviewPatch,
+  buildMessagePreview,
+  updateConversationWithPreview,
+} from "@/lib/inbox/conversation-preview";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -299,17 +304,28 @@ export const sendConversationMessageAction = async (
     metadata: deliveryMetadata,
   };
 
-  const { error: updateError } = await supabase
-    .from("conversations")
-    .update({
-      updated_at: now,
-      last_message_at: now,
+  const { error: updateError } = await updateConversationWithPreview(
+    (patch) =>
+      supabase
+        .from("conversations")
+        .update(patch)
+        .eq("id", parsed.data.conversationId)
+        .eq("organization_id", membership.organizationId),
+    {
+      ...buildConversationPreviewPatch({
+        preview: buildMessagePreview({
+          content: text || null,
+          mediaUrl: parsed.data.mediaUrl ?? null,
+          metadata: deliveryMetadata,
+        }),
+        direction: "outbound",
+        at: now,
+      }),
       status: "in_progress",
       assigned_user_id: user.id,
       assigned_at: now,
-    })
-    .eq("id", parsed.data.conversationId)
-    .eq("organization_id", membership.organizationId);
+    },
+  );
 
   if (updateError) {
     return {

@@ -16,6 +16,8 @@ export type ConversationListRow = {
   assigned_user_id: string | null;
   updated_at: string;
   last_message_at: string | null;
+  last_message_preview?: string | null;
+  last_message_direction?: string | null;
   metadata: unknown;
   customer_phone?: string | null;
   contacts?: {
@@ -57,7 +59,7 @@ export const mapConversationListRow = (
     return null;
   }
 
-  const storedPreview = readStoredPreview(row.metadata);
+  const storedPreview = row.last_message_preview?.trim() || readStoredPreview(row.metadata);
   const contactPhone = row.contacts?.phone || row.customer_phone || null;
 
   return {

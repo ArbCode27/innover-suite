@@ -59,8 +59,9 @@ export const applyBusinessProfile = async ({
     console.error("[ONBOARDING] save modules failed", modulesError);
   }
 
+  const { organizationId: _organizationId, ...defaultSettings } = defaults;
   const agentError = await upsertAgentSettings(organizationId, userId, {
-    ...defaults,
+    ...defaultSettings,
     systemPrompt: template.agentPrompt,
     toolsCalendar: modules.calendar,
     toolsFunnel: modules.funnels,

@@ -1,5 +1,11 @@
 import { cache } from "react";
-import { AGENT_MODEL, DEFAULT_AGENT_PROMPT, RETIRED_AGENT_MODELS } from "@/lib/agent/constants";
+import {
+  AGENT_MODEL,
+  DEFAULT_AGENT_PROMPT,
+  LEAD_RECOVERY_COOLDOWN_HOURS_DEFAULT,
+  LEAD_RECOVERY_IDLE_HOURS_DEFAULT,
+  RETIRED_AGENT_MODELS,
+} from "@/lib/agent/constants";
 import { DEFAULT_BUSINESS_HOURS, DEFAULT_CLOSED_MESSAGE, parseBusinessHours, type BusinessHours } from "@/lib/agent/hours";
 import type { AgentSettings } from "@/lib/agent/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -16,6 +22,18 @@ type SettingsRow = {
   language: string;
   business_hours?: unknown;
   closed_message?: string | null;
+  lead_recovery_enabled?: boolean | null;
+  lead_recovery_idle_hours?: number | null;
+  lead_recovery_stage_id?: number | null;
+  lead_recovery_respect_hours?: boolean | null;
+  lead_recovery_cooldown_hours?: number | null;
+  lead_recovery_prompt?: string | null;
+};
+
+const clampHours = (value: unknown, fallback: number, min: number, max: number) => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(parsed)));
 };
 
 const mapSettings = (row: SettingsRow): AgentSettings => ({
@@ -33,6 +51,20 @@ const mapSettings = (row: SettingsRow): AgentSettings => ({
   language: row.language || "es-VE",
   businessHours: parseBusinessHours(row.business_hours),
   closedMessage: row.closed_message?.trim() || DEFAULT_CLOSED_MESSAGE,
+  leadRecoveryEnabled: row.lead_recovery_enabled === true,
+  leadRecoveryIdleHours: clampHours(row.lead_recovery_idle_hours, LEAD_RECOVERY_IDLE_HOURS_DEFAULT, 2, 24),
+  leadRecoveryStageId:
+    typeof row.lead_recovery_stage_id === "number" && row.lead_recovery_stage_id > 0
+      ? row.lead_recovery_stage_id
+      : null,
+  leadRecoveryRespectHours: row.lead_recovery_respect_hours !== false,
+  leadRecoveryCooldownHours: clampHours(
+    row.lead_recovery_cooldown_hours,
+    LEAD_RECOVERY_COOLDOWN_HOURS_DEFAULT,
+    6,
+    168,
+  ),
+  leadRecoveryPrompt: row.lead_recovery_prompt?.trim() || "",
 });
 
 export const getDefaultAgentSettings = (organizationId: number): AgentSettings => ({
@@ -47,6 +79,12 @@ export const getDefaultAgentSettings = (organizationId: number): AgentSettings =
   language: "es-VE",
   businessHours: DEFAULT_BUSINESS_HOURS,
   closedMessage: DEFAULT_CLOSED_MESSAGE,
+  leadRecoveryEnabled: false,
+  leadRecoveryIdleHours: LEAD_RECOVERY_IDLE_HOURS_DEFAULT,
+  leadRecoveryStageId: null,
+  leadRecoveryRespectHours: true,
+  leadRecoveryCooldownHours: LEAD_RECOVERY_COOLDOWN_HOURS_DEFAULT,
+  leadRecoveryPrompt: "",
 });
 
 export const loadAgentSettings = cache(async (organizationId: number): Promise<AgentSettings> => {
@@ -54,12 +92,23 @@ export const loadAgentSettings = cache(async (organizationId: number): Promise<A
   const { data, error } = await admin
     .from("organization_agent_settings")
     .select(
-      "organization_id, enabled, system_prompt, model, tools_calendar, tools_funnel, tools_handoff, require_booking_confirmation, language, business_hours, closed_message",
+      "organization_id, enabled, system_prompt, model, tools_calendar, tools_funnel, tools_handoff, require_booking_confirmation, language, business_hours, closed_message, lead_recovery_enabled, lead_recovery_idle_hours, lead_recovery_stage_id, lead_recovery_respect_hours, lead_recovery_cooldown_hours, lead_recovery_prompt",
     )
     .eq("organization_id", organizationId)
     .maybeSingle<SettingsRow>();
 
   if (error) {
+    const withoutRecovery = await admin
+      .from("organization_agent_settings")
+      .select(
+        "organization_id, enabled, system_prompt, model, tools_calendar, tools_funnel, tools_handoff, require_booking_confirmation, language, business_hours, closed_message",
+      )
+      .eq("organization_id", organizationId)
+      .maybeSingle<SettingsRow>();
+    if (!withoutRecovery.error && withoutRecovery.data) {
+      return mapSettings(withoutRecovery.data);
+    }
+
     const fallback = await admin
       .from("organization_agent_settings")
       .select(
@@ -98,14 +147,37 @@ export const upsertAgentSettings = async (
     language: values.language,
     business_hours: values.businessHours,
     closed_message: values.closedMessage,
+    lead_recovery_enabled: values.leadRecoveryEnabled,
+    lead_recovery_idle_hours: values.leadRecoveryIdleHours,
+    lead_recovery_stage_id: values.leadRecoveryStageId,
+    lead_recovery_respect_hours: values.leadRecoveryRespectHours,
+    lead_recovery_cooldown_hours: values.leadRecoveryCooldownHours,
+    lead_recovery_prompt: values.leadRecoveryPrompt.trim() || null,
     updated_by_user_id: userId,
   };
 
   const { error } = await admin.from("organization_agent_settings").upsert(payload);
   if (!error) return error;
 
+  if (/lead_recovery/i.test(error.message ?? "")) {
+    delete payload.lead_recovery_enabled;
+    delete payload.lead_recovery_idle_hours;
+    delete payload.lead_recovery_stage_id;
+    delete payload.lead_recovery_respect_hours;
+    delete payload.lead_recovery_cooldown_hours;
+    delete payload.lead_recovery_prompt;
+    const withoutRecovery = await admin.from("organization_agent_settings").upsert(payload);
+    if (!withoutRecovery.error) return withoutRecovery.error;
+  }
+
   delete payload.business_hours;
   delete payload.closed_message;
+  delete payload.lead_recovery_enabled;
+  delete payload.lead_recovery_idle_hours;
+  delete payload.lead_recovery_stage_id;
+  delete payload.lead_recovery_respect_hours;
+  delete payload.lead_recovery_cooldown_hours;
+  delete payload.lead_recovery_prompt;
   const fallback = await admin.from("organization_agent_settings").upsert(payload);
   return fallback.error;
 };

@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { generateGeminiTurn } from "@/lib/agent/gemini";
+import { contentsFromPlainHistory } from "@/lib/agent/history";
 import { loadAgentSettings } from "@/lib/agent/settings";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -32,16 +33,7 @@ export const suggestReplyAction = async (rawValues: unknown) => {
   }
 
   const history = [...(messages ?? [])].reverse();
-  const contents = history
-    .map((row) => {
-      const text = typeof row.content === "string" ? row.content.trim() : "";
-      if (!text) return null;
-      return {
-        role: row.direction === "inbound" ? ("user" as const) : ("model" as const),
-        parts: [{ text }],
-      };
-    })
-    .filter((row): row is { role: "user" | "model"; parts: Array<{ text: string }> } => Boolean(row));
+  const contents = contentsFromPlainHistory(history);
 
   if (!contents.length) {
     return { error: "No hay texto suficiente para sugerir una respuesta." };

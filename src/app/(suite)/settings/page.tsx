@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { TeamAndIntegrationsForm } from "./team-and-integrations-form";
 import { AgentSettingsForm } from "./agent-settings-form";
+import { LeadRecoveryForm } from "./lead-recovery-form";
 import { OfficeHoursForm } from "./office-hours-form";
 import { ModulesSettingsForm } from "./modules-settings-form";
 import { CurrencySettingsForm } from "./currency-settings-form";
@@ -14,6 +15,7 @@ import { loadAgentSettings, loadKnowledgeArticles } from "@/lib/agent/settings";
 import { env } from "@/lib/config/env";
 import { loadCachedOrganizationModules } from "@/lib/modules/settings";
 import { loadOrganizationCurrencies } from "@/lib/organizations/currencies";
+import { loadOrganizationFunnelStages } from "@/lib/funnels/board";
 import { DEFAULT_TAX_RATE } from "@/lib/commerce/types";
 import { getWhatsAppOAuthRedirectUri } from "@/lib/integrations/whatsapp";
 
@@ -39,6 +41,7 @@ export default async function SettingsPage() {
     modules,
     currencies,
     articles,
+    funnelStages,
     orgBillingResult,
   ] = await Promise.all([
     supabase
@@ -72,6 +75,7 @@ export default async function SettingsPage() {
     loadCachedOrganizationModules(membership.organizationId),
     loadOrganizationCurrencies(supabase, membership.organizationId),
     loadKnowledgeArticles(membership.organizationId, false),
+    loadOrganizationFunnelStages(supabase, membership.organizationId),
     supabase
       .from("organizations")
       .select("plan, tax_rate")
@@ -133,6 +137,12 @@ export default async function SettingsPage() {
           modules={modules}
           geminiConfigured={Boolean(env.geminiApiKey)}
           articles={articles}
+        />
+        <LeadRecoveryForm
+          canManageOrganization={canManageOrganization}
+          settings={agentSettings}
+          funnelEnabled={Boolean(modules.funnels)}
+          stages={funnelStages}
         />
         <OfficeHoursForm
           canManageOrganization={canManageOrganization}

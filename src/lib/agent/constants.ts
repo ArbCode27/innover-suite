@@ -22,6 +22,14 @@ export const AGENT_COURTESY_MESSAGE =
 export const AGENT_HANDOFF_MESSAGE =
   "Te está atendiendo un asesor de nuestro equipo. En breve te escriben.";
 export const AGENT_PROMPT_MAX_CHARS = 50_000;
+export const LEAD_RECOVERY_IDLE_HOURS_MIN = 2;
+export const LEAD_RECOVERY_IDLE_HOURS_MAX = 24;
+export const LEAD_RECOVERY_IDLE_HOURS_DEFAULT = 6;
+export const LEAD_RECOVERY_COOLDOWN_HOURS_MIN = 6;
+export const LEAD_RECOVERY_COOLDOWN_HOURS_MAX = 168;
+export const LEAD_RECOVERY_COOLDOWN_HOURS_DEFAULT = 24;
+export const LEAD_RECOVERY_PROMPT_MAX_CHARS = 2000;
+export const LEAD_RECOVERY_DEFAULT_PROMPT = `Escribes un follow-up breve a un lead que no recibió respuesta. Español venezolano, 1 o 2 frases. Retoma el hilo; no vuelvas a vender desde cero. Una sola pregunta. No menciones que eres una IA ni el retraso interno.`;
 
 export const DEFAULT_AGENT_PROMPT = `Eres el asesor virtual de la organización. Atiendes leads por chat (WhatsApp, Instagram o Messenger) en español venezolano, claro y breve. Tu referencia principal es Caracas, Venezuela.
 

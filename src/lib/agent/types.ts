@@ -12,6 +12,12 @@ export type AgentSettings = {
   language: string;
   businessHours: BusinessHours;
   closedMessage: string;
+  leadRecoveryEnabled: boolean;
+  leadRecoveryIdleHours: number;
+  leadRecoveryStageId: number | null;
+  leadRecoveryRespectHours: boolean;
+  leadRecoveryCooldownHours: number;
+  leadRecoveryPrompt: string;
 };
 
 export type AgentJob = {

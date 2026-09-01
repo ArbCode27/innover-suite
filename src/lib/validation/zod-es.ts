@@ -34,6 +34,10 @@ const FIELD_LABELS: Record<string, string> = {
   accessToken: "Token de acceso",
   phoneNumberId: "Phone Number ID",
   wabaId: "WABA ID",
+  leadRecoveryIdleHours: "Horas sin responder",
+  leadRecoveryCooldownHours: "Espera entre reintentos",
+  leadRecoveryPrompt: "Prompt de recuperación",
+  leadRecoveryStageId: "Etapa del embudo",
 };
 
 const quoteValue = (value: unknown) => {

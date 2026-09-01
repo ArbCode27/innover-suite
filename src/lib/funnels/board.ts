@@ -265,3 +265,29 @@ export const loadFunnelBoard = async (
     stages: mappedStages,
   };
 };
+
+export const loadOrganizationFunnelStages = async (
+  supabase: FunnelSupabase,
+  organizationId: number,
+): Promise<Array<{ id: number; name: string }>> => {
+  const { data: funnel } = await supabase
+    .from("funnels")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (!funnel?.id) {
+    return [];
+  }
+
+  const { data } = await supabase
+    .from("funnel_stages")
+    .select("id, name")
+    .eq("funnel_id", funnel.id)
+    .order("order_index", { ascending: true });
+
+  return (data ?? []).map((row) => ({
+    id: row.id as number,
+    name: row.name as string,
+  }));
+};

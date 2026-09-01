@@ -19,7 +19,13 @@ import {
   type GeminiContent,
   type GeminiTurnFailure,
 } from "@/lib/agent/gemini";
-import { buildCoalescedGeminiContents, trailingInboundIds, trailingInboundText } from "@/lib/agent/history";
+import {
+  buildCoalescedGeminiContents,
+  ensureGeminiHistoryForGenerate,
+  historyThroughInbound,
+  trailingInboundIds,
+  trailingInboundText,
+} from "@/lib/agent/history";
 import { isIncompleteAgentReply, resolveAgentReplyText } from "@/lib/agent/reply-text";
 import { areAdvisorsAvailable, isAfterHoursAiCoverage } from "@/lib/agent/hours";
 import { formatKnowledgeContext, loadAgentSettings, loadKnowledgeArticles } from "@/lib/agent/settings";
@@ -608,9 +614,12 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
       .order("created_at", { ascending: false })
       .limit(AGENT_HISTORY_LIMIT);
 
-    const history = [...(messageRows ?? [])].reverse().filter((row) => row.sender_type !== "system");
+    const chronological = [...(messageRows ?? [])].reverse().filter((row) => row.sender_type !== "system");
+    const history = historyThroughInbound(chronological, job.inboundMessageId);
     const burstIds = trailingInboundIds(history);
-    const contents: GeminiContent[] = await buildCoalescedGeminiContents(history, burstIds);
+    const contents: GeminiContent[] = ensureGeminiHistoryForGenerate(
+      await buildCoalescedGeminiContents(history, burstIds),
+    );
     const lastInboundText = trailingInboundText(history);
 
     if (!contents.length) {

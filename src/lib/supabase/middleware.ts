@@ -16,6 +16,7 @@ const PUBLIC_PATHS = [
   "/api/auth/google/callback",
   "/api/cron/instagram/refresh",
   "/api/cron/google/refresh",
+  "/api/cron/agent",
   "/api/meta/webhook",
   "/api/webhooks/meta",
 ];
@@ -32,6 +33,7 @@ const AUTH_SKIP_PATHS = [
   "/api/auth/google/callback",
   "/api/cron/instagram/refresh",
   "/api/cron/google/refresh",
+  "/api/cron/agent",
   "/api/meta/webhook",
   "/api/webhooks/meta",
 ];

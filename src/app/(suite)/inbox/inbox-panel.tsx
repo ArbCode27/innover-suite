@@ -280,17 +280,29 @@ export const InboxPanel = ({
     const { data, error } = await supabase
       .from("conversations")
       .select(
-        "id, contact_id, channel, status, mode, assigned_user_id, updated_at, last_message_at, metadata, customer_phone, contacts(full_name, phone, metadata)",
+        "id, contact_id, channel, status, mode, assigned_user_id, updated_at, last_message_at, last_message_preview, metadata, customer_phone, contacts(full_name, phone, metadata)",
       )
       .eq("organization_id", organizationId)
       .order("updated_at", { ascending: false })
       .limit(50);
 
-    if (error) {
+    const result =
+      error?.message?.includes("last_message_preview")
+        ? await supabase
+            .from("conversations")
+            .select(
+              "id, contact_id, channel, status, mode, assigned_user_id, updated_at, last_message_at, metadata, customer_phone, contacts(full_name, phone, metadata)",
+            )
+            .eq("organization_id", organizationId)
+            .order("updated_at", { ascending: false })
+            .limit(50)
+        : { data, error };
+
+    if (result.error) {
       return;
     }
 
-    const mapped = ((data ?? []) as unknown as ConversationListRow[])
+    const mapped = ((result.data ?? []) as unknown as ConversationListRow[])
       .map((row) => mapConversationListRow(row))
       .filter((row): row is InboxConversation => Boolean(row));
 

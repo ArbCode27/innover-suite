@@ -2,6 +2,11 @@ import { resolveInstagramCredentials } from "@/lib/integrations/instagram-creden
 import { sendMetaOutboundMessage } from "@/lib/integrations/meta-send";
 import { createMessageAttachment } from "@/lib/media/types";
 import { mergeAttachmentMetadata } from "@/lib/media/parse";
+import {
+  buildConversationPreviewPatch,
+  buildMessagePreview,
+  updateConversationWithPreview,
+} from "@/lib/inbox/conversation-preview";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { MetaChannel } from "@/types/domain";
 
@@ -234,14 +239,23 @@ export const sendAiOutboundMessage = async (params: {
     })
     .eq("id", inserted.id);
 
-  await admin
-    .from("conversations")
-    .update({
-      updated_at: now,
-      last_message_at: now,
-    })
-    .eq("id", params.conversationId)
-    .eq("organization_id", params.organizationId);
+  await updateConversationWithPreview(
+    (patch) =>
+      admin
+        .from("conversations")
+        .update(patch)
+        .eq("id", params.conversationId)
+        .eq("organization_id", params.organizationId),
+    buildConversationPreviewPatch({
+      preview: buildMessagePreview({
+        content: text || null,
+        mediaUrl: mediaUrl || null,
+        metadata: pendingMetadata,
+      }),
+      direction: "outbound",
+      at: now,
+    }),
+  );
 
   if (!outboundResult.ok) {
     return { ok: false as const, error: outboundResult.errorMessage };

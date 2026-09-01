@@ -2,7 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AGENT_MODEL, AGENT_PROMPT_MAX_CHARS, DEFAULT_AGENT_PROMPT } from "@/lib/agent/constants";
+import {
+  AGENT_MODEL,
+  AGENT_PROMPT_MAX_CHARS,
+  DEFAULT_AGENT_PROMPT,
+  LEAD_RECOVERY_COOLDOWN_HOURS_MAX,
+  LEAD_RECOVERY_COOLDOWN_HOURS_MIN,
+  LEAD_RECOVERY_IDLE_HOURS_MAX,
+  LEAD_RECOVERY_IDLE_HOURS_MIN,
+  LEAD_RECOVERY_PROMPT_MAX_CHARS,
+} from "@/lib/agent/constants";
 import { DEFAULT_CLOSED_MESSAGE, parseBusinessHours } from "@/lib/agent/hours";
 import { loadAgentSettings, upsertAgentSettings } from "@/lib/agent/settings";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
@@ -40,6 +49,26 @@ const saveAgentSettingsSchema = z.object({
       days: z.record(z.string(), weekdaySchema),
     })
     .optional(),
+});
+
+const saveLeadRecoverySchema = z.object({
+  leadRecoveryEnabled: z.boolean(),
+  leadRecoveryIdleHours: z.coerce
+    .number()
+    .int()
+    .min(LEAD_RECOVERY_IDLE_HOURS_MIN)
+    .max(LEAD_RECOVERY_IDLE_HOURS_MAX),
+  leadRecoveryStageId: z.preprocess(
+    (value) => (value === "" || value === undefined ? null : value),
+    z.union([z.coerce.number().int().positive(), z.null()]),
+  ),
+  leadRecoveryRespectHours: z.boolean(),
+  leadRecoveryCooldownHours: z.coerce
+    .number()
+    .int()
+    .min(LEAD_RECOVERY_COOLDOWN_HOURS_MIN)
+    .max(LEAD_RECOVERY_COOLDOWN_HOURS_MAX),
+  leadRecoveryPrompt: z.string().trim().max(LEAD_RECOVERY_PROMPT_MAX_CHARS),
 });
 
 const saveOfficeHoursSchema = z.object({
@@ -91,6 +120,12 @@ export const saveAgentSettingsAction = async (rawValues: unknown): Promise<Actio
       ? parseBusinessHours(parsed.data.businessHours)
       : current.businessHours,
     closedMessage: parsed.data.closedMessage?.trim() || current.closedMessage,
+    leadRecoveryEnabled: current.leadRecoveryEnabled,
+    leadRecoveryIdleHours: current.leadRecoveryIdleHours,
+    leadRecoveryStageId: current.leadRecoveryStageId,
+    leadRecoveryRespectHours: current.leadRecoveryRespectHours,
+    leadRecoveryCooldownHours: current.leadRecoveryCooldownHours,
+    leadRecoveryPrompt: current.leadRecoveryPrompt,
   });
 
   if (error) {
@@ -139,6 +174,54 @@ export const saveOfficeHoursAction = async (rawValues: unknown): Promise<ActionR
   revalidatePath("/settings");
   revalidatePath("/inbox");
   return { success: "Horario de oficina guardado." };
+};
+
+export const saveLeadRecoverySettingsAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = saveLeadRecoverySchema.safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: zodErrorMessage(parsed.error, "Revisa la configuración de recuperación de chats.") };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
+    return { error: "Solo owner o admin pueden configurar la recuperación de chats." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return sessionExpiredResult();
+  }
+
+  const current = await loadAgentSettings(membership.organizationId);
+  const { organizationId: _organizationId, ...rest } = current;
+  const stageId =
+    typeof parsed.data.leadRecoveryStageId === "number" && parsed.data.leadRecoveryStageId > 0
+      ? parsed.data.leadRecoveryStageId
+      : null;
+  const error = await upsertAgentSettings(membership.organizationId, user.id, {
+    ...rest,
+    leadRecoveryEnabled: parsed.data.leadRecoveryEnabled,
+    leadRecoveryIdleHours: parsed.data.leadRecoveryIdleHours,
+    leadRecoveryStageId: stageId,
+    leadRecoveryRespectHours: parsed.data.leadRecoveryRespectHours,
+    leadRecoveryCooldownHours: parsed.data.leadRecoveryCooldownHours,
+    leadRecoveryPrompt: parsed.data.leadRecoveryPrompt,
+  });
+
+  if (error) {
+    console.error("[AGENT] save lead recovery failed", error);
+    return {
+      error:
+        "No se pudo guardar la recuperación de chats. ¿Corriste supabase/conversation-preview-and-lead-recovery.sql?",
+    };
+  }
+
+  revalidatePath("/settings");
+  return { success: "Recuperación de chats guardada." };
 };
 
 const knowledgeSchema = z.object({
