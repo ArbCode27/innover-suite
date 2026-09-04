@@ -1,9 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthUserWithTimeout } from "@/lib/supabase/auth-user";
-import { isSafeReturnPath, isSafeWhatsAppOAuthReturnPath } from "@/lib/auth/return-path";
+import {
+  isSafeReturnPath,
+  isSafeWhatsAppOAuthReturnPath,
+} from "@/lib/auth/return-path";
 
 const PUBLIC_PATHS = [
+  "/",
   "/login",
   "/privacy",
   "/terms",
@@ -41,12 +45,16 @@ const AUTH_SKIP_PATHS = [
 const isPrefixedPath = (pathname: string, paths: string[]) =>
   paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 
-const isPublicPath = (pathname: string) => isPrefixedPath(pathname, PUBLIC_PATHS);
+const isPublicPath = (pathname: string) =>
+  isPrefixedPath(pathname, PUBLIC_PATHS);
 
-const shouldSkipAuth = (pathname: string) => isPrefixedPath(pathname, AUTH_SKIP_PATHS);
+const shouldSkipAuth = (pathname: string) =>
+  isPrefixedPath(pathname, AUTH_SKIP_PATHS);
 
 const hasSupabaseAuthCookie = (request: NextRequest) =>
-  request.cookies.getAll().some((cookie) => cookie.name.includes("-auth-token"));
+  request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.includes("-auth-token"));
 
 const copyCookies = (from: NextResponse, to: NextResponse) => {
   from.cookies.getAll().forEach((cookie) => {
@@ -72,7 +80,9 @@ const redirectTo = (
 
 const loginRedirectSearch = (request: NextRequest) => {
   const candidate = `${request.nextUrl.pathname}${request.nextUrl.search}`;
-  return isSafeReturnPath(candidate) ? `?next=${encodeURIComponent(candidate)}` : "";
+  return isSafeReturnPath(candidate)
+    ? `?next=${encodeURIComponent(candidate)}`
+    : "";
 };
 
 export const updateSession = async (request: NextRequest) => {
@@ -87,14 +97,24 @@ export const updateSession = async (request: NextRequest) => {
 
   if (!supabaseUrl || !supabaseAnonKey) {
     if (!isPublicPath(pathname)) {
-      return redirectTo(request, sessionResponse, "/login", loginRedirectSearch(request));
+      return redirectTo(
+        request,
+        sessionResponse,
+        "/login",
+        loginRedirectSearch(request),
+      );
     }
 
     return sessionResponse;
   }
 
   if (!hasSupabaseAuthCookie(request) && !isPublicPath(pathname)) {
-    return redirectTo(request, sessionResponse, "/login", loginRedirectSearch(request));
+    return redirectTo(
+      request,
+      sessionResponse,
+      "/",
+      loginRedirectSearch(request),
+    );
   }
 
   // Cookie presence is enough to leave `/`; suite layout validates the session.
