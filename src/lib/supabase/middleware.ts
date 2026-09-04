@@ -117,10 +117,10 @@ export const updateSession = async (request: NextRequest) => {
     );
   }
 
-  // Cookie presence is enough to leave `/`; suite layout validates the session.
-  if (pathname === "/") {
-    return redirectTo(request, sessionResponse, "/home");
-  }
+  // // Cookie presence is enough to leave `/`; suite layout validates the session.
+  // if (pathname === "/") {
+  //   return redirectTo(request, sessionResponse, "/home");
+  // }
 
   // Protected routes: do not block on getUser. /login still confirms the session.
   if (pathname !== "/login" || !hasSupabaseAuthCookie(request)) {
