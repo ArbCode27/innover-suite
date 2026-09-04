@@ -163,10 +163,13 @@ const TermsPage = () => {
 
         <div className="flex flex-wrap gap-3 pt-2">
           <Button asChild variant="outline">
+            <Link href="/">Volver al inicio</Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href="/privacy">Política de privacidad</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/login">Volver al inicio de sesión</Link>
+            <Link href="/login">Acceso asesores</Link>
           </Button>
         </div>
       </div>
