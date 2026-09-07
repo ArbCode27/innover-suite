@@ -75,7 +75,7 @@ export const buildSetupSteps = (progress: OnboardingProgress): SetupStepDefiniti
   steps.push({
     id: "channel",
     title: "Canal de chat",
-    description: "Conecta WhatsApp o Instagram para recibir leads.",
+    description: "Conecta WhatsApp, Instagram o Messenger para recibir leads.",
     done: progress.hasChannel,
     optional: true,
   });

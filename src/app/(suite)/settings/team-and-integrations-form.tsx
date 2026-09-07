@@ -512,7 +512,7 @@ export const TeamAndIntegrationsForm = ({
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Instagram</p>
+              <p className="text-xs font-medium text-muted-foreground">Messenger e Instagram</p>
               <CopyableText
                 className="mt-1"
                 value="/api/webhooks/meta/social"

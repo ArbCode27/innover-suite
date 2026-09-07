@@ -1234,7 +1234,7 @@ export const loadDashboardBoard = async (
       id: "no-channel",
       severity: "warning",
       title: "Sin canal conectado",
-      detail: "Conecta WhatsApp o Instagram para recibir chats.",
+      detail: "Conecta WhatsApp, Instagram o Messenger para recibir chats.",
       href: "/settings",
       count: 1,
     });
