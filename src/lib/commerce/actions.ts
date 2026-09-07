@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getCurrentMembership, canManageCatalog, canManageOrders, canMarkPayment } from "@/lib/organizations/membership";
+import {
+  getCurrentMembership,
+  loadCurrentMemberSession,
+  canManageCatalog,
+  canManageOrders,
+  canMarkPayment,
+} from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { parseCatalogCsv } from "@/lib/commerce/catalog";
 import { isOrderStatus, isPaymentStatus, PAYMENT_STATUSES, PRODUCT_KINDS } from "@/lib/commerce/types";
@@ -549,6 +555,107 @@ const paymentSchema = z.object({
   paymentMethod: z.string().trim().max(40).optional(),
 });
 
+/** Etiqueta de contacto que se asigna al aprobar un pago. */
+const PAID_API_TAG_NAME = "PAGADO API";
+
+const ensurePaidApiTagOnContact = async (
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  organizationId: number,
+  contactId: number,
+) => {
+  const { data: existingTag } = await supabase
+    .from("contact_tags")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("name", PAID_API_TAG_NAME)
+    .maybeSingle();
+
+  let tagId = existingTag?.id as number | undefined;
+
+  if (!tagId) {
+    const { data: createdTag, error: tagError } = await supabase
+      .from("contact_tags")
+      .insert({ organization_id: organizationId, name: PAID_API_TAG_NAME })
+      .select("id")
+      .single();
+
+    if (tagError || !createdTag?.id) {
+      console.warn("[orders] No se pudo crear la etiqueta PAGADO API", tagError?.message);
+      return;
+    }
+    tagId = createdTag.id;
+  }
+
+  const { error: linkError } = await supabase.from("contact_tag_links").upsert({
+    contact_id: contactId,
+    tag_id: tagId,
+  });
+
+  if (linkError) {
+    console.warn("[orders] No se pudo vincular PAGADO API al contacto", linkError.message);
+  }
+};
+
+const resolveOrderConversationId = async (
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  organizationId: number,
+  conversationId: number | null,
+  contactId: number | null,
+) => {
+  if (conversationId) return conversationId;
+  if (!contactId) return null;
+
+  const { data: openConversation } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("contact_id", contactId)
+    .neq("status", "resolved")
+    .order("last_message_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (openConversation?.id) return openConversation.id;
+
+  const { data: latestConversation } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("contact_id", contactId)
+    .order("last_message_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return latestConversation?.id ?? null;
+};
+
+const assignConversationToAdvisor = async (
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  organizationId: number,
+  conversationId: number,
+  advisorUserId: string,
+) => {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("conversations")
+    .update({
+      assigned_user_id: advisorUserId,
+      assigned_at: now,
+      mode: "human",
+      status: "in_progress",
+      updated_at: now,
+    })
+    .eq("id", conversationId)
+    .eq("organization_id", organizationId);
+
+  if (error) {
+    console.warn("[orders] No se pudo asignar el chat al asesor", error.message);
+    return false;
+  }
+
+  return true;
+};
+
 export const updateOrderPaymentAction = async (rawValues: unknown): Promise<ActionResult> => {
   const parsed = paymentSchema.safeParse(rawValues);
   if (!parsed.success || !isPaymentStatus(parsed.data.paymentStatus)) {
@@ -558,29 +665,85 @@ export const updateOrderPaymentAction = async (rawValues: unknown): Promise<Acti
   const access = await requirePaymentMembership();
   if ("error" in access) return { error: access.error };
 
+  const { user } = await loadCurrentMemberSession();
+  if (!user) {
+    return { error: "Sesión no válida. Vuelve a iniciar sesión." };
+  }
+
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase
+  const { data: order, error } = await supabase
     .from("orders")
     .update({
       payment_status: parsed.data.paymentStatus,
       payment_method: parsed.data.paymentMethod || null,
     })
     .eq("id", parsed.data.orderId)
-    .eq("organization_id", access.membership.organizationId);
+    .eq("organization_id", access.membership.organizationId)
+    .select("id, contact_id, conversation_id")
+    .single();
 
   if (error) {
     return { error: error.message || "No se pudo actualizar el pago." };
   }
 
+  if (parsed.data.paymentStatus === "paid" && order?.contact_id) {
+    await ensurePaidApiTagOnContact(
+      supabase,
+      access.membership.organizationId,
+      order.contact_id,
+    );
+  }
+
+  const conversationId = await resolveOrderConversationId(
+    supabase,
+    access.membership.organizationId,
+    order?.conversation_id ?? null,
+    order?.contact_id ?? null,
+  );
+
+  let assignedConversation = false;
+  if (conversationId) {
+    assignedConversation = await assignConversationToAdvisor(
+      supabase,
+      access.membership.organizationId,
+      conversationId,
+      user.id,
+    );
+  }
+
   revalidatePath("/orders");
+  revalidatePath("/contacts");
+  revalidatePath("/inbox");
+  if (order?.contact_id) {
+    revalidatePath(`/contacts/${order.contact_id}`);
+  }
   await recordAuditEvent({
     organizationId: access.membership.organizationId,
     action: "order.payment",
     entity: "order",
     entityId: parsed.data.orderId,
-    payload: { paymentStatus: parsed.data.paymentStatus, paymentMethod: parsed.data.paymentMethod },
+    payload: {
+      paymentStatus: parsed.data.paymentStatus,
+      paymentMethod: parsed.data.paymentMethod,
+      taggedPaidApi: parsed.data.paymentStatus === "paid" && Boolean(order?.contact_id),
+      assignedConversationId: assignedConversation ? conversationId : null,
+      assignedUserId: assignedConversation ? user.id : null,
+    },
   });
-  return { success: parsed.data.paymentStatus === "paid" ? "Pedido marcado como pagado." : "Pago actualizado." };
+
+  if (parsed.data.paymentStatus === "paid") {
+    return {
+      success: assignedConversation
+        ? "Pedido marcado como pagado y chat asignado a ti."
+        : "Pedido marcado como pagado.",
+    };
+  }
+
+  return {
+    success: assignedConversation
+      ? "Pago actualizado y chat asignado a ti."
+      : "Pago actualizado.",
+  };
 };
 
 export const importCatalogCsvAction = async (csvText: string): Promise<ActionResult> => {
