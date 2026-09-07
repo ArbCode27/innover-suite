@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Camera, MessageCircle, MessagesSquare } from "lucide-react";
+import { Camera, MessageCircle } from "lucide-react";
 import { WhatsAppConnectButton } from "@/app/(suite)/settings/whatsapp-connect-button";
 import { oauthStartHref } from "@/lib/integrations/oauth-href";
 import { Badge } from "@/components/ui/badge";
@@ -21,23 +21,6 @@ const INSTAGRAM_STATUS_LABELS: Record<string, string> = {
   state_error: "No se pudo iniciar el flujo de Instagram.",
   auth_required: "Tu sesión expiró. Inicia sesión de nuevo.",
   forbidden: "No tienes permisos para conectar Instagram.",
-};
-
-const MESSENGER_STATUS_LABELS: Record<string, string> = {
-  connected: "Messenger conectado correctamente.",
-  cancelled: "Conexión de Messenger cancelada.",
-  invalid_callback: "Facebook devolvió un callback incompleto.",
-  invalid_state: "La sesión expiró. Inténtalo de nuevo.",
-  token_exchange_failed: "No se pudo completar el intercambio de token.",
-  long_token_failed: "No se pudo generar el token de larga duración.",
-  pages_fetch_failed: "No se pudieron obtener las páginas de Facebook.",
-  no_pages: "No hay páginas de Facebook autorizadas.",
-  subscription_failed: "No se pudo suscribir el webhook de Messenger.",
-  persist_failed: "Se conectó, pero no se pudo guardar.",
-  missing_env: "Faltan variables de entorno para Messenger.",
-  state_error: "No se pudo iniciar el flujo de Messenger.",
-  auth_required: "Tu sesión expiró. Inicia sesión de nuevo.",
-  forbidden: "No tienes permisos para conectar Messenger.",
 };
 
 const WHATSAPP_STATUS_LABELS: Record<string, string> = {
@@ -100,19 +83,17 @@ const ChannelCard = ({
 export const ChannelPanel = ({
   instagramConnected,
   instagramLabel,
-  messengerConnected,
   whatsappConnected,
 }: ChannelPanelProps) => {
   const searchParams = useSearchParams();
   const igStatus = searchParams.get("ig");
-  const messengerStatus = searchParams.get("ms");
   const whatsappStatus = searchParams.get("wa");
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Conecta al menos un canal para que lleguen chats. Si lo saltas, la IA no recibirá mensajes hasta que lo hagas en
-        Ajustes.
+        Conecta WhatsApp o Instagram para que lleguen chats. Messenger está temporalmente deshabilitado. Si lo saltas, la
+        IA no recibirá mensajes hasta que lo hagas en Ajustes.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <ChannelCard
@@ -147,25 +128,6 @@ export const ChannelPanel = ({
           ) : (
             <Button asChild className="w-full">
               <Link href={oauthStartHref("/api/auth/instagram/start", "channel")}>Conectar Instagram</Link>
-            </Button>
-          )}
-        </ChannelCard>
-
-        <ChannelCard
-          title="Messenger"
-          description="Páginas de Facebook."
-          connected={messengerConnected}
-          statusMessage={messengerStatus ? MESSENGER_STATUS_LABELS[messengerStatus] : null}
-          isError={Boolean(messengerStatus && !["connected", "disconnected"].includes(messengerStatus))}
-        >
-          {messengerConnected ? (
-            <p className="flex items-center gap-2 text-sm">
-              <MessagesSquare className="size-4 text-primary" aria-hidden />
-              Página conectada
-            </p>
-          ) : (
-            <Button asChild className="w-full">
-              <Link href={oauthStartHref("/api/auth/messenger/start", "channel")}>Conectar Messenger</Link>
             </Button>
           )}
         </ChannelCard>

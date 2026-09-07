@@ -4,6 +4,7 @@ import {
   getMessengerSettingsRedirectUrl,
   isMessengerOAuthConfigured,
 } from "@/lib/integrations/messenger";
+import { isMessengerConnectionEnabled } from "@/lib/integrations/channel-flags";
 import { rememberOAuthReturnPath } from "@/lib/integrations/oauth-return";
 import { createMessengerOAuthState } from "@/lib/integrations/messenger-state";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
@@ -15,6 +16,10 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const next = request.nextUrl.searchParams.get("next");
   await rememberOAuthReturnPath(next);
+
+  if (!isMessengerConnectionEnabled()) {
+    return NextResponse.redirect(getMessengerSettingsRedirectUrl("disabled", next));
+  }
 
   if (!isMessengerOAuthConfigured()) {
     return NextResponse.redirect(getMessengerSettingsRedirectUrl("missing_env", next));

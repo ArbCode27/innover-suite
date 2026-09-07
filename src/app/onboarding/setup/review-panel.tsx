@@ -20,8 +20,7 @@ export const ReviewPanel = ({ organizationName, templateLabel, steps, hasChannel
       {!hasChannel ? (
         <p className="flex items-start gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm">
           <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
-          No hay un canal de chat conectado. La IA no recibirá mensajes hasta que conectes WhatsApp, Instagram o
-          Messenger.
+          No hay un canal de chat conectado. La IA no recibirá mensajes hasta que conectes WhatsApp o Instagram.
         </p>
       ) : null}
       <ul className="space-y-2">

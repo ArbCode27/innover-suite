@@ -12,6 +12,7 @@ import { WhatsAppConnectButton } from "./whatsapp-connect-button";
 import { inviteAdvisorAction } from "@/lib/organizations/actions";
 import { CopyableText } from "@/components/auth/copyable-text";
 import { redirectIfSessionExpired } from "@/lib/auth/session-client";
+import { isMessengerConnectionEnabled } from "@/lib/integrations/channel-flags";
 import { AppSelect } from "@/components/ui/app-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,6 +105,7 @@ const MESSENGER_STATUS_LABELS: Record<string, string> = {
   state_error: "No se pudo iniciar el flujo OAuth de Messenger.",
   auth_required: "Tu sesión expiró. Inicia sesión nuevamente para conectar Messenger.",
   forbidden: "No tienes permisos para gestionar integraciones de Messenger.",
+  disabled: "La conexión de Messenger está temporalmente deshabilitada.",
 };
 
 const WHATSAPP_STATUS_LABELS: Record<string, string> = {
@@ -235,7 +237,7 @@ export const TeamAndIntegrationsForm = ({
   const instagramStatusIsError = Boolean(igStatus && !["connected", "disconnected"].includes(igStatus));
   const messengerStatusMessage = messengerStatus ? MESSENGER_STATUS_LABELS[messengerStatus] : null;
   const messengerStatusIsError = Boolean(
-    messengerStatus && !["connected", "disconnected"].includes(messengerStatus),
+    messengerStatus && !["connected", "disconnected", "disabled"].includes(messengerStatus),
   );
   const whatsappStatusMessage = whatsappStatus ? WHATSAPP_STATUS_LABELS[whatsappStatus] : null;
   const whatsappStatusIsError = Boolean(
@@ -302,9 +304,18 @@ export const TeamAndIntegrationsForm = ({
             id="messenger"
             icon={MessagesSquare}
             title="Messenger"
-            description="Conecta páginas de Facebook para chats de Messenger."
+            description={
+              isMessengerConnectionEnabled()
+                ? "Conecta páginas de Facebook para chats de Messenger."
+                : "Temporalmente deshabilitado. Usa WhatsApp o Instagram."
+            }
             connected={hasMessengerConnections}
-            statusMessage={messengerStatusMessage}
+            statusMessage={
+              messengerStatusMessage ??
+              (!isMessengerConnectionEnabled() && !hasMessengerConnections
+                ? "La conexión de Messenger estará disponible cuando Meta apruebe los permisos."
+                : null)
+            }
             statusIsError={messengerStatusIsError}
           >
             {hasMessengerConnections ? (
@@ -330,12 +341,16 @@ export const TeamAndIntegrationsForm = ({
                   </form>
                 ) : null}
               </div>
-            ) : canManageOrganization ? (
+            ) : isMessengerConnectionEnabled() && canManageOrganization ? (
               <Button asChild className="w-full">
                 <Link href="/api/auth/messenger/start">Conectar Messenger</Link>
               </Button>
-            ) : (
+            ) : isMessengerConnectionEnabled() ? (
               <p className="text-sm text-muted-foreground">Pide a un admin que conecte esta cuenta.</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Por ahora solo puedes conectar WhatsApp e Instagram.
+              </p>
             )}
           </IntegrationCard>
 
@@ -497,7 +512,7 @@ export const TeamAndIntegrationsForm = ({
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Messenger e Instagram</p>
+              <p className="text-xs font-medium text-muted-foreground">Instagram</p>
               <CopyableText
                 className="mt-1"
                 value="/api/webhooks/meta/social"

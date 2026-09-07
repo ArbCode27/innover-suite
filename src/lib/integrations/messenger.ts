@@ -1,6 +1,8 @@
 import { env } from "@/lib/config/env";
 import { resolveIntegrationReturnPath } from "@/lib/integrations/oauth-href";
 
+export { isMessengerConnectionEnabled, MESSENGER_CONNECTION_ENABLED } from "@/lib/integrations/channel-flags";
+
 type FacebookTokenResponse = {
   access_token: string;
   token_type?: string;
