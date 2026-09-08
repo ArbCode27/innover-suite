@@ -14,7 +14,7 @@ import {
   UtensilsCrossed,
 } from "lucide-react";
 import { placePublicMenuOrderAction, submitPublicCatalogInquiryAction } from "@/lib/menu/actions";
-import { formatRemovedIngredientsNote } from "@/lib/menu/public-menu";
+import { formatRemovedIngredientsNote } from "@/lib/menu/format";
 import type {
   CartLine,
   CatalogItem,
