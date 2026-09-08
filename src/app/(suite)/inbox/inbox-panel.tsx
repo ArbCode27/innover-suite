@@ -1178,7 +1178,11 @@ export const InboxPanel = ({
           </CardHeader>
 
           <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
-            <ScrollArea className="min-h-0 flex-1 bg-[radial-gradient(circle_at_top,rgba(0,0,0,0.02),transparent_30rem)] px-3 py-3">
+            <ScrollArea
+              hideScrollbar
+              data-chat-scroll
+              className="min-h-0 flex-1 bg-[radial-gradient(circle_at_top,rgba(0,0,0,0.02),transparent_30rem)] px-3 py-3"
+            >
               {isLoadingMessages ? (
                 <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                   <Loader2 className="mr-2 size-4 animate-spin" />

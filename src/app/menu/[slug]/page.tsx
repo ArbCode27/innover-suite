@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { MenuBoard } from "./menu-board";
+import { CatalogBoard } from "./menu-board";
 import { loadPublicMenuBySlug } from "@/lib/menu/public-menu";
 
 type MenuPageProps = {
@@ -10,33 +10,33 @@ type MenuPageProps = {
 export const generateMetadata = async ({ params }: MenuPageProps): Promise<Metadata> => {
   const { slug } = await params;
   try {
-    const menu = await loadPublicMenuBySlug(slug);
-    if (!menu) {
-      return { title: "Menú no disponible" };
+    const catalog = await loadPublicMenuBySlug(slug);
+    if (!catalog) {
+      return { title: "Catálogo no disponible" };
     }
     return {
-      title: `${menu.restaurant.name} | Auto-pedido`,
-      description: `Ordena en ${menu.restaurant.name} desde el menú digital.`,
+      title: `${catalog.organization.name} | Catálogo`,
+      description: `Explora el catálogo de ${catalog.organization.name}.`,
     };
   } catch {
-    return { title: "Menú" };
+    return { title: "Catálogo" };
   }
 };
 
 const MenuPage = async ({ params }: MenuPageProps) => {
   const { slug } = await params;
-  let menu = null;
+  let catalog = null;
   try {
-    menu = await loadPublicMenuBySlug(slug);
+    catalog = await loadPublicMenuBySlug(slug);
   } catch (error) {
-    console.error("[PUBLIC_MENU] page load failed", error);
+    console.error("[PUBLIC_CATALOG] page load failed", error);
   }
 
-  if (!menu) {
+  if (!catalog) {
     notFound();
   }
 
-  return <MenuBoard menu={menu} />;
+  return <CatalogBoard catalog={catalog} />;
 };
 
 export default MenuPage;

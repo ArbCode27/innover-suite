@@ -59,7 +59,6 @@ begin
   from public.organizations
   where public_menu_slug = lower(trim(p_slug))
     and public_menu_enabled = true
-    and business_template = 'restaurant'
   limit 1;
 
   if not found then

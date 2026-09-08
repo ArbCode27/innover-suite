@@ -1,4 +1,5 @@
 import type { FulfillmentType } from "@/lib/commerce/types";
+import type { OrganizationModules } from "@/lib/modules/constants";
 
 export type MenuIngredient = {
   id: string;
@@ -6,6 +7,28 @@ export type MenuIngredient = {
   removable: boolean;
 };
 
+export type CatalogItemKind = "food" | "physical" | "service" | "property";
+
+export type CatalogItem = {
+  id: string;
+  sourceId: number;
+  source: "product" | "listing";
+  kind: CatalogItemKind;
+  title: string;
+  description: string | null;
+  category: string | null;
+  price: number | null;
+  currency: string;
+  imageUrl: string | null;
+  available: boolean;
+  availableQty: number | null;
+  ingredients: MenuIngredient[];
+  promoPrice: number | null;
+  metaLabel: string | null;
+  actionable: "order" | "inquire";
+};
+
+/** @deprecated Prefer CatalogItem — kept for gradual migration */
 export type MenuProduct = {
   id: number;
   name: string;
@@ -20,20 +43,30 @@ export type MenuProduct = {
   promoPrice: number | null;
 };
 
-export type PublicMenuRestaurant = {
+export type PublicCatalogOrg = {
   organizationId: number;
   name: string;
   slug: string;
   taxRate: number;
   currency: string;
   promoPercent: number;
+  canOrder: boolean;
+  modules: Pick<OrganizationModules, "catalog" | "orders" | "kitchen" | "listings">;
 };
 
-export type PublicMenuPayload = {
-  restaurant: PublicMenuRestaurant;
+export type PublicCatalogPayload = {
+  organization: PublicCatalogOrg;
+  items: CatalogItem[];
+  filters: Array<{ id: string; label: string }>;
+  /** @deprecated use organization */
+  restaurant: PublicCatalogOrg;
+  /** @deprecated use items */
   products: MenuProduct[];
   categories: string[];
 };
+
+export type PublicMenuRestaurant = PublicCatalogOrg;
+export type PublicMenuPayload = PublicCatalogPayload;
 
 export type CartLine = {
   key: string;
@@ -46,6 +79,16 @@ export type CartLine = {
   removedIngredientIds: string[];
   removedIngredientNames: string[];
   note: string;
+};
+
+export type InterestLine = {
+  key: string;
+  listingId: number;
+  title: string;
+  price: number | null;
+  currency: string;
+  imageUrl: string | null;
+  metaLabel: string | null;
 };
 
 export type PlaceMenuOrderInput = {

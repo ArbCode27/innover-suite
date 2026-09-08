@@ -100,9 +100,7 @@ export default async function SettingsPage() {
     public_menu_enabled?: boolean | null;
     public_menu_slug?: string | null;
   } | null;
-  const isRestaurant =
-    orgBilling?.business_template === "restaurant" ||
-    (Boolean(modules.kitchen) && Boolean(modules.catalog) && Boolean(modules.orders));
+  const showPublicCatalog = Boolean(modules.catalog || modules.listings);
 
   const connectedCount = [
     Boolean(instagramConnection.data),
@@ -147,7 +145,7 @@ export default async function SettingsPage() {
             whatsappOAuthRedirectUri={getWhatsAppOAuthRedirectUri()}
           />
         </Suspense>
-        {isRestaurant ? (
+        {showPublicCatalog ? (
           <PublicMenuSettingsCard
             canManage={canManageOrganization}
             enabled={Boolean(orgBilling?.public_menu_enabled)}

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Copy, ExternalLink, Loader2, UtensilsCrossed } from "lucide-react";
+import { Copy, ExternalLink, Loader2, Store } from "lucide-react";
 import { updatePublicMenuSettingsAction } from "@/lib/menu/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,7 @@ export const PublicMenuSettingsCard = ({
       }
       setEnabled(result.enabled);
       setSlug(result.slug);
-      setMessage(next ? "Menú público activado." : "Menú público desactivado.");
+      setMessage(next ? "Catálogo público activado." : "Catálogo público desactivado.");
     });
   };
 
@@ -59,18 +59,18 @@ export const PublicMenuSettingsCard = ({
   };
 
   return (
-    <Card id="auto-pedido" className="border-primary/15 bg-card/80">
+    <Card id="catalogo-publico" className="border-primary/15 bg-card/80">
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <UtensilsCrossed className="size-5" aria-hidden />
+              <Store className="size-5" aria-hidden />
             </span>
             <div>
-              <CardTitle>Auto-pedido (menú público)</CardTitle>
+              <CardTitle>Catálogo público</CardTitle>
               <CardDescription className="mt-1 leading-6">
-                Comparte este enlace con tus clientes para que ordenen solos. Disponible para{" "}
-                {organizationName} (restaurante).
+                Publica platos, productos e inmuebles cargados en {organizationName}. Tus clientes ven todo
+                en un solo enlace.
               </CardDescription>
             </div>
           </div>
@@ -80,9 +80,9 @@ export const PublicMenuSettingsCard = ({
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 px-3 py-3">
           <div className="space-y-0.5">
-            <Label htmlFor="public-menu-enabled">Menú público activo</Label>
+            <Label htmlFor="public-menu-enabled">Catálogo público activo</Label>
             <p className="text-xs text-muted-foreground">
-              Los clientes entran sin login a <code className="text-[11px]">/menu/…</code>
+              Visible sin login en <code className="text-[11px]">/menu/…</code>
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -109,7 +109,7 @@ export const PublicMenuSettingsCard = ({
                 <Button asChild size="sm">
                   <Link href={menuPath} target="_blank" rel="noreferrer">
                     <ExternalLink className="size-3.5" />
-                    Abrir menú
+                    Abrir catálogo
                   </Link>
                 </Button>
               ) : null}
@@ -117,7 +117,8 @@ export const PublicMenuSettingsCard = ({
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Activa el menú para generar y mostrar el enlace público de auto-pedido.
+            Activa el catálogo para generar el enlace público (productos, platos e inmuebles según tus
+            funciones).
           </p>
         )}
 

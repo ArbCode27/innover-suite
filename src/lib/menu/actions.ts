@@ -44,7 +44,7 @@ export const placePublicMenuOrderAction = async (input: z.infer<typeof placeOrde
   });
 
   if (error) {
-    console.error("[PUBLIC_MENU] place order failed", error);
+    console.error("[PUBLIC_CATALOG] place order failed", error);
     return { ok: false as const, error: error.message || "No se pudo crear el pedido." };
   }
 
@@ -58,6 +58,58 @@ export const placePublicMenuOrderAction = async (input: z.infer<typeof placeOrde
     orderId: result.orderId ?? null,
     total: result.total ?? null,
   };
+};
+
+const inquirySchema = z.object({
+  slug: z.string().trim().min(2).max(80),
+  customerName: z.string().trim().min(2).max(120),
+  customerPhone: z.string().trim().min(7).max(40),
+  listingIds: z.array(z.number().int().positive()).min(1).max(20),
+});
+
+export const submitPublicCatalogInquiryAction = async (input: z.infer<typeof inquirySchema>) => {
+  const parsed = inquirySchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: "Indica nombre, teléfono e inmuebles de interés." };
+  }
+
+  const admin = getSupabaseAdminClient();
+  const { data: org } = await admin
+    .from("organizations")
+    .select("id, name")
+    .eq("public_menu_slug", parsed.data.slug.trim().toLowerCase())
+    .eq("public_menu_enabled", true)
+    .maybeSingle();
+
+  if (!org) {
+    return { ok: false as const, error: "Este catálogo no está disponible." };
+  }
+
+  const { data: listings } = await admin
+    .from("listings")
+    .select("id, title, code")
+    .eq("organization_id", org.id)
+    .in("id", parsed.data.listingIds);
+
+  const titles = (listings ?? []).map((row) => row.title || row.code || `#${row.id}`);
+  if (!titles.length) {
+    return { ok: false as const, error: "No se encontraron los inmuebles seleccionados." };
+  }
+
+  const { error } = await admin.from("notifications").insert({
+    organization_id: org.id,
+    kind: "order",
+    title: `Consulta catálogo · ${parsed.data.customerName}`,
+    body: `${parsed.data.customerPhone}\nInterés: ${titles.join(", ")}`,
+    href: "/listings",
+  });
+
+  if (error) {
+    console.error("[PUBLIC_CATALOG] inquiry failed", error);
+    return { ok: false as const, error: "No se pudo enviar la consulta." };
+  }
+
+  return { ok: true as const };
 };
 
 const menuSettingsSchema = z.object({
@@ -83,20 +135,13 @@ export const updatePublicMenuSettingsAction = async (input: z.infer<typeof menuS
     .maybeSingle();
 
   const modules = await loadCachedOrganizationModules(membership.organizationId).catch(() => null);
-  const looksLikeRestaurant =
-    org?.business_template === "restaurant" ||
-    Boolean(modules?.kitchen && modules?.catalog && modules?.orders);
+  const canPublishCatalog = Boolean(modules?.catalog || modules?.listings);
 
-  if (!org || !looksLikeRestaurant) {
-    return { ok: false as const, error: "El auto-pedido solo está disponible para restaurantes." };
-  }
-
-  // Ensure template flag so the public menu card and RPC stay aligned.
-  if (org.business_template !== "restaurant") {
-    await supabase
-      .from("organizations")
-      .update({ business_template: "restaurant" })
-      .eq("id", membership.organizationId);
+  if (!org || !canPublishCatalog) {
+    return {
+      ok: false as const,
+      error: "Activa Catálogo o Inmuebles en Funciones del CRM para publicar el catálogo.",
+    };
   }
 
   const slug = org.public_menu_slug || buildPublicMenuSlug(org.name || membership.organizationName, org.id);
@@ -110,7 +155,7 @@ export const updatePublicMenuSettingsAction = async (input: z.infer<typeof menuS
     .eq("id", membership.organizationId);
 
   if (error) {
-    console.error("[PUBLIC_MENU] settings update failed", error);
+    console.error("[PUBLIC_CATALOG] settings update failed", error);
     return { ok: false as const, error: error.message };
   }
 

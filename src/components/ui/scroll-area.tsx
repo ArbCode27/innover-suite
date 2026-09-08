@@ -8,13 +8,16 @@ import { cn } from "@/lib/utils"
 function ScrollArea({
   className,
   children,
-  type = "always",
+  type = "hover",
+  hideScrollbar = false,
   ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
+}: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
+  hideScrollbar?: boolean
+}) {
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
-      type={type}
+      type={hideScrollbar ? "scroll" : type}
       className={cn("relative overflow-hidden", className)}
       {...props}
     >
@@ -24,7 +27,7 @@ function ScrollArea({
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
-      <ScrollBar />
+      {hideScrollbar ? null : <ScrollBar />}
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   )
@@ -41,16 +44,16 @@ function ScrollBar({
       data-orientation={orientation}
       orientation={orientation}
       className={cn(
-        "z-10 flex touch-none p-0.5 transition-colors select-none",
-        "data-horizontal:h-3.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent",
-        "data-vertical:h-full data-vertical:w-3.5 data-vertical:border-l data-vertical:border-l-transparent",
+        "z-10 flex touch-none p-px transition-colors select-none",
+        "data-horizontal:h-1.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent",
+        "data-vertical:h-full data-vertical:w-1.5 data-vertical:border-l data-vertical:border-l-transparent",
         className
       )}
       {...props}
     >
       <ScrollAreaPrimitive.ScrollAreaThumb
         data-slot="scroll-area-thumb"
-        className="relative flex-1 rounded-full bg-foreground/45 hover:bg-foreground/70"
+        className="relative flex-1 rounded-full bg-foreground/30 hover:bg-foreground/50"
       />
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
   )
