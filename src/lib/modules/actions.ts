@@ -2,9 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { MODULE_KEYS, normalizeModules, type OrganizationModules } from "@/lib/modules/constants";
+import { loadAgentSettings, upsertAgentSettings } from "@/lib/agent/settings";
+import {
+  BUSINESS_TEMPLATE_IDS,
+  MODULE_KEYS,
+  normalizeModules,
+  type OrganizationModules,
+} from "@/lib/modules/constants";
 import { saveOrganizationModules } from "@/lib/modules/settings";
-import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
+import { hasOrganizationRole, loadCurrentMemberSession } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const saveModulesSchema = z.object({
@@ -14,6 +20,7 @@ const saveModulesSchema = z.object({
   orders: z.boolean(),
   kitchen: z.boolean(),
   listings: z.boolean(),
+  templateId: z.enum(BUSINESS_TEMPLATE_IDS).optional(),
 });
 
 type ActionResult = {
@@ -28,16 +35,17 @@ export const saveOrganizationModulesAction = async (rawValues: unknown): Promise
     return { error: "La configuración de módulos no es válida." };
   }
 
-  const membership = await getCurrentMembership();
-  if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
+  const { membership, user } = await loadCurrentMemberSession();
+  if (!membership || !user || !hasOrganizationRole(membership, ["owner", "admin"])) {
     return { error: "Solo owner o admin pueden cambiar las funciones del CRM." };
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error, modules } = await saveOrganizationModules(
+  const modules = normalizeModules(parsed.data);
+  const { error, modules: saved } = await saveOrganizationModules(
     supabase,
     membership.organizationId,
-    normalizeModules(parsed.data),
+    modules,
   );
 
   if (error) {
@@ -45,6 +53,30 @@ export const saveOrganizationModulesAction = async (rawValues: unknown): Promise
       error:
         "No se pudieron guardar los módulos. ¿Corriste el SQL de supabase/commerce-upgrade.sql y supabase/listings-upgrade.sql?",
     };
+  }
+
+  const templateId =
+    parsed.data.templateId ??
+    (modules.kitchen && !modules.funnels ? ("restaurant" as const) : undefined);
+
+  if (templateId) {
+    const { error: templateError } = await supabase
+      .from("organizations")
+      .update({ business_template: templateId })
+      .eq("id", membership.organizationId);
+
+    if (templateError && !/business_template/i.test(templateError.message)) {
+      console.error("[MODULES] business_template update failed", templateError);
+    }
+
+    if (templateId === "restaurant") {
+      const settings = await loadAgentSettings(membership.organizationId);
+      await upsertAgentSettings(membership.organizationId, user.id, {
+        ...settings,
+        toolsFunnel: false,
+        toolsCalendar: false,
+      });
+    }
   }
 
   revalidatePath("/settings");
@@ -59,5 +91,5 @@ export const saveOrganizationModulesAction = async (rawValues: unknown): Promise
     revalidatePath(`/${key}`);
   }
 
-  return { success: "Funciones del CRM actualizadas.", modules };
+  return { success: "Funciones del CRM actualizadas.", modules: saved };
 };

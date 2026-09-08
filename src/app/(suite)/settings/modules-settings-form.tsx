@@ -9,6 +9,7 @@ import {
   BUSINESS_TEMPLATES,
   MODULE_CATALOG,
   normalizeModules,
+  type BusinessTemplateId,
   type OrganizationModules,
 } from "@/lib/modules/constants";
 import { Badge } from "@/components/ui/badge";
@@ -30,21 +31,27 @@ const TEMPLATE_ICONS = {
 
 export const ModulesSettingsForm = ({ canManageOrganization, modules }: ModulesSettingsFormProps) => {
   const [values, setValues] = useState<OrganizationModules>(modules);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<BusinessTemplateId | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const handleToggle = (key: keyof OrganizationModules, enabled: boolean) => {
+    setSelectedTemplateId(null);
     setValues((current) => normalizeModules({ ...current, [key]: enabled }));
   };
 
-  const handleTemplate = (templateModules: OrganizationModules) => {
+  const handleTemplate = (templateId: BusinessTemplateId, templateModules: OrganizationModules) => {
+    setSelectedTemplateId(templateId);
     setValues(normalizeModules(templateModules));
   };
 
   const handleSubmit = () => {
     setFormError(null);
     startTransition(async () => {
-      const result = await saveOrganizationModulesAction(values);
+      const result = await saveOrganizationModulesAction({
+        ...values,
+        templateId: selectedTemplateId ?? undefined,
+      });
       if (result.error) {
         setFormError(result.error);
         toastActionError(result);
@@ -68,8 +75,8 @@ export const ModulesSettingsForm = ({ canManageOrganization, modules }: ModulesS
             <div>
               <CardTitle>Funciones del CRM</CardTitle>
               <CardDescription className="mt-1 leading-6">
-                Activa solo lo que usa este negocio. Cambiar plantilla aquí solo actualiza módulos; no borra
-                etapas del embudo ni el prompt de la IA.
+                Activa solo lo que usa este negocio. La plantilla Restaurante no incluye embudo. Guarda para
+                aplicar la plantilla y el menú público.
               </CardDescription>
             </div>
           </div>
@@ -80,19 +87,20 @@ export const ModulesSettingsForm = ({ canManageOrganization, modules }: ModulesS
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {BUSINESS_TEMPLATES.map((template) => {
             const Icon = TEMPLATE_ICONS[template.id];
+            const selected = selectedTemplateId === template.id;
             return (
               <Button
                 key={template.id}
                 type="button"
-                variant="outline"
+                variant={selected ? "default" : "outline"}
                 className="h-auto justify-start gap-3 px-3 py-3 text-left"
                 disabled={!canManageOrganization || isPending}
-                onClick={() => handleTemplate(template.modules)}
+                onClick={() => handleTemplate(template.id, template.modules)}
               >
-                <Icon className="size-4 text-primary" aria-hidden />
+                <Icon className="size-4" aria-hidden />
                 <span>
                   <span className="block text-sm font-medium">{template.label}</span>
-                  <span className="block text-xs font-normal text-muted-foreground">{template.description}</span>
+                  <span className="block text-xs font-normal opacity-80">{template.description}</span>
                 </span>
               </Button>
             );

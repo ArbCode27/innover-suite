@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { FULFILLMENT_TYPES } from "@/lib/commerce/types";
 import { buildPublicMenuSlug } from "@/lib/menu/public-menu";
+import { loadCachedOrganizationModules } from "@/lib/modules/settings";
 import { hasOrganizationRole, loadCurrentMemberSession } from "@/lib/organizations/membership";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -81,8 +82,21 @@ export const updatePublicMenuSettingsAction = async (input: z.infer<typeof menuS
     .eq("id", membership.organizationId)
     .maybeSingle();
 
-  if (!org || org.business_template !== "restaurant") {
+  const modules = await loadCachedOrganizationModules(membership.organizationId).catch(() => null);
+  const looksLikeRestaurant =
+    org?.business_template === "restaurant" ||
+    Boolean(modules?.kitchen && modules?.catalog && modules?.orders);
+
+  if (!org || !looksLikeRestaurant) {
     return { ok: false as const, error: "El auto-pedido solo está disponible para restaurantes." };
+  }
+
+  // Ensure template flag so the public menu card and RPC stay aligned.
+  if (org.business_template !== "restaurant") {
+    await supabase
+      .from("organizations")
+      .update({ business_template: "restaurant" })
+      .eq("id", membership.organizationId);
   }
 
   const slug = org.public_menu_slug || buildPublicMenuSlug(org.name || membership.organizationName, org.id);

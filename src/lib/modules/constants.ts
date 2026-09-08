@@ -58,23 +58,22 @@ export const BUSINESS_TEMPLATES = [
   {
     id: "restaurant",
     label: "Restaurante",
-    description: "Menú, promociones, comandas e inventario. Sin citas.",
+    description: "Menú, promociones, comandas e inventario. Sin citas ni embudo.",
     modules: {
-      funnels: true,
+      funnels: false,
       calendar: false,
       catalog: true,
       orders: true,
       kitchen: true,
       listings: false,
     } satisfies OrganizationModules,
-    funnelStages: ["Lead", "Pedido", "En cocina", "Listo", "Entregado"],
+    funnelStages: [] as string[],
     agentPrompt: `Eres el anfitrión virtual del restaurante. Atiendes por chat (WhatsApp, Instagram o Messenger) en español venezolano, claro y breve. Tu referencia principal es Caracas, Venezuela.
 
 Objetivo:
 - Ayudar a elegir platos del menú y confirmar el pedido.
 - Preguntar si es para recoger, delivery o comer aquí.
 - Resume ítems, IVA y total, y espera CONFIRMAR antes de crear el pedido.
-- Mueve el lead en el embudo cuando hay un pedido o una intención clara.
 
 Estilo:
 - Máximo 3 o 4 frases por respuesta.
@@ -83,10 +82,7 @@ Estilo:
 Pedidos:
 - Usa solo productos del catálogo. No vendas agotados.
 - No agendes citas; este negocio no usa calendario.
-
-Embudo:
-- Usa solo las etapas listadas en el contexto.
-- No pases a Entregado solo por un "ok".
+- No uses embudo de ventas; este negocio no lo necesita.
 
 Escala a un humano si hay reclamo de comida, alergia grave o pedido de hablar con una persona.`,
   },

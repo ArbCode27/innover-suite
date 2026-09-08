@@ -100,7 +100,9 @@ export default async function SettingsPage() {
     public_menu_enabled?: boolean | null;
     public_menu_slug?: string | null;
   } | null;
-  const isRestaurant = orgBilling?.business_template === "restaurant";
+  const isRestaurant =
+    orgBilling?.business_template === "restaurant" ||
+    (Boolean(modules.kitchen) && Boolean(modules.catalog) && Boolean(modules.orders));
 
   const connectedCount = [
     Boolean(instagramConnection.data),
@@ -150,6 +152,7 @@ export default async function SettingsPage() {
             canManage={canManageOrganization}
             enabled={Boolean(orgBilling?.public_menu_enabled)}
             slug={orgBilling?.public_menu_slug ?? null}
+            organizationName={membership?.organizationName || "Organización"}
           />
         ) : null}
         <BrowserNotificationsCard />
@@ -163,12 +166,14 @@ export default async function SettingsPage() {
           geminiConfigured={Boolean(env.geminiApiKey)}
           articles={articles}
         />
-        <LeadRecoveryForm
-          canManageOrganization={canManageOrganization}
-          settings={agentSettings}
-          funnelEnabled={Boolean(modules.funnels)}
-          stages={funnelStages}
-        />
+        {modules.funnels ? (
+          <LeadRecoveryForm
+            canManageOrganization={canManageOrganization}
+            settings={agentSettings}
+            funnelEnabled={Boolean(modules.funnels)}
+            stages={funnelStages}
+          />
+        ) : null}
         <OfficeHoursForm
           canManageOrganization={canManageOrganization}
           businessHours={agentSettings.businessHours}

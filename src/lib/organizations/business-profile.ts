@@ -73,7 +73,9 @@ export const applyBusinessProfile = async ({
   }
 
   try {
-    await ensureDefaultFunnel(supabase, organizationId, template.funnelStages);
+    if (modules.funnels && template.funnelStages.length > 0) {
+      await ensureDefaultFunnel(supabase, organizationId, template.funnelStages);
+    }
   } catch (error) {
     console.error("[ONBOARDING] seed funnel failed", error);
   }

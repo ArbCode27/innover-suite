@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Copy, ExternalLink, Loader2 } from "lucide-react";
+import { Copy, ExternalLink, Loader2, UtensilsCrossed } from "lucide-react";
 import { updatePublicMenuSettingsAction } from "@/lib/menu/actions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -13,12 +14,14 @@ type PublicMenuSettingsCardProps = {
   enabled: boolean;
   slug: string | null;
   canManage: boolean;
+  organizationName: string;
 };
 
 export const PublicMenuSettingsCard = ({
   enabled: initialEnabled,
   slug: initialSlug,
   canManage,
+  organizationName,
 }: PublicMenuSettingsCardProps) => {
   const [enabled, setEnabled] = useState(initialEnabled);
   const [slug, setSlug] = useState(initialSlug);
@@ -56,20 +59,30 @@ export const PublicMenuSettingsCard = ({
   };
 
   return (
-    <Card className="border-primary/15 bg-card/80">
+    <Card id="auto-pedido" className="border-primary/15 bg-card/80">
       <CardHeader>
-        <CardTitle>Auto-pedido (menú público)</CardTitle>
-        <CardDescription>
-          Activa una UI tipo menú para que tus clientes ordenen solos. Solo disponible en organizaciones
-          restaurante. Define ingredientes en cada plato del catálogo para permitir “sin cebolla”, etc.
-        </CardDescription>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <UtensilsCrossed className="size-5" aria-hidden />
+            </span>
+            <div>
+              <CardTitle>Auto-pedido (menú público)</CardTitle>
+              <CardDescription className="mt-1 leading-6">
+                Comparte este enlace con tus clientes para que ordenen solos. Disponible para{" "}
+                {organizationName} (restaurante).
+              </CardDescription>
+            </div>
+          </div>
+          <Badge variant={enabled ? "default" : "outline"}>{enabled ? "Activo" : "Inactivo"}</Badge>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 px-3 py-3">
           <div className="space-y-0.5">
             <Label htmlFor="public-menu-enabled">Menú público activo</Label>
             <p className="text-xs text-muted-foreground">
-              Visible en <code className="text-[11px]">/menu/&#123;slug&#125;</code>
+              Los clientes entran sin login a <code className="text-[11px]">/menu/…</code>
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -83,20 +96,20 @@ export const PublicMenuSettingsCard = ({
           </div>
         </div>
 
-        {slug ? (
-          <div className="space-y-2 rounded-xl border border-border/60 bg-muted/30 p-3">
-            <p className="text-xs font-medium text-muted-foreground">Enlace del menú</p>
-            <p className="break-all font-mono text-sm">{menuPath}</p>
+        {enabled && (absoluteUrl || menuPath) ? (
+          <div className="space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+            <p className="text-xs font-medium text-muted-foreground">Enlace para tus clientes</p>
+            <p className="break-all font-mono text-sm font-medium">{absoluteUrl || menuPath}</p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" onClick={() => void handleCopy()}>
                 <Copy className="size-3.5" />
-                Copiar
+                Copiar enlace
               </Button>
               {menuPath ? (
-                <Button asChild size="sm" variant="outline">
+                <Button asChild size="sm">
                   <Link href={menuPath} target="_blank" rel="noreferrer">
                     <ExternalLink className="size-3.5" />
-                    Abrir
+                    Abrir menú
                   </Link>
                 </Button>
               ) : null}
@@ -104,7 +117,7 @@ export const PublicMenuSettingsCard = ({
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Activa el menú para generar el enlace público automáticamente.
+            Activa el menú para generar y mostrar el enlace público de auto-pedido.
           </p>
         )}
 
