@@ -54,7 +54,9 @@ const lineKey = (productId: number, removedIds: string[]) =>
 
 export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
   const org = catalog.organization;
+  const surface = catalog.surface ?? org.surface ?? "catalog";
   const themePalette = parsePaletteId(org.themePalette);
+  const isMenu = surface === "menu";
 
   useEffect(() => {
     setDocumentPalette(themePalette);
@@ -66,7 +68,6 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
   const [interests, setInterests] = useState<InterestLine[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [partySize, setPartySize] = useState(1);
   const [customizeItem, setCustomizeItem] = useState<CatalogItem | null>(null);
   const [selectedIngredients, setSelectedIngredients] = useState<Record<string, boolean>>({});
   const [cartOpen, setCartOpen] = useState(false);
@@ -204,7 +205,7 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
         const result = await placePublicMenuOrderAction({
           slug: org.slug,
           customerName,
-          partySize,
+          partySize: 1,
           fulfillment: "dine_in",
           customerNote: interests.length
             ? `También interesa: ${interests.map((item) => item.title).join(", ")}`
@@ -253,7 +254,6 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
       canOrder={org.canOrder}
       customerName={customerName}
       customerPhone={customerPhone}
-      partySize={partySize}
       cart={cart}
       interests={interests}
       subtotal={subtotal}
@@ -266,7 +266,6 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
       isPending={isPending}
       onCustomerNameChange={setCustomerName}
       onCustomerPhoneChange={setCustomerPhone}
-      onPartySizeChange={setPartySize}
       onUpdateQty={updateQty}
       onRemoveCart={(key) => setCart((current) => current.filter((line) => line.key !== key))}
       onRemoveInterest={(key) => setInterests((current) => current.filter((line) => line.key !== key))}
@@ -319,9 +318,13 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar platos, productos o inmuebles"
+                placeholder={
+                  isMenu
+                    ? "Buscar platos"
+                    : "Buscar productos, servicios o inmuebles"
+                }
                 className="h-11 rounded-full bg-card pl-10 shadow-sm"
-                aria-label="Buscar en el catálogo"
+                aria-label={isMenu ? "Buscar en el menú" : "Buscar en el catálogo"}
               />
             </div>
           </header>
@@ -528,7 +531,6 @@ type CartPanelProps = {
   canOrder: boolean;
   customerName: string;
   customerPhone: string;
-  partySize: number;
   cart: CartLine[];
   interests: InterestLine[];
   subtotal: number;
@@ -541,7 +543,6 @@ type CartPanelProps = {
   isPending: boolean;
   onCustomerNameChange: (value: string) => void;
   onCustomerPhoneChange: (value: string) => void;
-  onPartySizeChange: (value: number) => void;
   onUpdateQty: (key: string, delta: number) => void;
   onRemoveCart: (key: string) => void;
   onRemoveInterest: (key: string) => void;
@@ -552,7 +553,6 @@ const CartPanel = ({
   canOrder,
   customerName,
   customerPhone,
-  partySize,
   cart,
   interests,
   subtotal,
@@ -565,7 +565,6 @@ const CartPanel = ({
   isPending,
   onCustomerNameChange,
   onCustomerPhoneChange,
-  onPartySizeChange,
   onUpdateQty,
   onRemoveCart,
   onRemoveInterest,
@@ -601,30 +600,6 @@ const CartPanel = ({
               placeholder="+58 412..."
               className="rounded-xl"
             />
-          </div>
-        ) : null}
-        {canOrder ? (
-          <div className="flex items-center justify-between gap-3">
-            <Label>Personas / mesa</Label>
-            <div className="inline-flex items-center gap-2 rounded-full bg-muted px-2 py-1">
-              <button
-                type="button"
-                className="flex size-8 items-center justify-center rounded-full bg-card shadow-sm"
-                aria-label="Menos personas"
-                onClick={() => onPartySizeChange(Math.max(1, partySize - 1))}
-              >
-                <Minus className="size-3.5" />
-              </button>
-              <span className="min-w-6 text-center text-sm font-semibold">{partySize}</span>
-              <button
-                type="button"
-                className="flex size-8 items-center justify-center rounded-full bg-card shadow-sm"
-                aria-label="Más personas"
-                onClick={() => onPartySizeChange(Math.min(50, partySize + 1))}
-              >
-                <Plus className="size-3.5" />
-              </button>
-            </div>
           </div>
         ) : null}
       </div>

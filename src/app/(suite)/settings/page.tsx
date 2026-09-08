@@ -8,7 +8,7 @@ import { CurrencySettingsForm } from "./currency-settings-form";
 import { BrowserNotificationsCard } from "./browser-notifications-card";
 import { AppearanceSettingsCard } from "./appearance-settings-card";
 import { OrganizationBrandSettingsCard } from "./organization-brand-settings-card";
-import { PublicMenuSettingsCard } from "./public-menu-settings-card";
+import { PublicSurfacesSettingsCard } from "./public-menu-settings-card";
 import { SecuritySettingsForm } from "./security-settings-form";
 import { loadCurrentMemberSession, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -82,23 +82,33 @@ export default async function SettingsPage() {
     loadOrganizationFunnelStages(supabase, membership.organizationId),
     supabase
       .from("organizations")
-      .select("plan, tax_rate, business_template, public_menu_enabled, public_menu_slug, logo_url, theme_palette")
+      .select(
+        "plan, tax_rate, business_template, public_menu_enabled, public_catalog_enabled, public_menu_slug, logo_url, theme_palette",
+      )
       .eq("id", membership.organizationId)
       .maybeSingle()
       .then(async (result) => {
         if (!result.error) return result;
         return supabase
           .from("organizations")
-          .select("plan, tax_rate, business_template, public_menu_enabled, public_menu_slug")
+          .select("plan, tax_rate, business_template, public_menu_enabled, public_menu_slug, logo_url, theme_palette")
           .eq("id", membership.organizationId)
           .maybeSingle()
-          .then(async (menuResult) => {
-            if (!menuResult.error) return menuResult;
+          .then(async (brandResult) => {
+            if (!brandResult.error) return brandResult;
             return supabase
               .from("organizations")
-              .select("plan, tax_rate, business_template")
+              .select("plan, tax_rate, business_template, public_menu_enabled, public_menu_slug")
               .eq("id", membership.organizationId)
-              .maybeSingle();
+              .maybeSingle()
+              .then(async (menuResult) => {
+                if (!menuResult.error) return menuResult;
+                return supabase
+                  .from("organizations")
+                  .select("plan, tax_rate, business_template")
+                  .eq("id", membership.organizationId)
+                  .maybeSingle();
+              });
           });
       }),
   ]);
@@ -108,11 +118,18 @@ export default async function SettingsPage() {
     tax_rate?: number | null;
     business_template?: string | null;
     public_menu_enabled?: boolean | null;
+    public_catalog_enabled?: boolean | null;
     public_menu_slug?: string | null;
     logo_url?: string | null;
     theme_palette?: string | null;
   } | null;
-  const showPublicCatalog = Boolean(modules.catalog || modules.listings);
+  const showPublicSurfaces = Boolean(modules.catalog || modules.listings);
+  const canPublishMenu = Boolean(modules.catalog);
+  const canPublishCatalog = Boolean(modules.catalog || modules.listings);
+  const catalogEnabled =
+    orgBilling?.public_catalog_enabled == null
+      ? Boolean(orgBilling?.public_menu_enabled)
+      : Boolean(orgBilling.public_catalog_enabled);
   const orgLogoUrl =
     (typeof orgBilling?.logo_url === "string" && orgBilling.logo_url.trim()
       ? orgBilling.logo_url.trim()
@@ -162,10 +179,13 @@ export default async function SettingsPage() {
             whatsappOAuthRedirectUri={getWhatsAppOAuthRedirectUri()}
           />
         </Suspense>
-        {showPublicCatalog ? (
-          <PublicMenuSettingsCard
+        {showPublicSurfaces ? (
+          <PublicSurfacesSettingsCard
             canManage={canManageOrganization}
-            enabled={Boolean(orgBilling?.public_menu_enabled)}
+            canPublishMenu={canPublishMenu}
+            canPublishCatalog={canPublishCatalog}
+            menuEnabled={Boolean(orgBilling?.public_menu_enabled)}
+            catalogEnabled={catalogEnabled}
             slug={orgBilling?.public_menu_slug ?? null}
             organizationName={membership?.organizationName || "Organización"}
           />

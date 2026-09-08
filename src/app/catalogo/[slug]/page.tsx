@@ -1,36 +1,36 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CatalogBoard } from "./menu-board";
+import { CatalogBoard } from "@/app/menu/[slug]/menu-board";
 import { loadPublicSurfaceBySlug } from "@/lib/menu/public-menu";
 import { PALETTE_ATTRIBUTE, parsePaletteId } from "@/lib/theme/palettes";
 
-type MenuPageProps = {
+type CatalogPageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export const generateMetadata = async ({ params }: MenuPageProps): Promise<Metadata> => {
+export const generateMetadata = async ({ params }: CatalogPageProps): Promise<Metadata> => {
   const { slug } = await params;
   try {
-    const catalog = await loadPublicSurfaceBySlug(slug, "menu");
+    const catalog = await loadPublicSurfaceBySlug(slug, "catalog");
     if (!catalog) {
-      return { title: "Menú no disponible" };
+      return { title: "Catálogo no disponible" };
     }
     return {
-      title: `${catalog.organization.name} | Menú`,
-      description: `Explora el menú de ${catalog.organization.name}.`,
+      title: `${catalog.organization.name} | Catálogo`,
+      description: `Explora el catálogo de ${catalog.organization.name}.`,
     };
   } catch {
-    return { title: "Menú" };
+    return { title: "Catálogo" };
   }
 };
 
-const MenuPage = async ({ params }: MenuPageProps) => {
+const CatalogPage = async ({ params }: CatalogPageProps) => {
   const { slug } = await params;
   let catalog = null;
   try {
-    catalog = await loadPublicSurfaceBySlug(slug, "menu");
+    catalog = await loadPublicSurfaceBySlug(slug, "catalog");
   } catch (error) {
-    console.error("[PUBLIC_MENU] page load failed", error);
+    console.error("[PUBLIC_CATALOG] page load failed", error);
   }
 
   if (!catalog) {
@@ -51,4 +51,4 @@ const MenuPage = async ({ params }: MenuPageProps) => {
   );
 };
 
-export default MenuPage;
+export default CatalogPage;

@@ -13,6 +13,7 @@ import type {
   MenuIngredient,
   MenuProduct,
   PublicCatalogPayload,
+  PublicSurface,
 } from "@/lib/menu/types";
 import { parsePaletteId } from "@/lib/theme/palettes";
 
@@ -34,7 +35,8 @@ type OrgRow = {
   id: number;
   name: string;
   public_menu_slug: string | null;
-  public_menu_enabled: boolean | null;
+  public_menu_enabled?: boolean | null;
+  public_catalog_enabled?: boolean | null;
   business_template: string | null;
   tax_rate: number | string | null;
   default_currency?: string | null;
@@ -143,56 +145,65 @@ const listingMeta = (row: ListingRow) => {
   return parts.join(" · ") || null;
 };
 
-export const loadPublicMenuBySlug = async (slug: string): Promise<PublicCatalogPayload | null> => {
+const ORG_SELECT_FULL =
+  "id, name, public_menu_slug, public_menu_enabled, public_catalog_enabled, business_template, tax_rate, default_currency, logo_url, theme_palette";
+const ORG_SELECT_MID =
+  "id, name, public_menu_slug, public_menu_enabled, public_catalog_enabled, business_template, tax_rate, default_currency";
+const ORG_SELECT_LEGACY =
+  "id, name, public_menu_slug, public_menu_enabled, business_template, tax_rate, default_currency";
+const ORG_SELECT_BASIC =
+  "id, name, public_menu_slug, public_menu_enabled, business_template, tax_rate";
+
+const isSurfaceEnabled = (org: OrgRow, surface: PublicSurface) => {
+  if (surface === "menu") return Boolean(org.public_menu_enabled);
+  // Legacy DBs without public_catalog_enabled: fall back to menu flag so links keep working until SQL runs.
+  if (org.public_catalog_enabled == null) return Boolean(org.public_menu_enabled);
+  return Boolean(org.public_catalog_enabled);
+};
+
+export const loadPublicSurfaceBySlug = async (
+  slug: string,
+  surface: PublicSurface,
+): Promise<PublicCatalogPayload | null> => {
   const normalized = slug.trim().toLowerCase();
   if (!normalized) return null;
 
   const admin = getSupabaseAdminClient();
-  const { data: org, error: orgError } = await admin
-    .from("organizations")
-    .select(
-      "id, name, public_menu_slug, public_menu_enabled, business_template, tax_rate, default_currency, logo_url, theme_palette",
-    )
-    .eq("public_menu_slug", normalized)
-    .eq("public_menu_enabled", true)
-    .maybeSingle();
+  const attempts = [ORG_SELECT_FULL, ORG_SELECT_MID, ORG_SELECT_LEGACY, ORG_SELECT_BASIC];
 
-  if (orgError) {
-    const fallback = await admin
+  let org: OrgRow | null = null;
+  for (const select of attempts) {
+    const { data, error } = await admin
       .from("organizations")
-      .select("id, name, public_menu_slug, public_menu_enabled, business_template, tax_rate, default_currency")
+      .select(select)
       .eq("public_menu_slug", normalized)
-      .eq("public_menu_enabled", true)
       .maybeSingle();
-    if (fallback.error || !fallback.data) {
-      const basic = await admin
-        .from("organizations")
-        .select("id, name, public_menu_slug, public_menu_enabled, business_template, tax_rate")
-        .eq("public_menu_slug", normalized)
-        .eq("public_menu_enabled", true)
-        .maybeSingle();
-      if (basic.error || !basic.data) return null;
-      return assembleCatalog(admin, basic.data as OrgRow);
+    if (!error && data && typeof data === "object" && "id" in data) {
+      org = data as unknown as OrgRow;
+      break;
     }
-    return assembleCatalog(admin, fallback.data as OrgRow);
   }
 
-  if (!org) return null;
-  return assembleCatalog(admin, org as OrgRow);
+  if (!org || !isSurfaceEnabled(org, surface)) return null;
+  return assembleCatalog(admin, org, surface);
 };
+
+/** @deprecated Prefer loadPublicSurfaceBySlug(slug, "menu") */
+export const loadPublicMenuBySlug = async (slug: string): Promise<PublicCatalogPayload | null> =>
+  loadPublicSurfaceBySlug(slug, "menu");
 
 const assembleCatalog = async (
   admin: ReturnType<typeof getSupabaseAdminClient>,
   org: OrgRow,
+  surface: PublicSurface,
 ): Promise<PublicCatalogPayload | null> => {
   const modules = await loadOrganizationModules(admin, org.id);
   const canLoadProducts = modules.catalog;
-  const canLoadListings = modules.listings;
+  const canLoadListings = surface === "catalog" && modules.listings;
   const canOrder = modules.catalog && modules.orders;
 
-  if (!canLoadProducts && !canLoadListings) {
-    return null;
-  }
+  if (surface === "menu" && !canLoadProducts) return null;
+  if (surface === "catalog" && !canLoadProducts && !canLoadListings) return null;
 
   const items: CatalogItem[] = [];
   let promoPercent = 0;
@@ -221,7 +232,7 @@ const assembleCatalog = async (
         .eq("active", true)
         .order("name", { ascending: true });
       if (basic.error) {
-        console.error("[PUBLIC_CATALOG] products load failed", basic.error);
+        console.error("[PUBLIC_SURFACE] products load failed", basic.error);
       } else {
         rows = (basic.data ?? []).map((row) => ({
           ...(row as ProductRow),
@@ -240,10 +251,13 @@ const assembleCatalog = async (
     promoPercent = Math.max(0, ...(promoRows ?? []).map((row) => toNumber(row.discount_percent)));
 
     for (const row of rows) {
+      const kind = isProductKind(row.kind) ? row.kind : "physical";
+      if (surface === "menu" && kind !== "food") continue;
+      if (surface === "catalog" && kind === "food") continue;
+
       const inventory = asSingle(row.inventory_items);
       const onHand = inventory?.on_hand == null ? null : toNumber(inventory.on_hand);
       const price = toNumber(row.price);
-      const kind = isProductKind(row.kind) ? row.kind : "physical";
       const available = !row.track_stock || onHand == null ? true : onHand > 0;
       items.push({
         id: `product:${row.id}`,
@@ -278,7 +292,7 @@ const assembleCatalog = async (
       .order("updated_at", { ascending: false });
 
     if (listingError) {
-      console.error("[PUBLIC_CATALOG] listings load failed", listingError);
+      console.error("[PUBLIC_SURFACE] listings load failed", listingError);
     } else {
       for (const row of (listingRows ?? []) as ListingRow[]) {
         const price = row.price == null ? null : toNumber(row.price);
@@ -304,6 +318,10 @@ const assembleCatalog = async (
     }
   }
 
+  if (!items.length && surface === "menu") {
+    // Empty menu is still a valid surface (org enabled it).
+  }
+
   const currency =
     org.default_currency ||
     items.find((item) => item.currency)?.currency ||
@@ -319,6 +337,7 @@ const assembleCatalog = async (
     canOrder,
     logoUrl: typeof org.logo_url === "string" && org.logo_url.trim() ? org.logo_url.trim() : null,
     themePalette: parsePaletteId(org.theme_palette),
+    surface,
     modules: {
       catalog: modules.catalog,
       orders: modules.orders,
@@ -326,6 +345,12 @@ const assembleCatalog = async (
       listings: modules.listings,
     },
   };
+
+  if (surface === "catalog") {
+    organization.canOrder = canOrder && items.some((item) => item.source === "product");
+  } else {
+    organization.canOrder = canOrder;
+  }
 
   const filters: Array<{ id: string; label: string }> = [{ id: "all", label: "Todos" }];
   if (items.some((item) => item.kind === "food")) filters.push({ id: "food", label: "Platos" });
@@ -360,5 +385,6 @@ const assembleCatalog = async (
     products,
     categories,
     filters,
+    surface,
   };
 };

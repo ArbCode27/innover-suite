@@ -74,12 +74,35 @@ export const submitPublicCatalogInquiryAction = async (input: z.infer<typeof inq
   }
 
   const admin = getSupabaseAdminClient();
-  const { data: org } = await admin
+  const slug = parsed.data.slug.trim().toLowerCase();
+  const withCatalogFlag = await admin
     .from("organizations")
-    .select("id, name")
-    .eq("public_menu_slug", parsed.data.slug.trim().toLowerCase())
-    .eq("public_menu_enabled", true)
+    .select("id, name, public_catalog_enabled, public_menu_enabled")
+    .eq("public_menu_slug", slug)
     .maybeSingle();
+
+  let org = withCatalogFlag.data as {
+    id: number;
+    name: string;
+    public_catalog_enabled?: boolean | null;
+    public_menu_enabled?: boolean | null;
+  } | null;
+
+  if (withCatalogFlag.error || !org) {
+    const fallback = await admin
+      .from("organizations")
+      .select("id, name, public_menu_enabled")
+      .eq("public_menu_slug", slug)
+      .eq("public_menu_enabled", true)
+      .maybeSingle();
+    org = fallback.data;
+  } else {
+    const catalogOn =
+      org.public_catalog_enabled == null
+        ? Boolean(org.public_menu_enabled)
+        : Boolean(org.public_catalog_enabled);
+    if (!catalogOn) org = null;
+  }
 
   if (!org) {
     return { ok: false as const, error: "Este catálogo no está disponible." };
@@ -112,12 +135,15 @@ export const submitPublicCatalogInquiryAction = async (input: z.infer<typeof inq
   return { ok: true as const };
 };
 
-const menuSettingsSchema = z.object({
+const surfaceSettingsSchema = z.object({
+  surface: z.enum(["menu", "catalog"]),
   enabled: z.boolean(),
 });
 
-export const updatePublicMenuSettingsAction = async (input: z.infer<typeof menuSettingsSchema>) => {
-  const parsed = menuSettingsSchema.safeParse(input);
+export const updatePublicSurfaceSettingsAction = async (
+  input: z.infer<typeof surfaceSettingsSchema>,
+) => {
+  const parsed = surfaceSettingsSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false as const, error: "Datos inválidos." };
   }
@@ -130,14 +156,26 @@ export const updatePublicMenuSettingsAction = async (input: z.infer<typeof menuS
   const supabase = await createSupabaseServerClient();
   const { data: org } = await supabase
     .from("organizations")
-    .select("id, name, business_template, public_menu_slug")
+    .select("id, name, public_menu_slug")
     .eq("id", membership.organizationId)
     .maybeSingle();
 
   const modules = await loadCachedOrganizationModules(membership.organizationId).catch(() => null);
+  const canPublishMenu = Boolean(modules?.catalog);
   const canPublishCatalog = Boolean(modules?.catalog || modules?.listings);
 
-  if (!org || !canPublishCatalog) {
+  if (!org) {
+    return { ok: false as const, error: "Organización no encontrada." };
+  }
+
+  if (parsed.data.surface === "menu" && !canPublishMenu) {
+    return {
+      ok: false as const,
+      error: "Activa Catálogo en Funciones del CRM para publicar el menú de platos.",
+    };
+  }
+
+  if (parsed.data.surface === "catalog" && !canPublishCatalog) {
     return {
       ok: false as const,
       error: "Activa Catálogo o Inmuebles en Funciones del CRM para publicar el catálogo.",
@@ -145,21 +183,39 @@ export const updatePublicMenuSettingsAction = async (input: z.infer<typeof menuS
   }
 
   const slug = org.public_menu_slug || buildPublicMenuSlug(org.name || membership.organizationName, org.id);
+  const patch =
+    parsed.data.surface === "menu"
+      ? { public_menu_enabled: parsed.data.enabled, public_menu_slug: slug }
+      : { public_catalog_enabled: parsed.data.enabled, public_menu_slug: slug };
 
-  const { error } = await supabase
-    .from("organizations")
-    .update({
-      public_menu_enabled: parsed.data.enabled,
-      public_menu_slug: slug,
-    })
-    .eq("id", membership.organizationId);
+  const { error } = await supabase.from("organizations").update(patch).eq("id", membership.organizationId);
 
   if (error) {
-    console.error("[PUBLIC_CATALOG] settings update failed", error);
-    return { ok: false as const, error: error.message };
+    console.error("[PUBLIC_SURFACE] settings update failed", error);
+    const hint =
+      parsed.data.surface === "catalog" && /public_catalog_enabled/i.test(error.message)
+        ? " ¿Corriste supabase/public-menu-catalog-split.sql?"
+        : "";
+    return { ok: false as const, error: `${error.message}${hint}` };
   }
 
   revalidatePath("/settings");
   revalidatePath(`/menu/${slug}`);
-  return { ok: true as const, slug, enabled: parsed.data.enabled };
+  revalidatePath(`/catalogo/${slug}`);
+  return {
+    ok: true as const,
+    slug,
+    surface: parsed.data.surface,
+    enabled: parsed.data.enabled,
+  };
+};
+
+/** @deprecated Prefer updatePublicSurfaceSettingsAction */
+export const updatePublicMenuSettingsAction = async (input: { enabled: boolean }) => {
+  const result = await updatePublicSurfaceSettingsAction({
+    surface: "catalog",
+    enabled: input.enabled,
+  });
+  if (!result.ok) return result;
+  return { ok: true as const, slug: result.slug, enabled: result.enabled };
 };

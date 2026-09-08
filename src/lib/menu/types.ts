@@ -43,6 +43,8 @@ export type MenuProduct = {
   promoPrice: number | null;
 };
 
+export type PublicSurface = "menu" | "catalog";
+
 export type PublicCatalogOrg = {
   organizationId: number;
   name: string;
@@ -53,6 +55,7 @@ export type PublicCatalogOrg = {
   canOrder: boolean;
   logoUrl: string | null;
   themePalette: string;
+  surface: PublicSurface;
   modules: Pick<OrganizationModules, "catalog" | "orders" | "kitchen" | "listings">;
 };
 
@@ -60,6 +63,7 @@ export type PublicCatalogPayload = {
   organization: PublicCatalogOrg;
   items: CatalogItem[];
   filters: Array<{ id: string; label: string }>;
+  surface: PublicSurface;
   /** @deprecated use organization */
   restaurant: PublicCatalogOrg;
   /** @deprecated use items */
