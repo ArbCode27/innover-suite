@@ -61,6 +61,7 @@ const emptyProductForm = {
   initialStock: "",
   reorderPoint: "",
   description: "",
+  menuIngredients: "",
   trackStock: true,
   currency: DEFAULT_CURRENCY,
   imageSendAlways: false,
@@ -211,6 +212,7 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
       initialStock: "",
       reorderPoint: product.reorderPoint == null ? "" : String(product.reorderPoint),
       description: product.description ?? "",
+      menuIngredients: product.menuIngredients.join(", "),
       trackStock: product.trackStock,
       currency: product.currency || currencies.defaultCode,
       imageSendAlways: product.imageSendPolicy === "always",
@@ -247,6 +249,7 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
       payload.set("price", String(price));
       payload.set("trackStock", form.kind === "service" ? "false" : String(form.trackStock));
       payload.set("description", form.description);
+      payload.set("menuIngredients", form.menuIngredients);
       payload.set("currency", form.currency);
       payload.set("imageSendAlways", String(form.imageSendAlways));
       if (form.reorderPoint) payload.set("reorderPoint", form.reorderPoint);
@@ -972,6 +975,18 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
                   onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
                 />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="product-ingredients">Ingredientes (auto-pedido)</Label>
+              <Input
+                id="product-ingredients"
+                value={form.menuIngredients}
+                onChange={(event) => setForm((current) => ({ ...current, menuIngredients: event.target.value }))}
+                placeholder="Ej. pan, carne, queso, lechuga, tomate"
+              />
+              <p className="text-xs text-muted-foreground">
+                Separa con comas. El cliente podrá desmarcar ingredientes al ordenar en el menú público.
+              </p>
             </div>
             {editingId ? null : (
               <div className="space-y-1.5">

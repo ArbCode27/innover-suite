@@ -7,6 +7,7 @@ import { ModulesSettingsForm } from "./modules-settings-form";
 import { CurrencySettingsForm } from "./currency-settings-form";
 import { BrowserNotificationsCard } from "./browser-notifications-card";
 import { AppearanceSettingsCard } from "./appearance-settings-card";
+import { PublicMenuSettingsCard } from "./public-menu-settings-card";
 import { SecuritySettingsForm } from "./security-settings-form";
 import { loadCurrentMemberSession, hasOrganizationRole } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -79,12 +80,27 @@ export default async function SettingsPage() {
     loadOrganizationFunnelStages(supabase, membership.organizationId),
     supabase
       .from("organizations")
-      .select("plan, tax_rate")
+      .select("plan, tax_rate, business_template, public_menu_enabled, public_menu_slug")
       .eq("id", membership.organizationId)
-      .maybeSingle(),
+      .maybeSingle()
+      .then(async (result) => {
+        if (!result.error) return result;
+        return supabase
+          .from("organizations")
+          .select("plan, tax_rate, business_template")
+          .eq("id", membership.organizationId)
+          .maybeSingle();
+      }),
   ]);
 
-  const orgBilling = orgBillingResult.data;
+  const orgBilling = orgBillingResult.data as {
+    plan?: string | null;
+    tax_rate?: number | null;
+    business_template?: string | null;
+    public_menu_enabled?: boolean | null;
+    public_menu_slug?: string | null;
+  } | null;
+  const isRestaurant = orgBilling?.business_template === "restaurant";
 
   const connectedCount = [
     Boolean(instagramConnection.data),
@@ -129,6 +145,13 @@ export default async function SettingsPage() {
             whatsappOAuthRedirectUri={getWhatsAppOAuthRedirectUri()}
           />
         </Suspense>
+        {isRestaurant ? (
+          <PublicMenuSettingsCard
+            canManage={canManageOrganization}
+            enabled={Boolean(orgBilling?.public_menu_enabled)}
+            slug={orgBilling?.public_menu_slug ?? null}
+          />
+        ) : null}
         <BrowserNotificationsCard />
         <AppearanceSettingsCard />
         <ModulesSettingsForm canManageOrganization={canManageOrganization} modules={modules} />

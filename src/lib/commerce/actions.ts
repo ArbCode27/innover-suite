@@ -54,7 +54,11 @@ const productFields = z.object({
   initialStock: z.number().nonnegative().max(1_000_000).optional(),
   reorderPoint: z.number().nonnegative().max(1_000_000).optional(),
   currency: z.string().trim().length(3).optional(),
+  menuIngredients: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
 });
+
+const normalizeMenuIngredients = (value: string[] | undefined) =>
+  [...new Set((value ?? []).map((item) => item.trim()).filter(Boolean))];
 
 const productSchema = productFields.superRefine((data, ctx) => {
   if (data.kind === "service") {
@@ -146,6 +150,7 @@ export const createProductAction = async (rawValues: unknown): Promise<ActionRes
     currency,
     active: true,
     track_stock: trackStock,
+    menu_ingredients: normalizeMenuIngredients(parsed.data.menuIngredients),
   }).select("id").single();
 
   if (error || !inserted?.id) {
@@ -197,6 +202,7 @@ export const updateProductAction = async (rawValues: unknown): Promise<ActionRes
       currency,
       active: parsed.data.active,
       track_stock: trackStock,
+      menu_ingredients: normalizeMenuIngredients(parsed.data.menuIngredients),
     })
     .eq("id", parsed.data.id)
     .eq("organization_id", access.membership.organizationId);
@@ -274,6 +280,13 @@ const productImageSqlHint = (message: string) => {
 export const saveProductAction = async (formData: FormData): Promise<ActionResult> => {
   const editingIdRaw = formData.get("id");
   const editingId = typeof editingIdRaw === "string" && editingIdRaw.trim() ? Number(editingIdRaw) : undefined;
+  const menuIngredientsRaw = typeof formData.get("menuIngredients") === "string"
+    ? String(formData.get("menuIngredients"))
+    : "";
+  const menuIngredients = menuIngredientsRaw
+    .split(/[,;\n]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
   const fields = {
     name: formData.get("name"),
     description: formData.get("description") || undefined,
@@ -285,6 +298,7 @@ export const saveProductAction = async (formData: FormData): Promise<ActionResul
     initialStock: formData.get("initialStock") ? Number(formData.get("initialStock")) : undefined,
     reorderPoint: formData.get("reorderPoint") ? Number(formData.get("reorderPoint")) : undefined,
     currency: formData.get("currency") || undefined,
+    menuIngredients,
   };
 
   const uploaded = await readCatalogImageFile(formData.get("image"));

@@ -34,6 +34,7 @@ export type ProductRecord = {
   imagePath: string | null;
   imageMime: string | null;
   imageSendPolicy: ImageSendPolicy;
+  menuIngredients: string[];
 };
 
 export type DeliveryZoneRecord = {

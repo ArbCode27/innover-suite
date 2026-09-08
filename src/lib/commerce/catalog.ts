@@ -28,6 +28,7 @@ type ProductRow = {
   image_path?: string | null;
   image_mime?: string | null;
   image_send_policy?: string | null;
+  menu_ingredients?: string[] | null;
   inventory_items:
     | { on_hand?: number | string | null; reorder_point?: number | string | null }
     | { on_hand?: number | string | null; reorder_point?: number | string | null }[]
@@ -57,11 +58,14 @@ export const mapProductRow = (row: ProductRow): ProductRecord => {
     imagePath: typeof row.image_path === "string" && row.image_path.trim() ? row.image_path.trim() : null,
     imageMime: typeof row.image_mime === "string" && row.image_mime.trim() ? row.image_mime.trim() : null,
     imageSendPolicy: isImageSendPolicy(row.image_send_policy) ? row.image_send_policy : "on_request",
+    menuIngredients: Array.isArray(row.menu_ingredients)
+      ? row.menu_ingredients.map((value) => String(value).trim()).filter(Boolean)
+      : [],
   };
 };
 
 const PRODUCT_COLUMNS =
-  "id, name, description, sku, category, kind, price, currency, active, track_stock, parent_id, inventory_item_id, inventory_items!inventory_item_id(on_hand, reorder_point)";
+  "id, name, description, sku, category, kind, price, currency, active, track_stock, parent_id, inventory_item_id, menu_ingredients, inventory_items!inventory_item_id(on_hand, reorder_point)";
 const PRODUCT_IMAGE_COLUMNS = "image_url, image_path, image_mime, image_send_policy";
 
 export const loadCatalog = async (supabase: SupabaseClient, organizationId: number) => {
