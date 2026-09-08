@@ -5,6 +5,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getRequestOrigin } from "@/lib/auth/origin";
 import { sessionExpiredResult } from "@/lib/auth/session-result";
+import { readCatalogImageFile } from "@/lib/media/image-upload";
+import {
+  buildOrganizationLogoPath,
+  removeOrganizationLogo,
+  uploadPublicMedia,
+} from "@/lib/media/storage";
+import { ORGANIZATION_IMAGES_BUCKET } from "@/lib/media/types";
 import { recordAuditEvent } from "@/lib/organizations/audit";
 import { applyBusinessProfile } from "@/lib/organizations/business-profile";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -211,6 +218,140 @@ export const updateOrganizationCurrenciesAction = async (rawValues: unknown) => 
   revalidatePath("/orders");
   revalidatePath("/home");
   return { success: "Monedas actualizadas." };
+};
+
+const brandingSqlHint =
+  "¿Corriste supabase/organization-branding.sql?";
+
+export const updateOrganizationLogoAction = async (formData: FormData) => {
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
+    return { error: "Solo owner o admin pueden actualizar el logo." };
+  }
+
+  const remove = formData.get("remove") === "1";
+  const uploaded = await readCatalogImageFile(formData.get("image"));
+  if ("error" in uploaded && uploaded.error) {
+    return { error: uploaded.error };
+  }
+
+  if (!remove && !uploaded.file) {
+    return { error: "Selecciona una imagen JPG, PNG o WebP." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: current, error: loadError } = await supabase
+    .from("organizations")
+    .select("logo_url, logo_path, logo_mime")
+    .eq("id", membership.organizationId)
+    .maybeSingle();
+
+  if (loadError) {
+    return {
+      error: loadError.message?.includes("logo_")
+        ? `No se pudo leer el logo. ${brandingSqlHint}`
+        : loadError.message || "No se pudo leer la organización.",
+    };
+  }
+
+  const previousPath =
+    typeof current?.logo_path === "string" && current.logo_path.trim()
+      ? current.logo_path.trim()
+      : null;
+
+  let logoUrl: string | null = null;
+  let logoPath: string | null = null;
+  let logoMime: string | null = null;
+
+  if (uploaded.file) {
+    try {
+      logoPath = buildOrganizationLogoPath({
+        organizationId: membership.organizationId,
+        fileName: uploaded.file.fileName,
+      });
+      logoUrl = await uploadPublicMedia({
+        bucket: ORGANIZATION_IMAGES_BUCKET,
+        path: logoPath,
+        bytes: uploaded.file.bytes,
+        mimeType: uploaded.file.mimeType,
+      });
+      logoMime = uploaded.file.mimeType;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo subir el logo.";
+      return {
+        error: /bucket|not found|does not exist/i.test(message)
+          ? `No se encontró el bucket organization-images. ${brandingSqlHint}`
+          : message,
+      };
+    }
+  }
+
+  const { error } = await supabase
+    .from("organizations")
+    .update({
+      logo_url: logoUrl,
+      logo_path: logoPath,
+      logo_mime: logoMime,
+    })
+    .eq("id", membership.organizationId);
+
+  if (error) {
+    if (logoPath) {
+      await removeOrganizationLogo(logoPath).catch(() => undefined);
+    }
+    return {
+      error: error.message?.includes("logo_")
+        ? `No se pudo guardar el logo. ${brandingSqlHint}`
+        : error.message || "No se pudo guardar el logo.",
+    };
+  }
+
+  if (previousPath && previousPath !== logoPath) {
+    await removeOrganizationLogo(previousPath).catch(() => undefined);
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/home");
+  revalidatePath("/menu", "layout");
+  return {
+    success: logoUrl ? "Logo actualizado." : "Logo eliminado.",
+    logoUrl,
+  };
+};
+
+export const updateOrganizationPaletteAction = async (rawValues: unknown) => {
+  const parsed = z
+    .object({
+      paletteId: z.enum(["default", "violet", "emerald", "rose", "candy", "amber"]),
+    })
+    .safeParse(rawValues);
+
+  if (!parsed.success) {
+    return { error: "Paleta no válida." };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin"])) {
+    return { error: "Solo owner o admin pueden guardar la paleta de marca." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("organizations")
+    .update({ theme_palette: parsed.data.paletteId })
+    .eq("id", membership.organizationId);
+
+  if (error) {
+    return {
+      error: error.message?.includes("theme_palette")
+        ? `No se pudo guardar la paleta. ${brandingSqlHint}`
+        : error.message || "No se pudo guardar la paleta.",
+    };
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/menu", "layout");
+  return { success: "Paleta de marca guardada." };
 };
 
 export type InviteRole = Extract<OrganizationRole, "admin" | "agent" | "viewer" | "kitchen" | "cashier">;

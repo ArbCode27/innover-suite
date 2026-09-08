@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import {
   Building2,
@@ -22,6 +22,7 @@ import type {
   PublicCatalogPayload,
 } from "@/lib/menu/types";
 import { formatMoney } from "@/lib/commerce/types";
+import { parsePaletteId, setDocumentPalette } from "@/lib/theme/palettes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -53,6 +54,11 @@ const lineKey = (productId: number, removedIds: string[]) =>
 
 export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
   const org = catalog.organization;
+  const themePalette = parsePaletteId(org.themePalette);
+
+  useEffect(() => {
+    setDocumentPalette(themePalette);
+  }, [themePalette]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [category, setCategory] = useState("all");
@@ -269,44 +275,52 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
   );
 
   return (
-    <div className="min-h-dvh bg-[#f4f5f7] text-zinc-900">
+    <div className="min-h-dvh bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 p-4 lg:flex-row lg:gap-6 lg:p-6">
         <section className="min-w-0 flex-1 space-y-5">
           <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <span className="flex size-11 items-center justify-center rounded-2xl bg-zinc-900 text-white shadow-sm">
-                  <UtensilsCrossed className="size-5" aria-hidden />
+                <span className="flex size-11 items-center justify-center overflow-hidden rounded-2xl bg-primary text-primary-foreground shadow-sm">
+                  {org.logoUrl ? (
+                    <Image
+                      src={org.logoUrl}
+                      alt={org.name}
+                      width={44}
+                      height={44}
+                      className="size-11 object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <UtensilsCrossed className="size-5" aria-hidden />
+                  )}
                 </span>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                    Catálogo público
-                  </p>
                   <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{org.name}</h1>
                 </div>
               </div>
               <Button
                 type="button"
                 size="icon"
-                className="relative shrink-0 rounded-full bg-zinc-900 text-white hover:bg-zinc-800 lg:hidden"
+                className="relative shrink-0 rounded-full lg:hidden"
                 aria-label="Abrir carrito"
                 onClick={() => setCartOpen(true)}
               >
                 <ShoppingBag className="size-4" />
                 {cartCount > 0 ? (
-                  <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white">
+                  <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-secondary text-[10px] font-bold text-secondary-foreground">
                     {cartCount}
                   </span>
                 ) : null}
               </Button>
             </div>
             <div className="relative w-full sm:max-w-md">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-zinc-400" />
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Buscar platos, productos o inmuebles"
-                className="h-11 rounded-full border-zinc-200 bg-white pl-10 shadow-sm"
+                className="h-11 rounded-full bg-card pl-10 shadow-sm"
                 aria-label="Buscar en el catálogo"
               />
             </div>
@@ -347,7 +361,7 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
           ) : null}
 
           <div className="flex items-center justify-end">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-500">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
               <Filter className="size-3.5" aria-hidden />
               {filtered.length} ítems
             </span>
@@ -360,7 +374,7 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
               ))}
             </div>
           ) : (
-            <p className="rounded-2xl bg-white p-8 text-center text-sm text-zinc-500 shadow-sm">
+            <p className="rounded-2xl bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
               No hay resultados en este filtro.
             </p>
           )}
@@ -372,8 +386,8 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
       </div>
 
       <Sheet open={cartOpen} onOpenChange={setCartOpen}>
-        <SheetContent side="right" className="w-full max-w-md border-l bg-white p-0 sm:max-w-md">
-          <SheetHeader className="border-b border-zinc-100">
+        <SheetContent side="right" className="w-full max-w-md border-l bg-card p-0 sm:max-w-md">
+          <SheetHeader className="border-b border-border">
             <SheetTitle>Tu selección</SheetTitle>
             <SheetDescription>
               {org.canOrder ? "Revisa el pedido o tus intereses." : "Revisa los inmuebles de interés."}
@@ -395,7 +409,7 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
             {customizeItem?.ingredients.map((ingredient) => (
               <label
                 key={ingredient.id}
-                className="flex cursor-pointer items-center gap-3 rounded-xl border border-zinc-200 px-3 py-2.5"
+                className="flex cursor-pointer items-center gap-3 rounded-xl border border-border px-3 py-2.5"
               >
                 <Checkbox
                   checked={selectedIngredients[ingredient.id] !== false}
@@ -414,9 +428,7 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
             <Button variant="outline" onClick={() => setCustomizeItem(null)}>
               Cancelar
             </Button>
-            <Button className="bg-zinc-900 text-white hover:bg-zinc-800" onClick={handleConfirmCustomize}>
-              Agregar al pedido
-            </Button>
+            <Button onClick={handleConfirmCustomize}>Agregar al pedido</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -444,8 +456,8 @@ const FilterChip = ({
     className={cn(
       "shrink-0 rounded-full border px-4 py-2 text-sm font-medium whitespace-nowrap transition",
       active
-        ? "border-zinc-900 bg-zinc-900 text-white"
-        : "border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50",
+        ? "border-primary bg-primary text-primary-foreground"
+        : "border-border bg-card text-foreground hover:bg-muted",
     )}
   >
     {label}
@@ -457,26 +469,26 @@ const CatalogCard = ({ item, onAction }: { item: CatalogItem; onAction: () => vo
   return (
     <article
       className={cn(
-        "flex flex-col overflow-hidden rounded-3xl bg-white shadow-sm",
+        "flex flex-col overflow-hidden rounded-3xl bg-card shadow-sm",
         !item.available && "opacity-60",
       )}
     >
-      <div className="relative h-44 bg-zinc-100">
+      <div className="relative h-44 bg-muted">
         {item.imageUrl ? (
           <Image src={item.imageUrl} alt={item.title} fill className="object-cover" unoptimized />
         ) : (
-          <div className="flex h-full items-center justify-center text-zinc-400">
+          <div className="flex h-full items-center justify-center text-muted-foreground">
             {item.kind === "property" ? <Building2 className="size-8" /> : <UtensilsCrossed className="size-8" />}
           </div>
         )}
-        <span className="absolute top-3 left-3 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-medium text-white">
+        <span className="absolute top-3 left-3 rounded-full bg-foreground/55 px-2.5 py-1 text-[11px] font-medium text-background">
           {item.metaLabel || item.category || "Ítem"}
         </span>
       </div>
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div>
           <h3 className="font-semibold tracking-tight">{item.title}</h3>
-          <p className="mt-1 line-clamp-2 text-xs text-zinc-500">
+          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
             {item.description ||
               (item.ingredients.length
                 ? `${item.ingredients.length} ingredientes`
@@ -486,7 +498,7 @@ const CatalogCard = ({ item, onAction }: { item: CatalogItem; onAction: () => vo
         <div className="mt-auto flex items-end justify-between gap-2">
           <div>
             {item.promoPrice != null && item.price != null ? (
-              <p className="text-xs text-red-500 line-through">{formatMoney(item.price, item.currency)}</p>
+              <p className="text-xs text-destructive line-through">{formatMoney(item.price, item.currency)}</p>
             ) : null}
             <p className="text-sm font-bold">
               {price == null ? "Consultar" : formatMoney(price, item.currency)}
@@ -495,11 +507,7 @@ const CatalogCard = ({ item, onAction }: { item: CatalogItem; onAction: () => vo
           {!item.available ? (
             <Badge variant="outline">No disponible</Badge>
           ) : (
-            <Button
-              size="sm"
-              className="rounded-full bg-zinc-900 px-4 text-white hover:bg-zinc-800"
-              onClick={onAction}
-            >
+            <Button size="sm" className="rounded-full px-4" onClick={onAction}>
               {item.actionable === "inquire" ? (
                 <>
                   <Heart className="size-3.5" /> Me interesa
@@ -571,8 +579,8 @@ const CartPanel = ({
     (interests.length === 0 || customerPhone.trim().length >= 7 || cart.length > 0);
 
   return (
-    <div className="flex h-full flex-col rounded-3xl bg-white lg:p-5 lg:shadow-sm">
-      <div className="space-y-3 border-b border-zinc-100 pb-4">
+    <div className="flex h-full flex-col rounded-3xl bg-card lg:p-5 lg:shadow-sm">
+      <div className="space-y-3 border-b border-border pb-4">
         <div className="space-y-1.5">
           <Label htmlFor="customer-name">Nombre del cliente</Label>
           <Input
@@ -598,10 +606,10 @@ const CartPanel = ({
         {canOrder ? (
           <div className="flex items-center justify-between gap-3">
             <Label>Personas / mesa</Label>
-            <div className="inline-flex items-center gap-2 rounded-full bg-zinc-100 px-2 py-1">
+            <div className="inline-flex items-center gap-2 rounded-full bg-muted px-2 py-1">
               <button
                 type="button"
-                className="flex size-8 items-center justify-center rounded-full bg-white shadow-sm"
+                className="flex size-8 items-center justify-center rounded-full bg-card shadow-sm"
                 aria-label="Menos personas"
                 onClick={() => onPartySizeChange(Math.max(1, partySize - 1))}
               >
@@ -610,7 +618,7 @@ const CartPanel = ({
               <span className="min-w-6 text-center text-sm font-semibold">{partySize}</span>
               <button
                 type="button"
-                className="flex size-8 items-center justify-center rounded-full bg-white shadow-sm"
+                className="flex size-8 items-center justify-center rounded-full bg-card shadow-sm"
                 aria-label="Más personas"
                 onClick={() => onPartySizeChange(Math.min(50, partySize + 1))}
               >
@@ -628,39 +636,39 @@ const CartPanel = ({
 
       <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
         {empty ? (
-          <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-2xl bg-zinc-50 text-center text-sm text-zinc-500">
+          <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-2xl bg-muted/50 text-center text-sm text-muted-foreground">
             <ShoppingBag className="size-5" aria-hidden />
             Agrega ítems del catálogo
           </div>
         ) : (
           <>
             {cart.map((line) => (
-              <div key={line.key} className="flex gap-3 rounded-2xl border border-zinc-100 p-2.5">
+              <div key={line.key} className="flex gap-3 rounded-2xl border border-border p-2.5">
                 <Thumb url={line.imageUrl} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{line.name}</p>
-                      <p className="text-xs text-zinc-500">
+                      <p className="text-xs text-muted-foreground">
                         {formatMoney(line.unitPrice, line.currency)} × {line.quantity}
                       </p>
                       {line.note ? (
-                        <p className="mt-1 text-[11px] leading-4 text-amber-700">{line.note}</p>
+                        <p className="mt-1 text-[11px] leading-4 text-primary">{line.note}</p>
                       ) : null}
                     </div>
                     <button
                       type="button"
-                      className="text-zinc-400 hover:text-red-500"
+                      className="text-muted-foreground hover:text-destructive"
                       aria-label={`Quitar ${line.name}`}
                       onClick={() => onRemoveCart(line.key)}
                     >
                       <Trash2 className="size-4" />
                     </button>
                   </div>
-                  <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-zinc-100 px-1.5 py-1">
+                  <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-muted px-1.5 py-1">
                     <button
                       type="button"
-                      className="flex size-6 items-center justify-center rounded-full bg-white"
+                      className="flex size-6 items-center justify-center rounded-full bg-card"
                       aria-label="Menos"
                       onClick={() => onUpdateQty(line.key, -1)}
                     >
@@ -669,7 +677,7 @@ const CartPanel = ({
                     <span className="min-w-4 text-center text-xs font-semibold">{line.quantity}</span>
                     <button
                       type="button"
-                      className="flex size-6 items-center justify-center rounded-full bg-white"
+                      className="flex size-6 items-center justify-center rounded-full bg-card"
                       aria-label="Más"
                       onClick={() => onUpdateQty(line.key, 1)}
                     >
@@ -680,22 +688,22 @@ const CartPanel = ({
               </div>
             ))}
             {interests.map((line) => (
-              <div key={line.key} className="flex gap-3 rounded-2xl border border-zinc-100 p-2.5">
+              <div key={line.key} className="flex gap-3 rounded-2xl border border-border p-2.5">
                 <Thumb url={line.imageUrl} property />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{line.title}</p>
-                      <p className="text-xs text-zinc-500">
+                      <p className="text-xs text-muted-foreground">
                         {line.price == null ? "Consultar" : formatMoney(line.price, line.currency)}
                       </p>
                       {line.metaLabel ? (
-                        <p className="mt-1 text-[11px] leading-4 text-zinc-500">{line.metaLabel}</p>
+                        <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{line.metaLabel}</p>
                       ) : null}
                     </div>
                     <button
                       type="button"
-                      className="text-zinc-400 hover:text-red-500"
+                      className="text-muted-foreground hover:text-destructive"
                       aria-label={`Quitar ${line.title}`}
                       onClick={() => onRemoveInterest(line.key)}
                     >
@@ -710,52 +718,44 @@ const CartPanel = ({
       </div>
 
       {canOrder && cart.length > 0 ? (
-        <div className="mt-4 space-y-2 border-t border-zinc-100 pt-4 text-sm">
-          <div className="flex justify-between text-zinc-500">
+        <div className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
+          <div className="flex justify-between text-muted-foreground">
             <span>Subtotal</span>
             <span>{formatMoney(subtotal, currency)}</span>
           </div>
           {discount > 0 ? (
-            <div className="flex justify-between text-zinc-500">
+            <div className="flex justify-between text-muted-foreground">
               <span>Descuento</span>
               <span>-{formatMoney(discount, currency)}</span>
             </div>
           ) : null}
-          <div className="flex justify-between text-zinc-500">
+          <div className="flex justify-between text-muted-foreground">
             <span>IVA</span>
             <span>{formatMoney(tax, currency)}</span>
           </div>
-          <div className="flex justify-between text-base font-bold text-emerald-600">
+          <div className="flex justify-between text-base font-bold text-primary">
             <span>Total</span>
             <span>{formatMoney(total, currency)}</span>
           </div>
         </div>
       ) : null}
 
-      {orderError ? <p className="mt-3 text-sm text-red-600">{orderError}</p> : null}
-      {orderMessage ? <p className="mt-3 text-sm text-emerald-600">{orderMessage}</p> : null}
+      {orderError ? <p className="mt-3 text-sm text-destructive">{orderError}</p> : null}
+      {orderMessage ? <p className="mt-3 text-sm text-primary">{orderMessage}</p> : null}
 
-      <Button
-        className="mt-4 h-12 w-full rounded-2xl bg-zinc-900 text-white hover:bg-zinc-800"
-        disabled={isPending || !canSubmit}
-        onClick={onSubmit}
-      >
-        {isPending
-          ? "Enviando…"
-          : cart.length > 0
-            ? "Ordenar ahora"
-            : "Enviar consulta"}
+      <Button className="mt-4 h-12 w-full rounded-2xl" disabled={isPending || !canSubmit} onClick={onSubmit}>
+        {isPending ? "Enviando…" : cart.length > 0 ? "Ordenar ahora" : "Enviar consulta"}
       </Button>
     </div>
   );
 };
 
 const Thumb = ({ url, property = false }: { url: string | null; property?: boolean }) => (
-  <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
+  <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-muted">
     {url ? (
       <Image src={url} alt="" fill className="object-cover" unoptimized />
     ) : (
-      <div className="flex h-full items-center justify-center text-zinc-400">
+      <div className="flex h-full items-center justify-center text-muted-foreground">
         {property ? <Building2 className="size-4" /> : <UtensilsCrossed className="size-4" />}
       </div>
     )}

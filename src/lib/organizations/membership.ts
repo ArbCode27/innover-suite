@@ -9,47 +9,73 @@ export type OrganizationMembership = {
   organizationId: number;
   role: OrganizationRole;
   organizationName: string;
+  logoUrl: string | null;
+  themePalette: string | null;
 };
 
 type MembershipRow = {
   organization_id: number;
   role: OrganizationRole;
-  organizations: { name: string } | { name: string }[] | null;
+  organizations:
+    | { name: string; logo_url?: string | null; theme_palette?: string | null }
+    | { name: string; logo_url?: string | null; theme_palette?: string | null }[]
+    | null;
 };
 
-const toOrganizationName = (value: MembershipRow["organizations"]) => {
-  if (Array.isArray(value)) {
-    return value[0]?.name ?? "Organización";
-  }
-
-  return value?.name ?? "Organización";
+const toOrganization = (value: MembershipRow["organizations"]) => {
+  const row = Array.isArray(value) ? value[0] : value;
+  return {
+    name: row?.name ?? "Organización",
+    logoUrl: typeof row?.logo_url === "string" && row.logo_url.trim() ? row.logo_url.trim() : null,
+    themePalette:
+      typeof row?.theme_palette === "string" && row.theme_palette.trim()
+        ? row.theme_palette.trim()
+        : null,
+  };
 };
 
 export const loadMembershipForUser = async (
   supabase: SupabaseClient,
   userId: string,
 ): Promise<OrganizationMembership | null> => {
-  const { data, error } = await supabase
+  const withBranding = await supabase
     .from("organization_members")
-    .select("organization_id, role, organizations(name)")
+    .select("organization_id, role, organizations(name, logo_url, theme_palette)")
     .eq("user_id", userId)
     .eq("status", "active")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle<MembershipRow>();
 
-  if (error) {
-    throw error;
+  let data = withBranding.data;
+  if (withBranding.error) {
+    const fallback = await supabase
+      .from("organization_members")
+      .select("organization_id, role, organizations(name)")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle<MembershipRow>();
+
+    if (fallback.error) {
+      throw fallback.error;
+    }
+    data = fallback.data;
   }
 
   if (!data?.organization_id) {
     return null;
   }
 
+  const organization = toOrganization(data.organizations);
+
   return {
     organizationId: data.organization_id,
     role: data.role,
-    organizationName: toOrganizationName(data.organizations),
+    organizationName: organization.name,
+    logoUrl: organization.logoUrl,
+    themePalette: organization.themePalette,
   };
 };
 

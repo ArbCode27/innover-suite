@@ -24,6 +24,7 @@ type MobileSuiteHeaderProps = {
   email: string | null;
   roleLabel: string;
   organizationName: string;
+  organizationLogoUrl?: string | null;
   initials: string;
 };
 
@@ -31,6 +32,7 @@ export const MobileSuiteHeader = ({
   email,
   roleLabel,
   organizationName,
+  organizationLogoUrl = null,
   initials,
 }: MobileSuiteHeaderProps) => {
   const [open, setOpen] = useState(false);
@@ -47,8 +49,17 @@ export const MobileSuiteHeader = ({
         aria-label="Inicio"
         className="flex min-w-0 items-center gap-2 rounded-2xl border border-primary/25 bg-primary/10 px-2 py-1.5"
       >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-          <Sparkles className="size-4" aria-hidden />
+        <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary text-primary-foreground">
+          {organizationLogoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={organizationLogoUrl}
+              alt={organizationName}
+              className="size-8 object-cover"
+            />
+          ) : (
+            <Sparkles className="size-4" aria-hidden />
+          )}
         </span>
         <span className="truncate text-sm font-semibold tracking-tight">
           <span className="text-primary">Innover</span> Suite

@@ -51,6 +51,8 @@ export type PublicCatalogOrg = {
   currency: string;
   promoPercent: number;
   canOrder: boolean;
+  logoUrl: string | null;
+  themePalette: string;
   modules: Pick<OrganizationModules, "catalog" | "orders" | "kitchen" | "listings">;
 };
 

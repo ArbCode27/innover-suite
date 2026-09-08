@@ -14,6 +14,7 @@ import type {
   MenuProduct,
   PublicCatalogPayload,
 } from "@/lib/menu/types";
+import { parsePaletteId } from "@/lib/theme/palettes";
 
 const slugify = (value: string) =>
   value
@@ -37,6 +38,8 @@ type OrgRow = {
   business_template: string | null;
   tax_rate: number | string | null;
   default_currency?: string | null;
+  logo_url?: string | null;
+  theme_palette?: string | null;
 };
 
 type ProductRow = {
@@ -147,7 +150,9 @@ export const loadPublicMenuBySlug = async (slug: string): Promise<PublicCatalogP
   const admin = getSupabaseAdminClient();
   const { data: org, error: orgError } = await admin
     .from("organizations")
-    .select("id, name, public_menu_slug, public_menu_enabled, business_template, tax_rate, default_currency")
+    .select(
+      "id, name, public_menu_slug, public_menu_enabled, business_template, tax_rate, default_currency, logo_url, theme_palette",
+    )
     .eq("public_menu_slug", normalized)
     .eq("public_menu_enabled", true)
     .maybeSingle();
@@ -155,11 +160,20 @@ export const loadPublicMenuBySlug = async (slug: string): Promise<PublicCatalogP
   if (orgError) {
     const fallback = await admin
       .from("organizations")
-      .select("id, name, public_menu_slug, public_menu_enabled, business_template, tax_rate")
+      .select("id, name, public_menu_slug, public_menu_enabled, business_template, tax_rate, default_currency")
       .eq("public_menu_slug", normalized)
       .eq("public_menu_enabled", true)
       .maybeSingle();
-    if (fallback.error || !fallback.data) return null;
+    if (fallback.error || !fallback.data) {
+      const basic = await admin
+        .from("organizations")
+        .select("id, name, public_menu_slug, public_menu_enabled, business_template, tax_rate")
+        .eq("public_menu_slug", normalized)
+        .eq("public_menu_enabled", true)
+        .maybeSingle();
+      if (basic.error || !basic.data) return null;
+      return assembleCatalog(admin, basic.data as OrgRow);
+    }
     return assembleCatalog(admin, fallback.data as OrgRow);
   }
 
@@ -303,6 +317,8 @@ const assembleCatalog = async (
     currency,
     promoPercent,
     canOrder,
+    logoUrl: typeof org.logo_url === "string" && org.logo_url.trim() ? org.logo_url.trim() : null,
+    themePalette: parsePaletteId(org.theme_palette),
     modules: {
       catalog: modules.catalog,
       orders: modules.orders,

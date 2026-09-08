@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CatalogBoard } from "./menu-board";
 import { loadPublicMenuBySlug } from "@/lib/menu/public-menu";
+import { PALETTE_ATTRIBUTE, parsePaletteId } from "@/lib/theme/palettes";
 
 type MenuPageProps = {
   params: Promise<{ slug: string }>;
@@ -36,7 +37,18 @@ const MenuPage = async ({ params }: MenuPageProps) => {
     notFound();
   }
 
-  return <CatalogBoard catalog={catalog} />;
+  const palette = parsePaletteId(catalog.organization.themePalette);
+
+  return (
+    <>
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `try{document.documentElement.setAttribute(${JSON.stringify(PALETTE_ATTRIBUTE)},${JSON.stringify(palette)});}catch(e){}`,
+        }}
+      />
+      <CatalogBoard catalog={catalog} />
+    </>
+  );
 };
 
 export default MenuPage;

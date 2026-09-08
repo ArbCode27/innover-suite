@@ -3,6 +3,7 @@ import {
   KNOWLEDGE_IMAGES_BUCKET,
   LISTING_IMAGES_BUCKET,
   MESSAGE_ATTACHMENTS_BUCKET,
+  ORGANIZATION_IMAGES_BUCKET,
   PRODUCT_IMAGES_BUCKET,
 } from "@/lib/media/types";
 
@@ -16,6 +17,9 @@ export const buildKnowledgeImagePath = (params: { organizationId: number; fileNa
 
 export const buildProductImagePath = (params: { organizationId: number; fileName: string }) =>
   orgImagePath(params.organizationId, params.fileName);
+
+export const buildOrganizationLogoPath = (params: { organizationId: number; fileName: string }) =>
+  `org/${params.organizationId}/logo/${crypto.randomUUID()}-${safeFileName(params.fileName)}`;
 
 export const buildListingImagePath = (params: {
   organizationId: number;
@@ -67,7 +71,11 @@ export const uploadMessageMedia = async (params: {
     mimeType: params.mimeType,
   });
 
-export const removeStoredMedia = async (params: { bucket: string; path: string; fallbackBuckets?: string[] }) => {
+export const removeStoredMedia = async (params: {
+  bucket: string;
+  path: string;
+  fallbackBuckets?: string[];
+}) => {
   const admin = getSupabaseAdminClient();
   const buckets = [params.bucket, ...(params.fallbackBuckets ?? [])];
 
@@ -93,6 +101,13 @@ export const removeListingImage = async (path: string) =>
 export const removeKnowledgeImage = async (path: string) =>
   removeStoredMedia({
     bucket: KNOWLEDGE_IMAGES_BUCKET,
+    path,
+    fallbackBuckets: [MESSAGE_ATTACHMENTS_BUCKET],
+  });
+
+export const removeOrganizationLogo = async (path: string) =>
+  removeStoredMedia({
+    bucket: ORGANIZATION_IMAGES_BUCKET,
     path,
     fallbackBuckets: [MESSAGE_ATTACHMENTS_BUCKET],
   });

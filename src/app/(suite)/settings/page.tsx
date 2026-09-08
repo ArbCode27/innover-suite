@@ -7,6 +7,7 @@ import { ModulesSettingsForm } from "./modules-settings-form";
 import { CurrencySettingsForm } from "./currency-settings-form";
 import { BrowserNotificationsCard } from "./browser-notifications-card";
 import { AppearanceSettingsCard } from "./appearance-settings-card";
+import { OrganizationBrandSettingsCard } from "./organization-brand-settings-card";
 import { PublicMenuSettingsCard } from "./public-menu-settings-card";
 import { SecuritySettingsForm } from "./security-settings-form";
 import { loadCurrentMemberSession, hasOrganizationRole } from "@/lib/organizations/membership";
@@ -20,6 +21,7 @@ import { loadOrganizationCurrencies } from "@/lib/organizations/currencies";
 import { loadOrganizationFunnelStages } from "@/lib/funnels/board";
 import { DEFAULT_TAX_RATE } from "@/lib/commerce/types";
 import { getWhatsAppOAuthRedirectUri } from "@/lib/integrations/whatsapp";
+import { parsePaletteId } from "@/lib/theme/palettes";
 
 export default async function SettingsPage() {
   const { membership } = await loadCurrentMemberSession();
@@ -80,16 +82,24 @@ export default async function SettingsPage() {
     loadOrganizationFunnelStages(supabase, membership.organizationId),
     supabase
       .from("organizations")
-      .select("plan, tax_rate, business_template, public_menu_enabled, public_menu_slug")
+      .select("plan, tax_rate, business_template, public_menu_enabled, public_menu_slug, logo_url, theme_palette")
       .eq("id", membership.organizationId)
       .maybeSingle()
       .then(async (result) => {
         if (!result.error) return result;
         return supabase
           .from("organizations")
-          .select("plan, tax_rate, business_template")
+          .select("plan, tax_rate, business_template, public_menu_enabled, public_menu_slug")
           .eq("id", membership.organizationId)
-          .maybeSingle();
+          .maybeSingle()
+          .then(async (menuResult) => {
+            if (!menuResult.error) return menuResult;
+            return supabase
+              .from("organizations")
+              .select("plan, tax_rate, business_template")
+              .eq("id", membership.organizationId)
+              .maybeSingle();
+          });
       }),
   ]);
 
@@ -99,8 +109,15 @@ export default async function SettingsPage() {
     business_template?: string | null;
     public_menu_enabled?: boolean | null;
     public_menu_slug?: string | null;
+    logo_url?: string | null;
+    theme_palette?: string | null;
   } | null;
   const showPublicCatalog = Boolean(modules.catalog || modules.listings);
+  const orgLogoUrl =
+    (typeof orgBilling?.logo_url === "string" && orgBilling.logo_url.trim()
+      ? orgBilling.logo_url.trim()
+      : null) ?? membership.logoUrl;
+  const orgThemePalette = parsePaletteId(orgBilling?.theme_palette ?? membership.themePalette);
 
   const connectedCount = [
     Boolean(instagramConnection.data),
@@ -153,6 +170,12 @@ export default async function SettingsPage() {
             organizationName={membership?.organizationName || "Organización"}
           />
         ) : null}
+        <OrganizationBrandSettingsCard
+          canManage={canManageOrganization}
+          organizationName={membership.organizationName}
+          logoUrl={orgLogoUrl}
+          themePalette={orgThemePalette}
+        />
         <BrowserNotificationsCard />
         <AppearanceSettingsCard />
         <ModulesSettingsForm canManageOrganization={canManageOrganization} modules={modules} />
