@@ -1,35 +1,26 @@
 "use client"
 
 import * as React from "react"
-import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
+/** Native browser scroll container (no Radix scrollbar). */
 function ScrollArea({
   className,
   children,
-  type = "hover",
-  hideScrollbar = false,
   ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
-  hideScrollbar?: boolean
-}) {
+}: React.ComponentProps<"div">) {
   return (
-    <ScrollAreaPrimitive.Root
+    <div
       data-slot="scroll-area"
-      type={hideScrollbar ? "scroll" : type}
-      className={cn("relative overflow-hidden", className)}
+      className={cn(
+        "relative min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain",
+        className,
+      )}
       {...props}
     >
-      <ScrollAreaPrimitive.Viewport
-        data-slot="scroll-area-viewport"
-        className="size-full overscroll-contain rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
-      >
-        {children}
-      </ScrollAreaPrimitive.Viewport>
-      {hideScrollbar ? null : <ScrollBar />}
-      <ScrollAreaPrimitive.Corner />
-    </ScrollAreaPrimitive.Root>
+      {children}
+    </div>
   )
 }
 
@@ -37,26 +28,14 @@ function ScrollBar({
   className,
   orientation = "vertical",
   ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>) {
-  return (
-    <ScrollAreaPrimitive.ScrollAreaScrollbar
-      data-slot="scroll-area-scrollbar"
-      data-orientation={orientation}
-      orientation={orientation}
-      className={cn(
-        "z-10 flex touch-none p-px transition-colors select-none",
-        "data-horizontal:h-1.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent",
-        "data-vertical:h-full data-vertical:w-1.5 data-vertical:border-l data-vertical:border-l-transparent",
-        className
-      )}
-      {...props}
-    >
-      <ScrollAreaPrimitive.ScrollAreaThumb
-        data-slot="scroll-area-thumb"
-        className="relative flex-1 rounded-full bg-foreground/30 hover:bg-foreground/50"
-      />
-    </ScrollAreaPrimitive.ScrollAreaScrollbar>
-  )
+}: React.ComponentProps<"div"> & {
+  orientation?: "vertical" | "horizontal"
+}) {
+  // Kept for API compatibility; native scrollbars are styled in globals.css.
+  void orientation
+  void className
+  void props
+  return null
 }
 
 export { ScrollArea, ScrollBar }
