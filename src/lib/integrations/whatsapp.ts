@@ -46,6 +46,8 @@ export type WhatsAppSessionInfo = {
   wabaId?: string;
   phoneNumberId?: string;
   businessId?: string;
+  /** True when the customer completed WhatsApp Business app coexistence onboarding. */
+  coexistence?: boolean;
 };
 
 const asRecord = (value: unknown) =>
@@ -326,6 +328,7 @@ const persistWhatsAppPhoneConnections = async (input: {
   wabaIdByPhoneId: Map<string, string>;
   wabaIds: string[];
   businessId?: string | null;
+  coexistence?: boolean;
 }): Promise<WhatsAppConnectStatus> => {
   const admin = getSupabaseAdminClient();
   const connectedAt = new Date().toISOString();
@@ -344,6 +347,8 @@ const persistWhatsAppPhoneConnections = async (input: {
         connected_by_user_id: input.userId,
         metadata: {
           provider: "whatsapp_embedded_signup",
+          onboardingMode: input.coexistence ? "coexistence" : "cloud_api",
+          coexistence: Boolean(input.coexistence),
           wabaId,
           businessId: input.businessId ?? null,
           displayPhoneNumber: phone.displayPhoneNumber,
@@ -432,6 +437,7 @@ export const completeWhatsAppEmbeddedSignup = async (input: {
     wabaIdByPhoneId: numbers.data.wabaIdByPhoneId,
     wabaIds: numbers.data.wabaIds,
     businessId: session.businessId,
+    coexistence: session.coexistence === true,
   });
 };
 

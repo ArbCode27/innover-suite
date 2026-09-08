@@ -4,6 +4,12 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+const WHATSAPP_COEXISTENCE_FEATURE_TYPE = "whatsapp_business_app_onboarding" as const;
+const WHATSAPP_EMBEDDED_FINISH_EVENTS = new Set([
+  "FINISH",
+  "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING",
+]);
+
 type FacebookLoginResponse = {
   authResponse?: {
     code?: string;
@@ -21,6 +27,7 @@ type FacebookSdk = {
       override_default_response_type: true;
       extras: {
         setup: Record<string, never>;
+        featureType: typeof WHATSAPP_COEXISTENCE_FEATURE_TYPE;
         sessionInfoVersion: "3";
       };
     },
@@ -39,6 +46,7 @@ type SessionInfo = {
   wabaId?: string;
   phoneNumberId?: string;
   businessId?: string;
+  coexistence?: boolean;
 };
 
 declare global {
@@ -166,8 +174,11 @@ const loginWithEmbeddedSignup = (sdk: FacebookSdk, configId: string) =>
         return;
       }
 
-      if (payload.eventName === "FINISH") {
-        session = payload.session;
+      if (WHATSAPP_EMBEDDED_FINISH_EVENTS.has(payload.eventName)) {
+        session = {
+          ...payload.session,
+          coexistence: payload.eventName === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING",
+        };
       }
     };
 
@@ -175,6 +186,7 @@ const loginWithEmbeddedSignup = (sdk: FacebookSdk, configId: string) =>
 
     sdk.login(
       (response) => {
+        // Session postMessage can arrive slightly after FB.login resolves.
         window.setTimeout(() => {
           settle(() => {
             const code = response.authResponse?.code?.trim();
@@ -192,6 +204,7 @@ const loginWithEmbeddedSignup = (sdk: FacebookSdk, configId: string) =>
         override_default_response_type: true,
         extras: {
           setup: {},
+          featureType: WHATSAPP_COEXISTENCE_FEATURE_TYPE,
           sessionInfoVersion: "3",
         },
       },
@@ -224,6 +237,7 @@ export const WhatsAppConnectButton = ({ returnPath }: WhatsAppConnectButtonProps
           wabaId: session.wabaId,
           phoneNumberId: session.phoneNumberId,
           businessId: session.businessId,
+          coexistence: session.coexistence === true,
         }),
       });
       const callbackPayload = (await callbackResponse.json().catch(() => null)) as { status?: string } | null;

@@ -21,6 +21,7 @@ const callbackSchema = z.object({
   wabaId: z.string().trim().min(1).optional(),
   phoneNumberId: z.string().trim().min(1).optional(),
   businessId: z.string().trim().min(1).optional(),
+  coexistence: z.boolean().optional(),
 });
 
 const jsonStatus = (status: string, httpStatus: number) =>
@@ -147,6 +148,7 @@ export async function POST(request: NextRequest) {
       wabaId: parsed.data.wabaId,
       phoneNumberId: parsed.data.phoneNumberId,
       businessId: parsed.data.businessId,
+      coexistence: parsed.data.coexistence === true,
     },
   });
 
