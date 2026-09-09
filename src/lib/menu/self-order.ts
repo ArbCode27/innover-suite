@@ -6,6 +6,7 @@ export type SelfOrderModifierOption = {
   /** Precio de carta por unidad (siempre el precio real de la bebida). */
   unitListPrice: number;
   menuItemId?: number;
+  imageUrl?: string | null;
 };
 
 export type SelfOrderModifierGroup = {
@@ -32,6 +33,7 @@ export type SelfOrderModifierSelection = {
   /** Cargo total de esta línea tras aplicar unidades gratis. */
   priceDelta: number;
   menuItemId?: number;
+  imageUrl?: string | null;
 };
 
 export type SelfOrderCartLine = {
@@ -114,6 +116,46 @@ const sectionFallback = (menuType: string | null | undefined) => {
   }
 };
 
+export const resolveDrinkFallbackImage = (name: string): string => {
+  const normalized = name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  if (normalized.includes("limonada") || normalized.includes("lemonade")) {
+    return "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=400&q=80";
+  }
+  if (normalized.includes("coca") || normalized.includes("cola") || normalized.includes("pepsi")) {
+    return "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=400&q=80";
+  }
+  if (normalized.includes("agua") || normalized.includes("water") || normalized.includes("mineral")) {
+    return "https://images.unsplash.com/photo-1559839914-17aae19cec71?auto=format&fit=crop&w=400&q=80";
+  }
+  if (normalized.includes("cerveza") || normalized.includes("beer")) {
+    return "https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&w=400&q=80";
+  }
+  if (
+    normalized.includes("jugo") ||
+    normalized.includes("zumo") ||
+    normalized.includes("naranja") ||
+    normalized.includes("juice")
+  ) {
+    return "https://images.unsplash.com/photo-1600271886742-f049cd451bba?auto=format&fit=crop&w=400&q=80";
+  }
+  if (
+    normalized.includes("cafe") ||
+    normalized.includes("coffee") ||
+    normalized.includes("capuchino") ||
+    normalized.includes("latte")
+  ) {
+    return "https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=400&q=80";
+  }
+  if (normalized.includes("soda") || normalized.includes("gaseosa") || normalized.includes("refresco")) {
+    return "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?auto=format&fit=crop&w=400&q=80";
+  }
+  return "https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=400&q=80";
+};
+
 /** Bebidas del menú como grupo con cantidad; en combo/promo 1 unidad va incluida. */
 export const buildModifierGroupsForItem = (
   item: CatalogItem,
@@ -140,6 +182,7 @@ export const buildModifierGroupsForItem = (
       name: drink.title,
       unitListPrice: displayPrice(drink),
       menuItemId: drink.sourceId,
+      imageUrl: drink.imageUrl?.trim() || resolveDrinkFallbackImage(drink.title),
     })),
   });
 
@@ -207,6 +250,7 @@ export const resolveDrinkSelections = (
       includedCount: charge.free,
       priceDelta: Math.round(charge.paidTotal * 100) / 100,
       menuItemId: option.menuItemId,
+      imageUrl: option.imageUrl,
     };
   });
 };

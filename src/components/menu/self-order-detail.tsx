@@ -212,16 +212,35 @@ export const SelfOrderDetail = ({ slug, item, drinkItems, onOpenCart }: SelfOrde
             <div className="space-y-2">
               {drinkGroup.options.map((option) => {
                 const qty = drinkQty[option.id] ?? 0;
+                const photo = option.imageUrl?.trim() || null;
                 return (
                   <div
                     key={option.id}
                     className="flex items-center justify-between gap-3 rounded-xl border border-border/60 px-3 py-2.5"
                   >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{option.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {lineChargeLabel(drinkGroup, option.id, option.unitListPrice)}
-                      </p>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-muted ring-1 ring-border/60">
+                        {photo ? (
+                          <Image
+                            src={photo}
+                            alt={option.name}
+                            fill
+                            sizes="56px"
+                            className="object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="flex size-full items-center justify-center text-[10px] text-muted-foreground">
+                            Sin foto
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{option.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {lineChargeLabel(drinkGroup, option.id, option.unitListPrice)}
+                        </p>
+                      </div>
                     </div>
                     <QuantitySelector
                       size="sm"
