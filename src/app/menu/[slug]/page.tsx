@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CatalogBoard } from "./menu-board";
+import { Suspense } from "react";
+import { SelfOrderBoard } from "@/components/menu/self-order-board";
 import { loadPublicSurfaceBySlug } from "@/lib/menu/public-menu";
 import { PALETTE_ATTRIBUTE, parsePaletteId } from "@/lib/theme/palettes";
 
@@ -17,7 +18,7 @@ export const generateMetadata = async ({ params }: MenuPageProps): Promise<Metad
     }
     return {
       title: `${catalog.organization.name} | Menú`,
-      description: `Explora el menú de ${catalog.organization.name}.`,
+      description: `Explora el menú de ${catalog.organization.name} y envía tu pedido.`,
     };
   } catch {
     return { title: "Menú" };
@@ -46,7 +47,9 @@ const MenuPage = async ({ params }: MenuPageProps) => {
           __html: `try{document.documentElement.setAttribute(${JSON.stringify(PALETTE_ATTRIBUTE)},${JSON.stringify(palette)});}catch(e){}`,
         }}
       />
-      <CatalogBoard catalog={catalog} />
+      <Suspense fallback={null}>
+        <SelfOrderBoard catalog={catalog} />
+      </Suspense>
     </>
   );
 };

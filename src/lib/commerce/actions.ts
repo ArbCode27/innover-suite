@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getCurrentMembership, canManageCatalog, canManageOrders, canMarkPayment } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { parseCatalogCsv } from "@/lib/commerce/catalog";
-import { isOrderStatus, isPaymentStatus, PAYMENT_STATUSES, PRODUCT_KINDS } from "@/lib/commerce/types";
+import { isOrderStatus, isPaymentStatus, MENU_TYPES, PAYMENT_STATUSES, PRODUCT_KINDS } from "@/lib/commerce/types";
 import { recordAuditEvent } from "@/lib/organizations/audit";
 import { loadOrganizationCurrencies, resolveOrganizationCurrency } from "@/lib/organizations/currencies";
 import { readCatalogImageFile } from "@/lib/media/image-upload";
@@ -49,6 +49,10 @@ const productFields = z.object({
   sku: z.string().trim().max(60).optional(),
   category: z.string().trim().max(80).optional(),
   kind: z.enum(PRODUCT_KINDS),
+  menuType: z.enum(MENU_TYPES).optional().nullable(),
+  isFeatured: z.boolean().optional(),
+  menuSort: z.number().int().min(0).max(10_000).optional(),
+  comboItemIds: z.array(z.number().int().positive()).max(20).optional(),
   price: z.number().nonnegative().max(10_000_000),
   trackStock: z.boolean(),
   initialStock: z.number().nonnegative().max(1_000_000).optional(),
@@ -61,7 +65,7 @@ const normalizeMenuIngredients = (value: string[] | undefined) =>
   [...new Set((value ?? []).map((item) => item.trim()).filter(Boolean))];
 
 const productSchema = productFields.superRefine((data, ctx) => {
-  if (data.kind === "service") {
+  if (data.kind === "service" || data.kind === "food") {
     return;
   }
 
@@ -92,6 +96,40 @@ const promotionSchema = z.object({
   endsAt: z.string().optional(),
 });
 
+const syncMenuComboItems = async (params: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  organizationId: number;
+  comboProductId: number;
+  itemIds: number[];
+}) => {
+  const uniqueIds = [...new Set(params.itemIds)].filter((id) => id !== params.comboProductId);
+  await params.supabase
+    .from("menu_combo_items")
+    .delete()
+    .eq("organization_id", params.organizationId)
+    .eq("combo_product_id", params.comboProductId);
+
+  if (!uniqueIds.length) return;
+
+  const { data: validItems } = await params.supabase
+    .from("products")
+    .select("id")
+    .eq("organization_id", params.organizationId)
+    .eq("kind", "food")
+    .in("id", uniqueIds);
+
+  const rows = (validItems ?? []).map((item) => ({
+    organization_id: params.organizationId,
+    combo_product_id: params.comboProductId,
+    item_product_id: item.id as number,
+    quantity: 1,
+  }));
+
+  if (rows.length) {
+    await params.supabase.from("menu_combo_items").insert(rows);
+  }
+};
+
 const updateOrderStatusSchema = z.object({
   orderId: z.number().int().positive(),
   status: z.enum(["received", "preparing", "ready", "completed", "cancelled"]),
@@ -112,7 +150,12 @@ export const createProductAction = async (rawValues: unknown): Promise<ActionRes
   if ("error" in access) return { error: access.error };
 
   const supabase = await createSupabaseServerClient();
-  const trackStock = parsed.data.kind === "service" ? false : parsed.data.trackStock;
+  const trackStock =
+    parsed.data.kind === "service" || parsed.data.kind === "food"
+      ? parsed.data.kind === "food"
+        ? parsed.data.trackStock
+        : false
+      : parsed.data.trackStock;
   let inventoryItemId: number | null = null;
 
   if (trackStock) {
@@ -137,6 +180,8 @@ export const createProductAction = async (rawValues: unknown): Promise<ActionRes
 
   const orgCurrencies = await loadOrganizationCurrencies(supabase, access.membership.organizationId);
   const currency = resolveOrganizationCurrency(parsed.data.currency, orgCurrencies);
+  const menuType =
+    parsed.data.kind === "food" ? parsed.data.menuType || "dish" : null;
 
   const { data: inserted, error } = await supabase.from("products").insert({
     organization_id: access.membership.organizationId,
@@ -146,6 +191,9 @@ export const createProductAction = async (rawValues: unknown): Promise<ActionRes
     sku: parsed.data.sku || null,
     category: parsed.data.category || null,
     kind: parsed.data.kind,
+    menu_type: menuType,
+    menu_sort: parsed.data.menuSort ?? 0,
+    is_featured: parsed.data.isFeatured ?? false,
     price: parsed.data.price,
     currency,
     active: true,
@@ -160,7 +208,17 @@ export const createProductAction = async (rawValues: unknown): Promise<ActionRes
     return { error: error?.message || "No se pudo crear el producto." };
   }
 
+  if (parsed.data.kind === "food") {
+    await syncMenuComboItems({
+      supabase,
+      organizationId: access.membership.organizationId,
+      comboProductId: inserted.id as number,
+      itemIds: parsed.data.menuType === "combo" ? parsed.data.comboItemIds ?? [] : [],
+    });
+  }
+
   revalidatePath("/inventory");
+  revalidatePath("/carta");
   return { success: "Producto agregado al catálogo.", id: inserted.id as number };
 };
 
@@ -174,7 +232,12 @@ export const updateProductAction = async (rawValues: unknown): Promise<ActionRes
   if ("error" in access) return { error: access.error };
 
   const supabase = await createSupabaseServerClient();
-  const trackStock = parsed.data.kind === "service" ? false : parsed.data.trackStock;
+  const trackStock =
+    parsed.data.kind === "service"
+      ? false
+      : parsed.data.kind === "food"
+        ? parsed.data.trackStock
+        : parsed.data.trackStock;
 
   const { data: existing, error: existingError } = await supabase
     .from("products")
@@ -189,6 +252,8 @@ export const updateProductAction = async (rawValues: unknown): Promise<ActionRes
 
   const orgCurrencies = await loadOrganizationCurrencies(supabase, access.membership.organizationId);
   const currency = resolveOrganizationCurrency(parsed.data.currency, orgCurrencies);
+  const menuType =
+    parsed.data.kind === "food" ? parsed.data.menuType || "dish" : null;
 
   const { error } = await supabase
     .from("products")
@@ -198,6 +263,9 @@ export const updateProductAction = async (rawValues: unknown): Promise<ActionRes
       sku: parsed.data.sku || null,
       category: parsed.data.category || null,
       kind: parsed.data.kind,
+      menu_type: menuType,
+      menu_sort: parsed.data.menuSort ?? 0,
+      is_featured: parsed.data.isFeatured ?? false,
       price: parsed.data.price,
       currency,
       active: parsed.data.active,
@@ -224,7 +292,17 @@ export const updateProductAction = async (rawValues: unknown): Promise<ActionRes
       .eq("organization_id", access.membership.organizationId);
   }
 
+  if (parsed.data.kind === "food") {
+    await syncMenuComboItems({
+      supabase,
+      organizationId: access.membership.organizationId,
+      comboProductId: parsed.data.id,
+      itemIds: parsed.data.menuType === "combo" ? parsed.data.comboItemIds ?? [] : [],
+    });
+  }
+
   revalidatePath("/inventory");
+  revalidatePath("/carta");
   return { success: "Producto actualizado." };
 };
 
@@ -264,6 +342,7 @@ export const deleteProductAction = async (productId: number): Promise<ActionResu
   }
 
   revalidatePath("/inventory");
+  revalidatePath("/carta");
   return { success: "Producto borrado del catálogo." };
 };
 
@@ -287,12 +366,26 @@ export const saveProductAction = async (formData: FormData): Promise<ActionResul
     .split(/[,;\n]+/)
     .map((value) => value.trim())
     .filter(Boolean);
+  const comboItemIds = String(formData.get("comboItemIds") || "")
+    .split(/[,;\s]+/)
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0);
+  const menuTypeRaw = formData.get("menuType");
   const fields = {
     name: formData.get("name"),
     description: formData.get("description") || undefined,
     sku: formData.get("sku") || undefined,
     category: formData.get("category") || undefined,
     kind: formData.get("kind"),
+    menuType:
+      typeof menuTypeRaw === "string" && menuTypeRaw.trim()
+        ? menuTypeRaw.trim()
+        : formData.get("kind") === "food"
+          ? "dish"
+          : null,
+    isFeatured: formData.get("isFeatured") === "true",
+    menuSort: formData.get("menuSort") ? Number(formData.get("menuSort")) : 0,
+    comboItemIds,
     price: Number(formData.get("price")),
     trackStock: formData.get("trackStock") === "true",
     initialStock: formData.get("initialStock") ? Number(formData.get("initialStock")) : undefined,
@@ -393,6 +486,7 @@ export const saveProductAction = async (formData: FormData): Promise<ActionResul
   }
 
   revalidatePath("/inventory");
+  revalidatePath("/carta");
   revalidatePath("/onboarding/setup");
   if (uploaded.file) {
     return { success: editingId ? "Producto e imagen actualizados." : "Producto agregado con imagen." };

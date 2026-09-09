@@ -12,8 +12,9 @@ export type CatalogItemKind = "food" | "physical" | "service" | "property";
 export type CatalogItem = {
   id: string;
   sourceId: number;
-  source: "product" | "listing";
+  source: "product" | "listing" | "menu_item";
   kind: CatalogItemKind;
+  menuType?: string | null;
   title: string;
   description: string | null;
   category: string | null;
@@ -26,6 +27,7 @@ export type CatalogItem = {
   promoPrice: number | null;
   metaLabel: string | null;
   actionable: "order" | "inquire";
+  isFeatured?: boolean;
 };
 
 /** @deprecated Prefer CatalogItem — kept for gradual migration */

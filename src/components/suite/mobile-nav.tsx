@@ -13,6 +13,7 @@ import {
   Package,
   Settings,
   Building2,
+  UtensilsCrossed,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,7 @@ const NAV_ICONS = {
   inbox: Inbox,
   orders: ClipboardList,
   inventory: Package,
+  menu: UtensilsCrossed,
   funnels: KanbanSquare,
   calendar: CalendarDays,
   listings: Building2,

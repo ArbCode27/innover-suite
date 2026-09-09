@@ -14,6 +14,7 @@ import {
   Settings,
   Sparkles,
   Building2,
+  UtensilsCrossed,
 } from "lucide-react";
 import { signOut } from "@/lib/auth/actions";
 import { loadCachedOrganizationModules } from "@/lib/modules/settings";
@@ -80,6 +81,13 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
       icon: ClipboardList,
       iconKey: "orders",
       show: Boolean(modules.orders && canManageOrders(membership)),
+    },
+    {
+      href: "/carta",
+      label: "Menú",
+      icon: UtensilsCrossed,
+      iconKey: "menu",
+      show: Boolean(modules.catalog && canManageCatalog(membership)),
     },
     {
       href: "/inventory",

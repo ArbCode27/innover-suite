@@ -1,10 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   isImageSendPolicy,
+  isMenuType,
   isProductKind,
   toNumber,
   type DeliveryZoneRecord,
+  type InventoryItemOption,
   type InventoryMovementRecord,
+  type MenuType,
   type ProductKind,
   type ProductRecord,
   type PromotionRecord,
@@ -18,6 +21,9 @@ type ProductRow = {
   sku: string | null;
   category: string | null;
   kind: string;
+  menu_type?: string | null;
+  menu_sort?: number | string | null;
+  is_featured?: boolean | null;
   price: number | string;
   currency: string;
   active: boolean;
@@ -37,15 +43,27 @@ type ProductRow = {
 
 const asInventory = (value: ProductRow["inventory_items"]) => (Array.isArray(value) ? value[0] : value) ?? null;
 
-export const mapProductRow = (row: ProductRow): ProductRecord => {
+export const mapProductRow = (
+  row: ProductRow,
+  comboItemIds: number[] = [],
+): ProductRecord => {
   const inventory = asInventory(row.inventory_items);
+  const kind = isProductKind(row.kind) ? row.kind : "physical";
+  const menuType = isMenuType(row.menu_type)
+    ? row.menu_type
+    : kind === "food"
+      ? ("dish" as MenuType)
+      : null;
   return {
     id: row.id,
     name: row.name,
     description: row.description,
     sku: row.sku,
     category: row.category,
-    kind: isProductKind(row.kind) ? row.kind : "physical",
+    kind,
+    menuType,
+    menuSort: row.menu_sort == null ? 0 : toNumber(row.menu_sort),
+    isFeatured: Boolean(row.is_featured),
     price: toNumber(row.price),
     currency: row.currency || DEFAULT_CURRENCY,
     active: row.active,
@@ -61,27 +79,75 @@ export const mapProductRow = (row: ProductRow): ProductRecord => {
     menuIngredients: Array.isArray(row.menu_ingredients)
       ? row.menu_ingredients.map((value) => String(value).trim()).filter(Boolean)
       : [],
+    comboItemIds,
   };
 };
 
 const PRODUCT_COLUMNS =
+  "id, name, description, sku, category, kind, menu_type, menu_sort, is_featured, price, currency, active, track_stock, parent_id, inventory_item_id, menu_ingredients, inventory_items!inventory_item_id(on_hand, reorder_point)";
+const PRODUCT_COLUMNS_LEGACY =
   "id, name, description, sku, category, kind, price, currency, active, track_stock, parent_id, inventory_item_id, menu_ingredients, inventory_items!inventory_item_id(on_hand, reorder_point)";
 const PRODUCT_IMAGE_COLUMNS = "image_url, image_path, image_mime, image_send_policy";
 
+const loadComboMap = async (supabase: SupabaseClient, organizationId: number, productIds: number[]) => {
+  const map = new Map<number, number[]>();
+  if (!productIds.length) return map;
+
+  const { data, error } = await supabase
+    .from("menu_combo_items")
+    .select("combo_product_id, item_product_id")
+    .eq("organization_id", organizationId)
+    .in("combo_product_id", productIds);
+
+  if (error) return map;
+
+  for (const row of data ?? []) {
+    const comboId = row.combo_product_id as number;
+    const itemId = row.item_product_id as number;
+    const current = map.get(comboId) ?? [];
+    current.push(itemId);
+    map.set(comboId, current);
+  }
+  return map;
+};
+
+const mapRowsWithCombos = async (
+  supabase: SupabaseClient,
+  organizationId: number,
+  rows: ProductRow[],
+) => {
+  const comboMap = await loadComboMap(
+    supabase,
+    organizationId,
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) => mapProductRow(row, comboMap.get(row.id) ?? []));
+};
+
 export const loadCatalog = async (supabase: SupabaseClient, organizationId: number) => {
-  const withImages = await supabase
+  const withMenu = await supabase
     .from("products")
     .select(`${PRODUCT_COLUMNS}, ${PRODUCT_IMAGE_COLUMNS}`)
     .eq("organization_id", organizationId)
     .order("name", { ascending: true });
 
+  if (!withMenu.error) {
+    return mapRowsWithCombos(supabase, organizationId, (withMenu.data ?? []) as ProductRow[]);
+  }
+
+  const withImages = await supabase
+    .from("products")
+    .select(`${PRODUCT_COLUMNS_LEGACY}, ${PRODUCT_IMAGE_COLUMNS}`)
+    .eq("organization_id", organizationId)
+    .order("name", { ascending: true });
+
   if (!withImages.error) {
-    return (withImages.data ?? []).map((row) => mapProductRow(row as ProductRow));
+    return mapRowsWithCombos(supabase, organizationId, (withImages.data ?? []) as ProductRow[]);
   }
 
   const { data, error } = await supabase
     .from("products")
-    .select(PRODUCT_COLUMNS)
+    .select(PRODUCT_COLUMNS_LEGACY)
     .eq("organization_id", organizationId)
     .order("name", { ascending: true });
 
@@ -101,7 +167,43 @@ export const loadCatalog = async (supabase: SupabaseClient, organizationId: numb
     return (fallback.data ?? []).map((row) => mapProductRow(row as ProductRow));
   }
 
-  return (data ?? []).map((row) => mapProductRow(row as ProductRow));
+  return mapRowsWithCombos(supabase, organizationId, (data ?? []) as ProductRow[]);
+};
+
+export const loadMenuCatalog = async (supabase: SupabaseClient, organizationId: number) => {
+  // Legacy bridge: carta now uses loadMenuItems from @/lib/menu/crm-catalog.
+  // Keep filtering food products only for older call sites during migration.
+  const all = await loadCatalog(supabase, organizationId);
+  return all
+    .filter((product) => product.kind === "food")
+    .sort((a, b) => a.menuSort - b.menuSort || a.name.localeCompare(b.name, "es"));
+};
+
+export const loadInventoryCatalog = async (supabase: SupabaseClient, organizationId: number) => {
+  const all = await loadCatalog(supabase, organizationId);
+  return all.filter((product) => product.kind !== "food");
+};
+
+export const loadInventoryItemOptions = async (
+  supabase: SupabaseClient,
+  organizationId: number,
+): Promise<InventoryItemOption[]> => {
+  const { data, error } = await supabase
+    .from("inventory_items")
+    .select("id, name, unit, on_hand")
+    .eq("organization_id", organizationId)
+    .order("name", { ascending: true });
+
+  if (error) {
+    return [];
+  }
+
+  return (data ?? []).map((row) => ({
+    id: row.id as number,
+    name: String(row.name ?? "Insumo"),
+    unit: typeof row.unit === "string" ? row.unit : null,
+    onHand: toNumber(row.on_hand),
+  }));
 };
 
 export const loadPromotions = async (supabase: SupabaseClient, organizationId: number) => {

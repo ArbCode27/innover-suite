@@ -31,7 +31,7 @@ export const MODULE_CATALOG: Array<{
   {
     key: "catalog",
     label: "Catálogo e inventario",
-    description: "Productos, precios y stock para cualquier tipo de vendedor.",
+    description: "Productos físicos, servicios e insumos. El menú de platos vive en la sección Menú.",
   },
   {
     key: "orders",

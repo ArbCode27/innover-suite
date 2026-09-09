@@ -81,8 +81,15 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
   );
   const showTypeFilters = typeOptions.length > 1;
 
+  const matchesTypeFilter = (item: CatalogItem, selected: string) => {
+    if (selected === "all") return true;
+    if (item.kind === selected) return true;
+    if (item.menuType === selected) return true;
+    return false;
+  };
+
   const categoryOptions = useMemo(() => {
-    const scoped = catalog.items.filter((item) => filter === "all" || item.kind === filter);
+    const scoped = catalog.items.filter((item) => matchesTypeFilter(item, filter));
     return [
       ...new Set(scoped.map((item) => item.category).filter((value): value is string => Boolean(value))),
     ].sort((a, b) => a.localeCompare(b, "es"));
@@ -92,7 +99,7 @@ export const CatalogBoard = ({ catalog }: CatalogBoardProps) => {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return catalog.items.filter((item) => {
-      if (filter !== "all" && item.kind !== filter) return false;
+      if (!matchesTypeFilter(item, filter)) return false;
       if (category !== "all" && item.category !== category) return false;
       if (!q) return true;
       return `${item.title} ${item.description ?? ""} ${item.category ?? ""} ${item.metaLabel ?? ""}`

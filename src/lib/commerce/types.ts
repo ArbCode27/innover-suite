@@ -4,12 +4,14 @@ import { DEFAULT_CURRENCY } from "@/lib/organizations/currencies";
 export const DEFAULT_TAX_RATE = 0.16;
 
 export const PRODUCT_KINDS = ["physical", "food", "service"] as const;
+export const MENU_TYPES = ["dish", "drink", "dessert", "side", "combo", "promo"] as const;
 export const IMAGE_SEND_POLICIES = ["on_request", "always"] as const;
 export const ORDER_STATUSES = ["received", "preparing", "ready", "completed", "cancelled"] as const;
 export const FULFILLMENT_TYPES = ["pickup", "delivery", "dine_in", "unspecified"] as const;
 export const PAYMENT_STATUSES = ["unpaid", "pending", "paid", "refunded"] as const;
 
 export type ProductKind = (typeof PRODUCT_KINDS)[number];
+export type MenuType = (typeof MENU_TYPES)[number];
 export type ImageSendPolicy = (typeof IMAGE_SEND_POLICIES)[number];
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export type FulfillmentType = (typeof FULFILLMENT_TYPES)[number];
@@ -22,6 +24,9 @@ export type ProductRecord = {
   sku: string | null;
   category: string | null;
   kind: ProductKind;
+  menuType: MenuType | null;
+  menuSort: number;
+  isFeatured: boolean;
   price: number;
   currency: string;
   active: boolean;
@@ -35,6 +40,14 @@ export type ProductRecord = {
   imageMime: string | null;
   imageSendPolicy: ImageSendPolicy;
   menuIngredients: string[];
+  comboItemIds: number[];
+};
+
+export type InventoryItemOption = {
+  id: number;
+  name: string;
+  unit: string | null;
+  onHand: number;
 };
 
 export type DeliveryZoneRecord = {
@@ -106,6 +119,17 @@ export const PRODUCT_KIND_LABELS: Record<ProductKind, string> = {
   service: "Servicio",
 };
 
+export const INVENTORY_PRODUCT_KINDS = ["physical", "service"] as const satisfies readonly ProductKind[];
+
+export const MENU_TYPE_LABELS: Record<MenuType, string> = {
+  dish: "Plato",
+  drink: "Bebida",
+  dessert: "Postre",
+  side: "Acompañante",
+  combo: "Combo",
+  promo: "Promo",
+};
+
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   received: "Nuevo",
   preparing: "En preparación",
@@ -162,6 +186,9 @@ export const toNumber = (value: unknown) => {
 
 export const isProductKind = (value: unknown): value is ProductKind =>
   typeof value === "string" && PRODUCT_KINDS.includes(value as ProductKind);
+
+export const isMenuType = (value: unknown): value is MenuType =>
+  typeof value === "string" && MENU_TYPES.includes(value as MenuType);
 
 export const isImageSendPolicy = (value: unknown): value is ImageSendPolicy =>
   typeof value === "string" && IMAGE_SEND_POLICIES.includes(value as ImageSendPolicy);

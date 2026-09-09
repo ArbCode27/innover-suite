@@ -41,9 +41,22 @@ type OrderRow = {
     | null;
 };
 
-const contactName = (value: OrderRow["contacts"]) => {
+const nameFromCustomerNote = (note: string | null | undefined) => {
+  if (!note?.trim()) return null;
+  // Autopedido: "Cliente: Nombre · Personas: 1" (+ notas extra en líneas siguientes)
+  const match = note.match(/^\s*Cliente:\s*([^·\n]+)/i);
+  const name = match?.[1]?.trim();
+  return name || null;
+};
+
+const contactName = (
+  value: OrderRow["contacts"],
+  customerNote: string | null | undefined,
+) => {
   const row = Array.isArray(value) ? value[0] : value;
-  return row?.full_name?.trim() || "Cliente";
+  const fromContact = row?.full_name?.trim();
+  if (fromContact) return fromContact;
+  return nameFromCustomerNote(customerNote) || "Cliente";
 };
 
 export const mapOrderRow = (row: OrderRow): OrderRecord => ({
@@ -66,7 +79,7 @@ export const mapOrderRow = (row: OrderRow): OrderRecord => ({
   updatedAt: row.updated_at,
   contactId: row.contact_id,
   conversationId: row.conversation_id,
-  contactName: contactName(row.contacts),
+  contactName: contactName(row.contacts, row.customer_note),
   items: (row.order_items ?? []).map(
     (item): OrderItemRecord => ({
       id: item.id,
@@ -97,6 +110,44 @@ export const loadOrders = async (supabase: SupabaseClient, organizationId: numbe
         "id, status, fulfillment, channel, customer_note, subtotal, total, created_at, updated_at, contact_id, conversation_id, contacts(full_name), order_items(id, product_id, name_snapshot, quantity, unit_price, notes)",
       )
       .eq("organization_id", organizationId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (fallback.error) {
+      throw new Error(fallback.error.message || "No se pudieron cargar los pedidos.");
+    }
+
+    return (fallback.data ?? []).map((row) => mapOrderRow(row as unknown as OrderRow));
+  }
+
+  return (data ?? []).map((row) => mapOrderRow(row as unknown as OrderRow));
+};
+
+export const loadOrdersByDateRange = async (
+  supabase: SupabaseClient,
+  organizationId: number,
+  fromIso: string,
+  toIso: string,
+  limit = 200,
+) => {
+  const { data, error } = await supabase
+    .from("orders")
+    .select(ORDER_SELECT)
+    .eq("organization_id", organizationId)
+    .gte("created_at", fromIso)
+    .lte("created_at", toIso)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    const fallback = await supabase
+      .from("orders")
+      .select(
+        "id, status, fulfillment, channel, customer_note, subtotal, total, created_at, updated_at, contact_id, conversation_id, contacts(full_name), order_items(id, product_id, name_snapshot, quantity, unit_price, notes)",
+      )
+      .eq("organization_id", organizationId)
+      .gte("created_at", fromIso)
+      .lte("created_at", toIso)
       .order("created_at", { ascending: false })
       .limit(limit);
 

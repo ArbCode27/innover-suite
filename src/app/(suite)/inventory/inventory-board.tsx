@@ -17,6 +17,7 @@ import {
 import { catalogToCsv } from "@/lib/commerce/catalog";
 import {
   formatMoney,
+  INVENTORY_PRODUCT_KINDS,
   PRODUCT_KIND_LABELS,
   type InventoryMovementRecord,
   type ProductKind,
@@ -416,7 +417,9 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle>Catálogo e inventario</CardTitle>
-            <CardDescription>La IA vende solo lo que está aquí, al precio y stock reales.</CardDescription>
+            <CardDescription>
+              Productos físicos y servicios. Los platos se gestionan en Menú.
+            </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" onClick={handleExport}>
@@ -952,7 +955,9 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
                   id="product-kind"
                   value={form.kind}
                   onValueChange={(value) => setForm((current) => ({ ...current, kind: value as ProductKind }))}
-                  options={(Object.entries(PRODUCT_KIND_LABELS) as Array<[ProductKind, string]>).map(
+                  options={(Object.entries(PRODUCT_KIND_LABELS) as Array<[ProductKind, string]>)
+                    .filter(([kind]) => (INVENTORY_PRODUCT_KINDS as readonly string[]).includes(kind))
+                    .map(
                     ([value, label]) => ({ value, label }),
                   )}
                 />

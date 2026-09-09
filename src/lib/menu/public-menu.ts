@@ -16,6 +16,7 @@ import type {
   PublicSurface,
 } from "@/lib/menu/types";
 import { parsePaletteId } from "@/lib/theme/palettes";
+import { isMenuType, MENU_TYPE_LABELS } from "@/lib/commerce/types";
 
 const slugify = (value: string) =>
   value
@@ -50,6 +51,7 @@ type ProductRow = {
   description: string | null;
   category: string | null;
   kind?: string | null;
+  menu_type?: string | null;
   price: number | string;
   currency: string | null;
   active: boolean;
@@ -93,6 +95,16 @@ const asSingle = <T,>(value: T | T[] | null | undefined): T | null => {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
 };
+
+const resolveMenuIngredients = (ingredients: string[] | null | undefined, itemId: number): MenuIngredient[] =>
+  (ingredients ?? [])
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .map((name, index) => ({
+      id: `mi-${itemId}-${index}`,
+      name,
+      removable: true,
+    }));
 
 const resolveIngredients = (row: ProductRow): MenuIngredient[] => {
   const fromColumn = (row.menu_ingredients ?? [])
@@ -208,11 +220,67 @@ const assembleCatalog = async (
   const items: CatalogItem[] = [];
   let promoPercent = 0;
 
-  if (canLoadProducts) {
+  const { data: promoRows } = await admin
+    .from("promotions")
+    .select("discount_percent")
+    .eq("organization_id", org.id)
+    .eq("active", true);
+
+  promoPercent = Math.max(0, ...(promoRows ?? []).map((row) => toNumber(row.discount_percent)));
+
+  if (surface === "menu" && canLoadProducts) {
+    const { data: menuRows, error: menuError } = await admin
+      .from("menu_items")
+      .select(
+        "id, name, description, category, item_type, price, currency, active, is_featured, sort_order, image_url, ingredients",
+      )
+      .eq("organization_id", org.id)
+      .eq("active", true)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+
+    if (menuError) {
+      console.error("[PUBLIC_SURFACE] menu_items load failed", menuError);
+    } else {
+      for (const row of menuRows ?? []) {
+        const price = toNumber(row.price);
+        const menuType = isMenuType(row.item_type) ? row.item_type : "dish";
+        items.push({
+          id: `menu:${row.id}`,
+          sourceId: row.id as number,
+          source: "menu_item",
+          kind: "food",
+          menuType,
+          title: row.name as string,
+          description: (row.description as string | null) ?? null,
+          category: typeof row.category === "string" ? row.category.trim() || null : null,
+          price,
+          currency: (row.currency as string) || org.default_currency || DEFAULT_CURRENCY,
+          imageUrl:
+            typeof row.image_url === "string" && row.image_url.trim() ? row.image_url.trim() : null,
+          available: true,
+          availableQty: null,
+          ingredients: resolveMenuIngredients(
+            Array.isArray(row.ingredients) ? (row.ingredients as string[]) : [],
+            row.id as number,
+          ),
+          promoPrice:
+            promoPercent > 0
+              ? Math.max(0, Math.round(price * (1 - promoPercent / 100) * 100) / 100)
+              : null,
+          metaLabel: MENU_TYPE_LABELS[menuType],
+          actionable: canOrder ? "order" : "inquire",
+          isFeatured: Boolean(row.is_featured),
+        });
+      }
+    }
+  }
+
+  if (surface === "catalog" && canLoadProducts) {
     const withRecipes = await admin
       .from("products")
       .select(
-        "id, name, description, category, kind, price, currency, active, track_stock, image_url, menu_ingredients, inventory_items!inventory_item_id(on_hand), product_recipes(quantity, inventory_items(id, name))",
+        "id, name, description, category, kind, menu_type, price, currency, active, track_stock, image_url, menu_ingredients, inventory_items!inventory_item_id(on_hand), product_recipes(quantity, inventory_items(id, name))",
       )
       .eq("organization_id", org.id)
       .eq("active", true)
@@ -242,18 +310,9 @@ const assembleCatalog = async (
       }
     }
 
-    const { data: promoRows } = await admin
-      .from("promotions")
-      .select("discount_percent")
-      .eq("organization_id", org.id)
-      .eq("active", true);
-
-    promoPercent = Math.max(0, ...(promoRows ?? []).map((row) => toNumber(row.discount_percent)));
-
     for (const row of rows) {
       const kind = isProductKind(row.kind) ? row.kind : "physical";
-      if (surface === "menu" && kind !== "food") continue;
-      if (surface === "catalog" && kind === "food") continue;
+      if (kind === "food") continue;
 
       const inventory = asSingle(row.inventory_items);
       const onHand = inventory?.on_hand == null ? null : toNumber(inventory.on_hand);
@@ -264,6 +323,7 @@ const assembleCatalog = async (
         sourceId: row.id,
         source: "product",
         kind,
+        menuType: null,
         title: row.name,
         description: row.description,
         category: row.category?.trim() || null,
@@ -272,10 +332,10 @@ const assembleCatalog = async (
         imageUrl: row.image_url?.trim() || null,
         available,
         availableQty: onHand,
-        ingredients: kind === "food" ? resolveIngredients(row) : [],
+        ingredients: [],
         promoPrice:
           promoPercent > 0 ? Math.max(0, Math.round(price * (1 - promoPercent / 100) * 100) / 100) : null,
-        metaLabel: kind === "food" ? "Plato" : kind === "service" ? "Servicio" : "Producto",
+        metaLabel: kind === "service" ? "Servicio" : "Producto",
         actionable: canOrder ? "order" : "inquire",
       });
     }
@@ -318,10 +378,6 @@ const assembleCatalog = async (
     }
   }
 
-  if (!items.length && surface === "menu") {
-    // Empty menu is still a valid surface (org enabled it).
-  }
-
   const currency =
     org.default_currency ||
     items.find((item) => item.currency)?.currency ||
@@ -353,17 +409,24 @@ const assembleCatalog = async (
   }
 
   const filters: Array<{ id: string; label: string }> = [{ id: "all", label: "Todos" }];
-  if (items.some((item) => item.kind === "food")) filters.push({ id: "food", label: "Platos" });
-  if (items.some((item) => item.kind === "physical")) filters.push({ id: "physical", label: "Productos" });
-  if (items.some((item) => item.kind === "service")) filters.push({ id: "service", label: "Servicios" });
-  if (items.some((item) => item.kind === "property")) filters.push({ id: "property", label: "Inmuebles" });
+  if (surface === "menu") {
+    for (const type of ["dish", "drink", "dessert", "side", "combo", "promo"] as const) {
+      if (items.some((item) => item.menuType === type)) {
+        filters.push({ id: type, label: MENU_TYPE_LABELS[type] });
+      }
+    }
+  } else {
+    if (items.some((item) => item.kind === "physical")) filters.push({ id: "physical", label: "Productos" });
+    if (items.some((item) => item.kind === "service")) filters.push({ id: "service", label: "Servicios" });
+    if (items.some((item) => item.kind === "property")) filters.push({ id: "property", label: "Inmuebles" });
+  }
 
   const categories = [
     ...new Set(items.map((item) => item.category).filter((value): value is string => Boolean(value))),
   ].sort((a, b) => a.localeCompare(b, "es"));
 
   const products: MenuProduct[] = items
-    .filter((item) => item.source === "product")
+    .filter((item) => item.source === "menu_item" || item.source === "product")
     .map((item) => ({
       id: item.sourceId,
       name: item.title,
