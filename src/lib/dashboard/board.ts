@@ -165,6 +165,10 @@ export type DashboardRestaurant = {
   topProducts: DashboardProductRow[];
   peakHour: { hour: number; orders: number } | null;
   hourlyOrders: Array<{ hour: number; orders: number }>;
+  /** Heatmap [weekday 0-6][hour 0-23] */
+  weekdayHourHeatmap: number[][];
+  byFulfillment: Array<{ fulfillment: string; orders: number; revenue: number; aov: number }>;
+  aovByChannel: Array<{ channel: string; aov: number; orders: number; revenue: number }>;
   aov: number;
   aovPrev: number;
   ordersCount: number;
@@ -188,6 +192,8 @@ export type DashboardServices = {
   showRate: number | null;
   byPurpose: Array<{ purpose: string; count: number }>;
   topTitles: Array<{ title: string; count: number }>;
+  avgCycleMs: number | null;
+  renewalRate: number | null;
   comparisons: {
     weekly: DashboardServicesComparison;
     monthly: DashboardServicesComparison;
@@ -197,6 +203,15 @@ export type DashboardServices = {
 
 export type DashboardRetail = {
   topProducts: DashboardProductRow[];
+  lowStockCount: number;
+  stockRows: Array<{
+    name: string;
+    onHand: number;
+    reorderPoint: number;
+    daysOfCover: number | null;
+    status: "ok" | "low" | "out";
+  }>;
+  avgDaysOfCover: number | null;
 };
 
 export type DashboardBoard = {
@@ -428,6 +443,8 @@ type OrderRow = {
   total: number | string;
   status: string;
   payment_status?: string | null;
+  payment_method?: string | null;
+  fulfillment?: string | null;
   channel: string | null;
   conversation_id: number | null;
   contact_id: number | null;
@@ -654,7 +671,7 @@ export const loadDashboardBoard = async (
       ? supabase
           .from("orders")
           .select(
-            "id, total, status, payment_status, channel, conversation_id, contact_id, created_at, order_items(product_id, name_snapshot, quantity, unit_price)",
+            "id, total, status, payment_status, payment_method, fulfillment, channel, conversation_id, contact_id, created_at, order_items(product_id, name_snapshot, quantity, unit_price)",
           )
           .eq("organization_id", organizationId)
           .gte("created_at", since730)
@@ -743,9 +760,10 @@ export const loadDashboardBoard = async (
     modules.catalog
       ? supabase
           .from("inventory_items")
-          .select("on_hand, reorder_point, track_stock")
+          .select("name, on_hand, reorder_point, track_stock")
           .eq("organization_id", organizationId)
           .eq("track_stock", true)
+          .limit(200)
       : Promise.resolve(emptyList()),
     modules.calendar
       ? supabase
@@ -1289,12 +1307,46 @@ export const loadDashboardBoard = async (
   }
 
   const recentActiveOrders = activeRecent;
+  const inventoryRows = (
+    (inventoryResult.data ?? []) as Array<{
+      name?: string | null;
+      on_hand: unknown;
+      reorder_point: unknown;
+      track_stock: boolean;
+    }>
+  ).filter((row) => row.track_stock !== false);
+
+  const unitsSoldByName = new Map<string, number>();
+  recentActiveOrders.forEach((row) => {
+    (row.order_items ?? []).forEach((item) => {
+      const name = item.name_snapshot?.trim() || "Producto";
+      unitsSoldByName.set(name, (unitsSoldByName.get(name) ?? 0) + toNumber(item.quantity));
+    });
+  });
+
   const restaurant: DashboardRestaurant | null = modules.kitchen
     ? (() => {
         const hours = Array.from({ length: 24 }, () => 0);
+        const heatmap = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
+        const fulfillmentMap = new Map<string, { orders: number; revenue: number }>();
+        const channelMap = new Map<string, { orders: number; revenue: number }>();
+
         recentActiveOrders.forEach((row) => {
-          hours[localWeekdayHour(row.created_at).hour] += 1;
+          const { weekday, hour } = localWeekdayHour(row.created_at);
+          hours[hour] += 1;
+          heatmap[weekday][hour] += 1;
+          const fulfillment = row.fulfillment?.trim() || "unspecified";
+          const f = fulfillmentMap.get(fulfillment) ?? { orders: 0, revenue: 0 };
+          f.orders += 1;
+          f.revenue += toNumber(row.total);
+          fulfillmentMap.set(fulfillment, f);
+          const channel = row.channel || "otro";
+          const c = channelMap.get(channel) ?? { orders: 0, revenue: 0 };
+          c.orders += 1;
+          c.revenue += toNumber(row.total);
+          channelMap.set(channel, c);
         });
+
         const peak = hours.reduce((best, count, hour) => (count > best.count ? { hour, count } : best), {
           hour: 0,
           count: 0,
@@ -1304,6 +1356,19 @@ export const loadDashboardBoard = async (
           topProducts: topProductsFromOrders(recentActiveOrders),
           peakHour: peak.count ? { hour: peak.hour, orders: peak.count } : null,
           hourlyOrders: hours.map((orders, hour) => ({ hour, orders })),
+          weekdayHourHeatmap: heatmap,
+          byFulfillment: [...fulfillmentMap.entries()].map(([fulfillment, value]) => ({
+            fulfillment,
+            orders: value.orders,
+            revenue: value.revenue,
+            aov: value.orders ? value.revenue / value.orders : 0,
+          })),
+          aovByChannel: [...channelMap.entries()].map(([channel, value]) => ({
+            channel,
+            orders: value.orders,
+            revenue: value.revenue,
+            aov: value.orders ? value.revenue / value.orders : 0,
+          })),
           aov: finance?.aov ?? 0,
           aovPrev: activePrevious.length ? prevRevenue / activePrevious.length : 0,
           ordersCount: recentActiveOrders.length,
@@ -1334,6 +1399,12 @@ export const loadDashboardBoard = async (
             const title = row.title?.trim() || "Cita";
             titleMap.set(title, (titleMap.get(title) ?? 0) + 1);
           });
+          const cycleSamples =
+            stageFunnel?.stages
+              .map((stage) => stage.avgDwellMs)
+              .filter((value): value is number => typeof value === "number" && value > 0) ?? [];
+          const avgCycleMs = average(cycleSamples);
+          const returningTitles = [...titleMap.values()].filter((count) => count > 1).length;
           return {
             scheduled,
             done,
@@ -1344,6 +1415,8 @@ export const loadDashboardBoard = async (
               .map(([title, count]) => ({ title, count }))
               .sort((a, b) => b.count - a.count)
               .slice(0, 5),
+            avgCycleMs,
+            renewalRate: percentOrNull(returningTitles, titleMap.size),
             comparisons: {
               weekly: toServicesComparison(
                 summarizeAppointments(appointmentRows, since7),
@@ -1363,8 +1436,29 @@ export const loadDashboardBoard = async (
       : null;
 
   const retail: DashboardRetail | null =
-    modules.catalog && modules.orders && !modules.kitchen
-      ? { topProducts: topProductsFromOrders(recentActiveOrders) }
+    modules.catalog && modules.orders
+      ? (() => {
+          const stockRows = inventoryRows.map((row) => {
+            const onHand = toNumber(row.on_hand);
+            const reorderPoint = toNumber(row.reorder_point);
+            const name = row.name?.trim() || "Ítem";
+            const sold = unitsSoldByName.get(name) ?? 0;
+            const daily = sold / 30;
+            const daysOfCover = daily > 0 ? Math.round((onHand / daily) * 10) / 10 : null;
+            const status: "ok" | "low" | "out" =
+              onHand <= 0 ? "out" : onHand <= reorderPoint ? "low" : "ok";
+            return { name, onHand, reorderPoint, daysOfCover, status };
+          });
+          const covers = stockRows
+            .map((row) => row.daysOfCover)
+            .filter((value): value is number => value !== null);
+          return {
+            topProducts: topProductsFromOrders(recentActiveOrders),
+            lowStockCount: stockRows.filter((row) => row.status !== "ok").length,
+            stockRows: stockRows.sort((a, b) => a.onHand - b.onHand).slice(0, 12),
+            avgDaysOfCover: covers.length ? average(covers) : null,
+          };
+        })()
       : null;
 
   return {

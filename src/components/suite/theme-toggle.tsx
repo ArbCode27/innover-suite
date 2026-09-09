@@ -17,7 +17,11 @@ export const ThemeToggle = ({ compact = false, row = false, labelClassName }: Th
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const isDark = resolvedTheme === "dark";
-  const ariaLabel = isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro";
+  const ariaLabel = !mounted
+    ? "Cambiar tema"
+    : isDark
+      ? "Cambiar a modo claro"
+      : "Cambiar a modo oscuro";
 
   useEffect(() => {
     setMounted(true);

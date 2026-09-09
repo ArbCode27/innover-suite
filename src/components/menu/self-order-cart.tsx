@@ -303,7 +303,13 @@ export const SelfOrderCart = ({
             size="icon"
             variant="outline"
             className="size-12 rounded-full border-border/80 bg-background/95 shadow-md backdrop-blur supports-backdrop-filter:bg-background/80"
-            aria-label={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+            aria-label={
+              themeMounted
+                ? isDark
+                  ? "Cambiar a modo claro"
+                  : "Cambiar a modo oscuro"
+                : "Cambiar tema"
+            }
             disabled={!themeMounted}
             onClick={handleThemeToggle}
           >
