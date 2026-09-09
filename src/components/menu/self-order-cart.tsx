@@ -3,7 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Loader2, ShoppingBag, Trash2, UtensilsCrossed } from "lucide-react";
+import { useTheme } from "next-themes";
+import { Loader2, Moon, ShoppingBag, Sun, Trash2, UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -70,11 +71,18 @@ export const SelfOrderCart = ({
 
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [themeMounted, setThemeMounted] = useState(false);
   const [, startTransition] = useTransition();
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
 
   ensureSlug(org.slug);
   const cantidad = getCantidadItems();
   const totales = getTotales(org.promoPercent, org.taxRate);
+
+  useEffect(() => {
+    setThemeMounted(true);
+  }, []);
 
   useEffect(() => {
     if (searchParams.get("cart") === "1" || forceOpen) {
@@ -82,6 +90,10 @@ export const SelfOrderCart = ({
       onForceOpenHandled?.();
     }
   }, [searchParams, forceOpen, onForceOpenHandled]);
+
+  const handleThemeToggle = () => {
+    setTheme(isDark ? "light" : "dark");
+  };
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
@@ -285,23 +297,33 @@ export const SelfOrderCart = ({
   return (
     <>
       {!hideFab ? (
-        <Button
-          type="button"
-          size="icon"
-          className={cn(
-            "fixed right-4 bottom-4 z-40 size-14 rounded-full shadow-lg md:right-6 md:bottom-6",
-            fabClassName,
-          )}
-          aria-label={`Abrir carrito, ${cantidad} ítems`}
-          onClick={() => setOpen(true)}
-        >
-          <ShoppingBag className="size-5" />
-          {cantidad > 0 ? (
-            <Badge className="absolute -top-1 -right-1 size-5 justify-center rounded-full p-0 text-[10px]">
-              {cantidad}
-            </Badge>
-          ) : null}
-        </Button>
+        <div className="fixed right-4 bottom-4 z-40 flex flex-col items-center gap-3 md:right-6 md:bottom-6">
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="size-12 rounded-full border-border/80 bg-background/95 shadow-md backdrop-blur supports-backdrop-filter:bg-background/80"
+            aria-label={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+            disabled={!themeMounted}
+            onClick={handleThemeToggle}
+          >
+            {themeMounted && isDark ? <Sun className="size-5" /> : <Moon className="size-5" />}
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            className={cn("relative size-14 rounded-full shadow-lg", fabClassName)}
+            aria-label={`Abrir carrito, ${cantidad} ítems`}
+            onClick={() => setOpen(true)}
+          >
+            <ShoppingBag className="size-5" />
+            {cantidad > 0 ? (
+              <Badge className="absolute -top-1 -right-1 size-5 justify-center rounded-full p-0 text-[10px]">
+                {cantidad}
+              </Badge>
+            ) : null}
+          </Button>
+        </div>
       ) : null}
 
       {isDesktop ? (
