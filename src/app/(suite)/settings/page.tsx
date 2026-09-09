@@ -6,7 +6,6 @@ import { OfficeHoursForm } from "./office-hours-form";
 import { ModulesSettingsForm } from "./modules-settings-form";
 import { CurrencySettingsForm } from "./currency-settings-form";
 import { BrowserNotificationsCard } from "./browser-notifications-card";
-import { AppearanceSettingsCard } from "./appearance-settings-card";
 import { OrganizationBrandSettingsCard } from "./organization-brand-settings-card";
 import { PublicSurfacesSettingsCard } from "./public-menu-settings-card";
 import { SecuritySettingsForm } from "./security-settings-form";
@@ -197,7 +196,6 @@ export default async function SettingsPage() {
           themePalette={orgThemePalette}
         />
         <BrowserNotificationsCard />
-        <AppearanceSettingsCard />
         <ModulesSettingsForm canManageOrganization={canManageOrganization} modules={modules} />
         <CurrencySettingsForm canManageOrganization={canManageOrganization} currencies={currencies} />
         <AgentSettingsForm
