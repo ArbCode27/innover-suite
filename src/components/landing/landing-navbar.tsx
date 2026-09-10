@@ -20,36 +20,42 @@ export const LandingNavbar = ({ isLoggedIn }: LandingNavbarProps) => {
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-6 md:flex" aria-label="Navegación principal">
+        <nav className="hidden items-center gap-5 lg:flex" aria-label="Navegación principal">
           <Link
-            href="#canales"
+            href="#industrias"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            Canales de Meta
+            Industrias
+          </Link>
+          <Link
+            href="#plataforma"
+            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Plataforma
           </Link>
           <Link
             href="#funciones"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            Funcionalidades
+            Capacidades
+          </Link>
+          <Link
+            href="#canales"
+            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Canales
           </Link>
           <Link
             href="#seguridad"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            Seguridad y Datos
+            Seguridad
           </Link>
           <Link
             href="#faq"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            Preguntas
-          </Link>
-          <Link
-            href="/privacy"
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Privacidad
+            FAQ
           </Link>
         </nav>
 

@@ -22,40 +22,40 @@ export const LandingFooter = () => {
               </div>
             </Link>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Plataforma CRM omnicanal para empresas y comercios. Centraliza WhatsApp, Instagram y
-              Facebook Messenger con inteligencia artificial y control humano.
+              CRM omnicanal con IA para empresas. Chats de Meta, ventas y operación por módulos:
+              menú, pedidos, cocina, inventario o inmuebles.
             </p>
           </div>
 
-          {/* Product & Channels */}
+          {/* Product */}
           <div className="space-y-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-foreground">
-              Integraciones
+              Producto
             </p>
             <ul className="space-y-2 text-xs">
               <li>
-                <Link href="#canales" className="transition hover:text-foreground">
-                  WhatsApp Business Cloud API
+                <Link href="#industrias" className="transition hover:text-foreground">
+                  Por industria
                 </Link>
               </li>
               <li>
-                <Link href="#canales" className="transition hover:text-foreground">
-                  Instagram Direct Messaging
-                </Link>
-              </li>
-              <li>
-                <Link href="#canales" className="transition hover:text-foreground">
-                  Facebook Messenger
+                <Link href="#plataforma" className="transition hover:text-foreground">
+                  Mapa de la plataforma
                 </Link>
               </li>
               <li>
                 <Link href="#funciones" className="transition hover:text-foreground">
-                  Embudos de Ventas Kanban
+                  Capacidades
                 </Link>
               </li>
               <li>
-                <Link href="#funciones" className="transition hover:text-foreground">
-                  Agente IA con Traspaso Humano
+                <Link href="#flujo" className="transition hover:text-foreground">
+                  Flujo restaurante
+                </Link>
+              </li>
+              <li>
+                <Link href="#canales" className="transition hover:text-foreground">
+                  Canales Meta
                 </Link>
               </li>
             </ul>
