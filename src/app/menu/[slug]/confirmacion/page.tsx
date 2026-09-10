@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { SelfOrderConfirmation } from "@/components/menu/self-order-confirmation";
+import { PublicPaletteSync } from "@/components/theme/public-palette-sync";
 import { loadPublicSurfaceBySlug } from "@/lib/menu/public-menu";
-import { PALETTE_ATTRIBUTE, parsePaletteId } from "@/lib/theme/palettes";
+import { parsePaletteId } from "@/lib/theme/palettes";
 
 type ConfirmacionPageProps = {
   params: Promise<{ slug: string }>;
@@ -33,11 +34,7 @@ const ConfirmacionPage = async ({ params, searchParams }: ConfirmacionPageProps)
 
   return (
     <>
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `try{document.documentElement.setAttribute(${JSON.stringify(PALETTE_ATTRIBUTE)},${JSON.stringify(palette)});}catch(e){}`,
-        }}
-      />
+      <PublicPaletteSync palette={palette} />
       <SelfOrderConfirmation
         slug={slug}
         orgName={catalog.organization.name}

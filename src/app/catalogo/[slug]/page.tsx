@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CatalogBoard } from "@/app/menu/[slug]/menu-board";
+import { PublicPaletteSync } from "@/components/theme/public-palette-sync";
 import { loadPublicSurfaceBySlug } from "@/lib/menu/public-menu";
-import { PALETTE_ATTRIBUTE, parsePaletteId } from "@/lib/theme/palettes";
+import { parsePaletteId } from "@/lib/theme/palettes";
 
 type CatalogPageProps = {
   params: Promise<{ slug: string }>;
@@ -41,11 +42,7 @@ const CatalogPage = async ({ params }: CatalogPageProps) => {
 
   return (
     <>
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `try{document.documentElement.setAttribute(${JSON.stringify(PALETTE_ATTRIBUTE)},${JSON.stringify(palette)});}catch(e){}`,
-        }}
-      />
+      <PublicPaletteSync palette={palette} />
       <CatalogBoard catalog={catalog} />
     </>
   );

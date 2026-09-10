@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { SelfOrderProductClient } from "@/components/menu/self-order-product-client";
+import { PublicPaletteSync } from "@/components/theme/public-palette-sync";
 import { loadPublicSurfaceBySlug } from "@/lib/menu/public-menu";
-import { PALETTE_ATTRIBUTE, parsePaletteId } from "@/lib/theme/palettes";
+import { parsePaletteId } from "@/lib/theme/palettes";
 
 type ProductPageProps = {
   params: Promise<{ slug: string; id: string }>;
@@ -37,11 +38,7 @@ const ProductPage = async ({ params }: ProductPageProps) => {
 
   return (
     <>
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `try{document.documentElement.setAttribute(${JSON.stringify(PALETTE_ATTRIBUTE)},${JSON.stringify(palette)});}catch(e){}`,
-        }}
-      />
+      <PublicPaletteSync palette={palette} />
       <Suspense fallback={null}>
         <SelfOrderProductClient
           slug={slug}

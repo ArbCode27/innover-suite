@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { SelfOrderBoard } from "@/components/menu/self-order-board";
+import { PublicPaletteSync } from "@/components/theme/public-palette-sync";
 import { loadPublicSurfaceBySlug } from "@/lib/menu/public-menu";
-import { PALETTE_ATTRIBUTE, parsePaletteId } from "@/lib/theme/palettes";
+import { parsePaletteId } from "@/lib/theme/palettes";
 
 type MenuPageProps = {
   params: Promise<{ slug: string }>;
@@ -42,11 +43,7 @@ const MenuPage = async ({ params }: MenuPageProps) => {
 
   return (
     <>
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `try{document.documentElement.setAttribute(${JSON.stringify(PALETTE_ATTRIBUTE)},${JSON.stringify(palette)});}catch(e){}`,
-        }}
-      />
+      <PublicPaletteSync palette={palette} />
       <Suspense fallback={null}>
         <SelfOrderBoard catalog={catalog} />
       </Suspense>

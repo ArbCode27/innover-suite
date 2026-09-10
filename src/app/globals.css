@@ -348,3 +348,125 @@
       radial-gradient(circle at 85% 22%, color-mix(in oklch, var(--brand-secondary) 16%, transparent), transparent 30rem);
   }
 }
+
+/* Ticket de confirmación del menú: plato + cubiertos */
+@keyframes order-ticket-fork-in {
+  0% {
+    opacity: 0;
+    transform: translate(-18px, 8px) rotate(-18deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(1px, -1px) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+
+@keyframes order-ticket-knife-in {
+  0% {
+    opacity: 0;
+    transform: translate(18px, 8px) rotate(18deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(-1px, -1px) rotate(-2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+
+@keyframes order-ticket-plate-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes order-ticket-check-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) translateY(6px);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.12) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes order-ticket-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes order-ticket-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.08);
+  }
+}
+
+.order-ticket-fork-in {
+  transform-origin: 28px 60px;
+  animation: order-ticket-fork-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.order-ticket-knife-in {
+  transform-origin: 132px 60px;
+  animation: order-ticket-knife-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+
+.order-ticket-plate-in {
+  transform-origin: 80px 62px;
+  animation: order-ticket-plate-in 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
+}
+
+.order-ticket-check-in {
+  transform-origin: 108px 36px;
+  animation: order-ticket-check-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.45s both;
+}
+
+.order-ticket-float {
+  animation: order-ticket-float 3.4s ease-in-out 0.9s infinite;
+}
+
+.order-ticket-glow {
+  animation: order-ticket-glow-pulse 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .order-ticket-fork-in,
+  .order-ticket-knife-in,
+  .order-ticket-plate-in,
+  .order-ticket-check-in,
+  .order-ticket-float,
+  .order-ticket-glow {
+    animation: none !important;
+  }
+}
