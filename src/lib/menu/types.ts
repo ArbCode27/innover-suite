@@ -5,6 +5,7 @@ export type MenuIngredient = {
   id: string;
   name: string;
   removable: boolean;
+  imageUrl: string | null;
 };
 
 export type CatalogItemKind = "food" | "physical" | "service" | "property";

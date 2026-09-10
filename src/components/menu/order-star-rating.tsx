@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -65,10 +65,10 @@ export const OrderStarRating = ({
                 className={cn(
                   "size-8 transition-colors sm:size-9",
                   selected
-                    ? "fill-amber-400 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.35)]"
-                    : "fill-transparent text-muted-foreground/45 dark:text-foreground/35",
+                    ? "fill-amber-400 text-amber-400"
+                    : "fill-transparent text-muted-foreground/40",
                 )}
-                strokeWidth={selected ? 0 : 1.75}
+                strokeWidth={selected ? 0 : 1.6}
                 aria-hidden
               />
             </button>

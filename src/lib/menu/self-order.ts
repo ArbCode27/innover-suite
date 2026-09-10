@@ -156,51 +156,101 @@ export const resolveDrinkFallbackImage = (name: string): string => {
   return "https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=400&q=80";
 };
 
-/** Bebidas del menú como grupo con cantidad; en combo/promo 1 unidad va incluida. */
+/** Bebidas, acompañantes y postres como grupos de cantidad. */
 export const buildModifierGroupsForItem = (
   item: CatalogItem,
   drinkItems: CatalogItem[],
+  sideItems: CatalogItem[] = [],
+  dessertItems: CatalogItem[] = [],
 ): SelfOrderModifierGroup[] => {
   const groups: SelfOrderModifierGroup[] = [];
-  if (item.menuType === "drink") return groups;
+  const standalone =
+    item.menuType === "drink" || item.menuType === "side" || item.menuType === "dessert";
+  if (standalone) return groups;
 
   const drinks = drinkItems.filter(
     (drink) => drink.available && drink.sourceId !== item.sourceId && drink.price != null,
   );
-  if (!drinks.length) return groups;
+  if (drinks.length) {
+    const isComboLike = item.menuType === "combo" || item.menuType === "promo";
+    groups.push({
+      id: "addon-bebida",
+      title: isComboLike ? "Elige tu bebida" : "Agregar bebida (opcional)",
+      required: isComboLike,
+      minSelect: isComboLike ? 1 : 0,
+      maxSelect: 12,
+      includedFreeCount: isComboLike ? 1 : 0,
+      options: drinks.map((drink) => ({
+        id: `drink-${drink.sourceId}`,
+        name: drink.title,
+        unitListPrice: displayPrice(drink),
+        menuItemId: drink.sourceId,
+        imageUrl: drink.imageUrl?.trim() || resolveDrinkFallbackImage(drink.title),
+      })),
+    });
+  }
 
-  const isComboLike = item.menuType === "combo" || item.menuType === "promo";
-  groups.push({
-    id: "addon-bebida",
-    title: isComboLike ? "Elige tu bebida" : "Agregar bebida (opcional)",
-    required: isComboLike,
-    minSelect: isComboLike ? 1 : 0,
-    maxSelect: 12,
-    includedFreeCount: isComboLike ? 1 : 0,
-    options: drinks.map((drink) => ({
-      id: `drink-${drink.sourceId}`,
-      name: drink.title,
-      unitListPrice: displayPrice(drink),
-      menuItemId: drink.sourceId,
-      imageUrl: drink.imageUrl?.trim() || resolveDrinkFallbackImage(drink.title),
-    })),
-  });
+  const sides = sideItems.filter(
+    (side) => side.available && side.sourceId !== item.sourceId && side.price != null,
+  );
+  if (sides.length) {
+    groups.push({
+      id: "addon-extra",
+      title: "Adicionales y acompañantes",
+      required: false,
+      minSelect: 0,
+      maxSelect: 20,
+      includedFreeCount: 0,
+      options: sides.map((side) => ({
+        id: `side-${side.sourceId}`,
+        name: side.title,
+        unitListPrice: displayPrice(side),
+        menuItemId: side.sourceId,
+        imageUrl: side.imageUrl,
+      })),
+    });
+  }
+
+  const desserts = dessertItems.filter(
+    (dessert) =>
+      dessert.available && dessert.sourceId !== item.sourceId && dessert.price != null,
+  );
+  if (desserts.length) {
+    groups.push({
+      id: "addon-postre",
+      title: "Postres",
+      required: false,
+      minSelect: 0,
+      maxSelect: 12,
+      includedFreeCount: 0,
+      options: desserts.map((dessert) => ({
+        id: `dessert-${dessert.sourceId}`,
+        name: dessert.title,
+        unitListPrice: displayPrice(dessert),
+        menuItemId: dessert.sourceId,
+        imageUrl: dessert.imageUrl,
+      })),
+    });
+  }
 
   return groups;
 };
 
-type DrinkQtyMap = Record<string, number>;
+type OptionQtyMap = Record<string, number>;
 
-export const sumDrinkQuantities = (qtyByOption: DrinkQtyMap) =>
+export const sumOptionQuantities = (qtyByOption: OptionQtyMap) =>
   Object.values(qtyByOption).reduce((sum, qty) => sum + Math.max(0, qty), 0);
 
+/** @deprecated Prefer sumOptionQuantities */
+export const sumDrinkQuantities = sumOptionQuantities;
+
 /**
- * Aplica unidades gratis a las bebidas más caras primero.
+ * Aplica unidades gratis a las opciones más caras primero.
  * Devuelve selecciones con quantity y priceDelta (cargo neto de esa línea).
  */
-export const resolveDrinkSelections = (
+export const resolveQtySelections = (
   group: SelfOrderModifierGroup,
-  qtyByOption: DrinkQtyMap,
+  qtyByOption: OptionQtyMap,
 ): SelfOrderModifierSelection[] => {
   const rows = group.options
     .map((option) => ({
@@ -255,6 +305,9 @@ export const resolveDrinkSelections = (
   });
 };
 
+/** @deprecated Prefer resolveQtySelections */
+export const resolveDrinkSelections = resolveQtySelections;
+
 export const calcUnitPrice = (
   basePrice: number,
   modifiers: SelfOrderModifierSelection[],
@@ -272,14 +325,21 @@ export const validateModifierGroups = (
       .filter((entry) => entry.groupId === group.id)
       .reduce((sum, entry) => sum + entry.quantity, 0);
     if (group.required && count < group.minSelect) {
-      return `Selecciona al menos ${group.minSelect} bebida${group.minSelect > 1 ? "s" : ""} en “${group.title}”`;
+      const unit = group.id === "addon-bebida" ? "bebida" : "opción";
+      const plural = group.minSelect > 1 ? (unit === "bebida" ? "s" : "es") : "";
+      return `Selecciona al menos ${group.minSelect} ${unit}${plural} en “${group.title}”`;
     }
     if (count > group.maxSelect) {
-      return `Máximo ${group.maxSelect} bebidas en “${group.title}”`;
+      return `Máximo ${group.maxSelect} en “${group.title}”`;
     }
   }
   return null;
 };
+
+export const validateGroupsSubset = (
+  groups: SelfOrderModifierGroup[],
+  selected: SelfOrderModifierSelection[],
+) => validateModifierGroups(groups, selected);
 
 export const buildLineNote = (params: {
   removedNames: string[];
@@ -329,9 +389,43 @@ export const ingredientsInitialState = (ingredients: MenuIngredient[]) => {
   return initial;
 };
 
-export const drinkQtyHint = (group: SelfOrderModifierGroup) => {
+export const groupQtyHint = (group: SelfOrderModifierGroup) => {
   if (group.includedFreeCount > 0) {
     return `${group.includedFreeCount} incluida${group.includedFreeCount > 1 ? "s" : ""} · adicionales al precio de carta`;
   }
   return "Opcional · cada unidad al precio de carta";
+};
+
+/** @deprecated Prefer groupQtyHint */
+export const drinkQtyHint = groupQtyHint;
+
+export type SelfOrderFlowStep = "customize" | "drinks" | "extras";
+
+export const buildSelfOrderSteps = (
+  item: CatalogItem,
+  groups: SelfOrderModifierGroup[],
+): SelfOrderFlowStep[] => {
+  const standalone =
+    item.menuType === "drink" || item.menuType === "side" || item.menuType === "dessert";
+  if (standalone) return ["customize"];
+
+  const steps: SelfOrderFlowStep[] = ["customize"];
+  if (groups.some((group) => group.id === "addon-bebida")) {
+    steps.push("drinks");
+  }
+  if (groups.some((group) => group.id === "addon-extra" || group.id === "addon-postre")) {
+    steps.push("extras");
+  }
+  return steps;
+};
+
+export const stepLabel = (step: SelfOrderFlowStep) => {
+  switch (step) {
+    case "customize":
+      return "Plato";
+    case "drinks":
+      return "Bebidas";
+    case "extras":
+      return "Extras";
+  }
 };

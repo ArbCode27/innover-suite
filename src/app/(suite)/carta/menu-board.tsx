@@ -24,6 +24,7 @@ import {
   formatMoney,
   type MenuItemRecord,
   type MenuType,
+  type StoredMenuIngredient,
 } from "@/lib/menu/crm-types";
 import { DEFAULT_CURRENCY, type OrganizationCurrencySettings } from "@/lib/organizations/currencies";
 import { cn } from "@/lib/utils";
@@ -51,23 +52,42 @@ type MenuBoardProps = {
   canManage: boolean;
 };
 
+type IngredientFormRow = {
+  key: string;
+  name: string;
+  imageUrl: string | null;
+  imageFile: File | null;
+  imagePreview: string | null;
+  removeImage: boolean;
+};
+
 const emptyForm = {
   name: "",
   category: "",
   itemType: "dish" as MenuType,
   price: "",
   description: "",
-  ingredients: "",
   isFeatured: false,
   active: true,
   currency: DEFAULT_CURRENCY,
   comboItemIds: [] as number[],
 };
 
+const toIngredientRows = (ingredients: StoredMenuIngredient[]): IngredientFormRow[] =>
+  ingredients.map((ingredient, index) => ({
+    key: `ing-${index}-${ingredient.name}`,
+    name: ingredient.name,
+    imageUrl: ingredient.imageUrl,
+    imageFile: null,
+    imagePreview: null,
+    removeImage: false,
+  }));
+
 export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState({ ...emptyForm, currency: currencies.defaultCode });
+  const [ingredientRows, setIngredientRows] = useState<IngredientFormRow[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | MenuType>("all");
   const [isPending, startTransition] = useTransition();
@@ -96,6 +116,7 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
   const handleOpenCreate = () => {
     setEditingId(null);
     setForm({ ...emptyForm, currency: currencies.defaultCode });
+    setIngredientRows([]);
     setImageFile(null);
     setImagePreview(null);
     setExistingImageUrl(null);
@@ -111,12 +132,12 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
       itemType: dish.itemType,
       price: String(dish.price),
       description: dish.description ?? "",
-      ingredients: dish.ingredients.join(", "),
       isFeatured: dish.isFeatured,
       active: dish.active,
       currency: dish.currency || currencies.defaultCode,
       comboItemIds: dish.comboItemIds,
     });
+    setIngredientRows(toIngredientRows(dish.ingredients));
     setImageFile(null);
     setImagePreview(null);
     setExistingImageUrl(dish.imageUrl);
@@ -137,7 +158,21 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
     payload.set("comboItemIds", form.comboItemIds.join(","));
     payload.set("price", form.price);
     payload.set("currency", form.currency);
-    payload.set("ingredients", form.ingredients);
+    payload.set(
+      "ingredientsJson",
+      JSON.stringify(
+        ingredientRows
+          .map((row) => ({
+            name: row.name.trim(),
+            imageUrl: row.removeImage ? null : row.imageUrl,
+          }))
+          .filter((row) => row.name),
+      ),
+    );
+    ingredientRows.forEach((row, index) => {
+      if (row.imageFile) payload.set(`ingredientImage_${index}`, row.imageFile);
+      if (row.removeImage) payload.set(`removeIngredientImage_${index}`, "true");
+    });
     if (imageFile) payload.set("image", imageFile);
     if (removeExistingImage) payload.set("removeImage", "true");
 
@@ -360,19 +395,144 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                 }
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="menu-ingredients">Ingredientes removibles</Label>
-              <Input
-                id="menu-ingredients"
-                placeholder="Cebolla, cilantro, queso…"
-                value={form.ingredients}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, ingredients: event.target.value }))
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                Separados por coma. El cliente puede quitarlos al pedir.
-              </p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label>Ingredientes removibles</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setIngredientRows((current) => [
+                      ...current,
+                      {
+                        key: `ing-new-${Date.now()}`,
+                        name: "",
+                        imageUrl: null,
+                        imageFile: null,
+                        imagePreview: null,
+                        removeImage: false,
+                      },
+                    ])
+                  }
+                >
+                  <Plus />
+                  Agregar
+                </Button>
+              </div>
+              {ingredientRows.length ? (
+                <div className="space-y-2">
+                  {ingredientRows.map((row, index) => {
+                    const preview =
+                      row.imagePreview || (!row.removeImage && row.imageUrl ? row.imageUrl : null);
+                    return (
+                      <div
+                        key={row.key}
+                        className="flex items-start gap-2 rounded-xl border border-border/70 p-2.5"
+                      >
+                        <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+                          {preview ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={preview} alt="" className="size-full object-cover" />
+                          ) : (
+                            <ImagePlus className="size-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <Input
+                            value={row.name}
+                            placeholder="Ej. Cebolla"
+                            onChange={(event) =>
+                              setIngredientRows((current) =>
+                                current.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, name: event.target.value }
+                                    : item,
+                                ),
+                              )
+                            }
+                          />
+                          <div className="flex flex-wrap gap-1.5">
+                            <label className="inline-flex">
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                className="sr-only"
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0] ?? null;
+                                  setIngredientRows((current) =>
+                                    current.map((item, itemIndex) =>
+                                      itemIndex === index
+                                        ? {
+                                            ...item,
+                                            imageFile: file,
+                                            imagePreview: file
+                                              ? URL.createObjectURL(file)
+                                              : null,
+                                            removeImage: false,
+                                          }
+                                        : item,
+                                    ),
+                                  );
+                                  event.target.value = "";
+                                }}
+                              />
+                              <Button type="button" size="sm" variant="outline" asChild>
+                                <span>
+                                  <ImagePlus />
+                                  Foto
+                                </span>
+                              </Button>
+                            </label>
+                            {preview ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  setIngredientRows((current) =>
+                                    current.map((item, itemIndex) =>
+                                      itemIndex === index
+                                        ? {
+                                            ...item,
+                                            imageFile: null,
+                                            imagePreview: null,
+                                            removeImage: true,
+                                          }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                              >
+                                <X />
+                                Quitar foto
+                              </Button>
+                            ) : null}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive"
+                              onClick={() =>
+                                setIngredientRows((current) =>
+                                  current.filter((_, itemIndex) => itemIndex !== index),
+                                )
+                              }
+                            >
+                              <Trash2 />
+                              Quitar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-dashed border-border/70 px-3 py-4 text-xs text-muted-foreground">
+                  Agrega ingredientes que el cliente pueda quitar al pedir. La foto es opcional.
+                </p>
+              )}
             </div>
 
             {form.itemType === "combo" || form.itemType === "promo" ? (

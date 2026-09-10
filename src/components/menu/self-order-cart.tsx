@@ -71,6 +71,7 @@ export const SelfOrderCart = ({
 
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [themeMounted, setThemeMounted] = useState(false);
   const [, startTransition] = useTransition();
   const { resolvedTheme, setTheme } = useTheme();
@@ -102,10 +103,21 @@ export const SelfOrderCart = ({
     }
   };
 
+  const handleCustomerNameChange = (value: string) => {
+    setCustomerName(value);
+    if (nameError && value.trim().length >= 2) {
+      setNameError(null);
+    }
+  };
+
   const handleCheckout = () => {
     setError(null);
+    setNameError(null);
     if (customerName.trim().length < 2) {
-      setError("Indica el nombre del cliente.");
+      setNameError("Indica el nombre del cliente.");
+      requestAnimationFrame(() => {
+        document.getElementById("self-order-customer")?.focus();
+      });
       return;
     }
     if (!items.length) {
@@ -157,10 +169,17 @@ export const SelfOrderCart = ({
           <Input
             id="self-order-customer"
             value={customerName}
-            onChange={(event) => setCustomerName(event.target.value)}
+            onChange={(event) => handleCustomerNameChange(event.target.value)}
             placeholder="Ej. María Pérez / Mesa 4"
             className="rounded-xl"
+            aria-invalid={Boolean(nameError)}
+            aria-describedby={nameError ? "self-order-customer-error" : undefined}
           />
+          {nameError ? (
+            <p id="self-order-customer-error" className="text-xs text-destructive" role="alert">
+              {nameError}
+            </p>
+          ) : null}
         </div>
 
         {!items.length ? (

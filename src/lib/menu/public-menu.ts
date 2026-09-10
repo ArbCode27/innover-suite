@@ -15,6 +15,7 @@ import type {
   PublicCatalogPayload,
   PublicSurface,
 } from "@/lib/menu/types";
+import { parseStoredIngredients } from "@/lib/menu/crm-types";
 import { parsePaletteId } from "@/lib/theme/palettes";
 import { isMenuType, MENU_TYPE_LABELS } from "@/lib/commerce/types";
 
@@ -96,15 +97,16 @@ const asSingle = <T,>(value: T | T[] | null | undefined): T | null => {
   return value ?? null;
 };
 
-const resolveMenuIngredients = (ingredients: string[] | null | undefined, itemId: number): MenuIngredient[] =>
-  (ingredients ?? [])
-    .map((name) => name.trim())
-    .filter(Boolean)
-    .map((name, index) => ({
-      id: `mi-${itemId}-${index}`,
-      name,
-      removable: true,
-    }));
+const resolveMenuIngredients = (
+  ingredients: unknown,
+  itemId: number,
+): MenuIngredient[] =>
+  parseStoredIngredients(ingredients).map((ingredient, index) => ({
+    id: `mi-${itemId}-${index}`,
+    name: ingredient.name,
+    removable: true,
+    imageUrl: ingredient.imageUrl,
+  }));
 
 const resolveIngredients = (row: ProductRow): MenuIngredient[] => {
   const fromColumn = (row.menu_ingredients ?? [])
@@ -114,6 +116,7 @@ const resolveIngredients = (row: ProductRow): MenuIngredient[] => {
       id: `mi-${row.id}-${index}`,
       name,
       removable: true,
+      imageUrl: null as string | null,
     }));
 
   if (fromColumn.length) return fromColumn;
@@ -126,6 +129,7 @@ const resolveIngredients = (row: ProductRow): MenuIngredient[] => {
       id: `pr-${item.id}`,
       name: item.name.trim(),
       removable: true,
+      imageUrl: null,
     });
   }
   return fromRecipes;
@@ -260,10 +264,7 @@ const assembleCatalog = async (
             typeof row.image_url === "string" && row.image_url.trim() ? row.image_url.trim() : null,
           available: true,
           availableQty: null,
-          ingredients: resolveMenuIngredients(
-            Array.isArray(row.ingredients) ? (row.ingredients as string[]) : [],
-            row.id as number,
-          ),
+          ingredients: resolveMenuIngredients(row.ingredients, row.id as number),
           promoPrice:
             promoPercent > 0
               ? Math.max(0, Math.round(price * (1 - promoPercent / 100) * 100) / 100)

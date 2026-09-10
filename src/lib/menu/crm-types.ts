@@ -10,6 +10,11 @@ import { DEFAULT_CURRENCY } from "@/lib/organizations/currencies";
 
 export { MENU_TYPES, MENU_TYPE_LABELS, formatMoney, isMenuType, type MenuType };
 
+export type StoredMenuIngredient = {
+  name: string;
+  imageUrl: string | null;
+};
+
 export type MenuItemRecord = {
   id: number;
   name: string;
@@ -24,7 +29,7 @@ export type MenuItemRecord = {
   imageUrl: string | null;
   imagePath: string | null;
   imageMime: string | null;
-  ingredients: string[];
+  ingredients: StoredMenuIngredient[];
   comboItemIds: number[];
   legacyProductId: number | null;
 };
@@ -43,8 +48,38 @@ export type MenuItemRow = {
   image_url: string | null;
   image_path: string | null;
   image_mime: string | null;
-  ingredients: string[] | null;
+  ingredients: unknown;
   legacy_product_id: number | null;
+};
+
+export const parseStoredIngredients = (raw: unknown): StoredMenuIngredient[] => {
+  if (!Array.isArray(raw)) return [];
+
+  const result: StoredMenuIngredient[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of raw) {
+    if (typeof entry === "string") {
+      const name = entry.trim();
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      result.push({ name, imageUrl: null });
+      continue;
+    }
+
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+
+    const imageRaw = record.imageUrl ?? record.image_url;
+    const imageUrl =
+      typeof imageRaw === "string" && imageRaw.trim() ? imageRaw.trim() : null;
+    result.push({ name, imageUrl });
+  }
+
+  return result;
 };
 
 export const mapMenuItemRow = (
@@ -64,12 +99,14 @@ export const mapMenuItemRow = (
   imageUrl: typeof row.image_url === "string" && row.image_url.trim() ? row.image_url.trim() : null,
   imagePath: typeof row.image_path === "string" && row.image_path.trim() ? row.image_path.trim() : null,
   imageMime: typeof row.image_mime === "string" && row.image_mime.trim() ? row.image_mime.trim() : null,
-  ingredients: Array.isArray(row.ingredients)
-    ? row.ingredients.map((value) => String(value).trim()).filter(Boolean)
-    : [],
+  ingredients: parseStoredIngredients(row.ingredients),
   comboItemIds,
   legacyProductId: row.legacy_product_id,
 });
 
-export const normalizeIngredients = (value: string[] | undefined) =>
-  [...new Set((value ?? []).map((item) => item.trim()).filter(Boolean))];
+export const normalizeIngredients = (
+  value: Array<string | StoredMenuIngredient> | undefined,
+): StoredMenuIngredient[] => {
+  if (!value?.length) return [];
+  return parseStoredIngredients(value);
+};

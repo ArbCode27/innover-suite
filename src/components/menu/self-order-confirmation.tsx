@@ -6,9 +6,7 @@ import { ArrowRight, Check, Clock3 } from "lucide-react";
 import { toast } from "sonner";
 import { OrderStarRating } from "@/components/menu/order-star-rating";
 import { OrderTicketIcon } from "@/components/menu/order-ticket-icon";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { formatMoney } from "@/lib/commerce/types";
 import { cn } from "@/lib/utils";
 
@@ -81,42 +79,64 @@ export const SelfOrderConfirmation = ({
       <div className="relative w-full">
         <div
           aria-hidden
-          className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[min(34rem,90vw)] w-[min(34rem,90vw)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle_at_center,color-mix(in_oklch,var(--primary)_22%,transparent)_0%,transparent_68%)] blur-2xl"
+          className="pointer-events-none absolute inset-x-0 top-1/2 -z-10 mx-auto h-[28rem] w-[min(100%,28rem)] -translate-y-1/2 rounded-[40%] bg-[radial-gradient(ellipse_at_center,color-mix(in_oklch,var(--primary)_18%,transparent)_0%,transparent_70%)] blur-3xl"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(ellipse_at_top,color-mix(in_oklch,var(--secondary)_35%,transparent),transparent_55%)]"
         />
 
         <article
           className={cn(
-            "relative w-full overflow-hidden rounded-[1.75rem] border border-border/50 bg-card/95 shadow-[0_24px_60px_-28px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-700",
-            entered ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0",
+            "relative w-full overflow-hidden rounded-[1.5rem] bg-card shadow-[0_20px_50px_-24px_rgba(0,0,0,0.35)] ring-1 ring-foreground/8 transition duration-700",
+            entered ? "translate-y-0 opacity-100" : "translate-y-5 opacity-0",
           )}
         >
-          <div className="space-y-6 px-6 pb-7 pt-6 sm:px-8">
-            <header className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground dark:text-foreground/65">
-                  Tu pedido
-                </p>
-                <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                  {displayId}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground dark:text-foreground/70">{orgName}</p>
-              </div>
-              <Badge className="rounded-full border-transparent bg-emerald-500/15 px-3 py-1 text-emerald-600 dark:text-emerald-400">
-                Enviado
-              </Badge>
-            </header>
+          {/* Ticket top strip */}
+          <div className="relative overflow-hidden bg-[linear-gradient(135deg,color-mix(in_oklch,var(--primary)_14%,var(--card))_0%,color-mix(in_oklch,var(--secondary)_28%,var(--card))_100%)] px-6 pb-5 pt-7 sm:px-8">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:radial-gradient(color-mix(in_oklch,var(--foreground)_8%,transparent)_1px,transparent_1px)] [background-size:14px_14px]"
+            />
+            <div className="relative space-y-1 text-center">
+              <p className="text-balance text-2xl font-semibold tracking-tight text-foreground sm:text-[1.7rem]">
+                {orgName}
+              </p>
+              <p className="text-sm text-muted-foreground">Pedido recibido · gracias por elegirnos</p>
+            </div>
+          </div>
 
-            <OrderTicketIcon className="my-1" />
+          {/* Perforation */}
+          <div className="relative h-4 bg-card" aria-hidden>
+            <div className="absolute inset-x-4 top-1/2 border-t border-dashed border-foreground/15" />
+            <span className="absolute left-0 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background" />
+            <span className="absolute right-0 top-1/2 size-4 translate-x-1/2 -translate-y-1/2 rounded-full bg-background" />
+          </div>
+
+          <div className="space-y-6 px-6 pb-8 pt-2 sm:px-8">
+            <div className="text-center">
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Comanda
+              </p>
+              <p className="mt-1 text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
+                {displayId}
+              </p>
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                En cocina
+              </p>
+            </div>
+
+            <OrderTicketIcon className="my-0" />
 
             <div className="space-y-3 text-center">
               <div className="space-y-2">
                 <h1 className="text-balance text-xl font-semibold tracking-tight sm:text-2xl">
                   ¿Cómo estuvo tu experiencia?
                 </h1>
-                <p className="text-sm text-muted-foreground dark:text-foreground/75">
-                  Tu orden ya está en cocina. Te avisaremos cuando esté lista.
+                <p className="mx-auto max-w-sm text-sm leading-relaxed text-muted-foreground">
+                  Tu orden ya está en cocina. Te avisaremos cuando esté lista para disfrutar.
                 </p>
-                <p className="inline-flex items-center justify-center gap-1.5 text-xs text-muted-foreground dark:text-foreground/65">
+                <p className="inline-flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
                   <Clock3 className="size-3.5" aria-hidden />
                   Confirmado a las {confirmedAt}
                 </p>
@@ -129,36 +149,34 @@ export const SelfOrderConfirmation = ({
               />
             </div>
 
-            <Separator className="bg-border/60" />
-
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
-              <div>
-                <p className="text-xs text-muted-foreground dark:text-foreground/65">Total del pedido</p>
-                <p className="text-lg font-semibold tabular-nums">
+            <div className="space-y-2.5 rounded-2xl bg-muted/40 px-4 py-4">
+              <div className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">Total del pedido</span>
+                <span className="text-lg font-semibold tabular-nums tracking-tight">
                   {total != null ? formatMoney(total, currency) : "—"}
-                </p>
+                </span>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground dark:text-foreground/65">Estado</p>
-                <p className="text-sm font-medium text-primary">En cocina</p>
-              </div>
+              <div className="border-t border-dashed border-foreground/12" />
+              <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+                Guarda el número {displayId} por si necesitas consultar tu orden.
+              </p>
             </div>
 
-            <div className="space-y-2.5 pt-1">
+            <div className="space-y-2.5">
               {!submitted ? (
                 <Button
                   type="button"
                   size="lg"
-                  className="h-12 w-full rounded-2xl text-base font-semibold shadow-md"
+                  className="h-12 w-full rounded-2xl text-base font-semibold"
                   disabled={rating < 1}
                   onClick={handleSubmitRating}
                 >
                   Enviar calificación
                 </Button>
               ) : (
-                <div className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                <div className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-primary/10 text-sm font-medium text-primary">
                   <Check className="size-4" aria-hidden />
-                  Calificación enviada · {rating}/5
+                  Gracias por tu calificación · {rating}/5
                 </div>
               )}
 
@@ -173,10 +191,6 @@ export const SelfOrderConfirmation = ({
                   <ArrowRight className="size-4" aria-hidden />
                 </Link>
               </Button>
-
-              <p className="text-center text-[11px] text-muted-foreground dark:text-foreground/60">
-                Guarda el número {displayId} por si necesitas consultar tu orden.
-              </p>
             </div>
           </div>
         </article>

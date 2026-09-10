@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { MENU_TYPES } from "@/lib/commerce/types";
-import { normalizeIngredients } from "@/lib/menu/crm-types";
+import { normalizeIngredients, type StoredMenuIngredient } from "@/lib/menu/crm-types";
 import { readCatalogImageFile } from "@/lib/media/image-upload";
 import { buildProductImagePath, removeProductImage, uploadPublicMedia } from "@/lib/media/storage";
 import { PRODUCT_IMAGES_BUCKET } from "@/lib/media/types";
@@ -36,9 +36,27 @@ const menuItemFields = z.object({
   comboItemIds: z.array(z.number().int().positive()).max(20).optional(),
   price: z.number().nonnegative().max(10_000_000),
   currency: z.string().trim().length(3).optional(),
-  ingredients: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
+  ingredients: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(80),
+        imageUrl: z.string().trim().max(2000).nullable().optional(),
+      }),
+    )
+    .max(40)
+    .optional(),
   active: z.boolean().optional(),
 });
+
+const toStoredIngredients = (
+  value: Array<{ name: string; imageUrl?: string | null }> | undefined,
+): StoredMenuIngredient[] =>
+  normalizeIngredients(
+    (value ?? []).map((item) => ({
+      name: item.name,
+      imageUrl: item.imageUrl?.trim() ? item.imageUrl.trim() : null,
+    })),
+  );
 
 const createSchema = menuItemFields;
 const updateSchema = menuItemFields.extend({
@@ -115,7 +133,7 @@ export const createMenuItemAction = async (rawValues: unknown): Promise<ActionRe
       active: true,
       is_featured: parsed.data.isFeatured ?? false,
       sort_order: parsed.data.sortOrder ?? 0,
-      ingredients: normalizeIngredients(parsed.data.ingredients),
+      ingredients: toStoredIngredients(parsed.data.ingredients),
     })
     .select("id")
     .single();
@@ -162,7 +180,7 @@ export const updateMenuItemAction = async (rawValues: unknown): Promise<ActionRe
       active: parsed.data.active,
       is_featured: parsed.data.isFeatured ?? false,
       sort_order: parsed.data.sortOrder ?? 0,
-      ingredients: normalizeIngredients(parsed.data.ingredients),
+      ingredients: toStoredIngredients(parsed.data.ingredients),
       updated_at: new Date().toISOString(),
     })
     .eq("id", parsed.data.id)
@@ -243,16 +261,84 @@ export const saveMenuItemAction = async (formData: FormData): Promise<ActionResu
   const editingId =
     typeof editingIdRaw === "string" && editingIdRaw.trim() ? Number(editingIdRaw) : undefined;
 
-  const ingredientsRaw =
-    typeof formData.get("ingredients") === "string"
-      ? String(formData.get("ingredients"))
-      : typeof formData.get("menuIngredients") === "string"
-        ? String(formData.get("menuIngredients"))
-        : "";
-  const ingredients = ingredientsRaw
-    .split(/[,;\n]+/)
-    .map((value) => value.trim())
-    .filter(Boolean);
+  let ingredientsDraft: Array<{ name: string; imageUrl?: string | null }> = [];
+  const ingredientsJsonRaw = formData.get("ingredientsJson");
+  if (typeof ingredientsJsonRaw === "string" && ingredientsJsonRaw.trim()) {
+    try {
+      const parsedJson = JSON.parse(ingredientsJsonRaw) as unknown;
+      if (Array.isArray(parsedJson)) {
+        ingredientsDraft = parsedJson
+          .map((entry) => {
+            if (typeof entry === "string") {
+              return { name: entry.trim(), imageUrl: null as string | null };
+            }
+            if (entry && typeof entry === "object" && "name" in entry) {
+              const record = entry as { name?: unknown; imageUrl?: unknown };
+              return {
+                name: String(record.name ?? "").trim(),
+                imageUrl:
+                  typeof record.imageUrl === "string" && record.imageUrl.trim()
+                    ? record.imageUrl.trim()
+                    : null,
+              };
+            }
+            return null;
+          })
+          .filter((entry): entry is { name: string; imageUrl: string | null } =>
+            Boolean(entry?.name),
+          );
+      }
+    } catch {
+      return { error: "Los ingredientes no son válidos." };
+    }
+  } else {
+    const ingredientsRaw =
+      typeof formData.get("ingredients") === "string"
+        ? String(formData.get("ingredients"))
+        : typeof formData.get("menuIngredients") === "string"
+          ? String(formData.get("menuIngredients"))
+          : "";
+    ingredientsDraft = ingredientsRaw
+      .split(/[,;\n]+/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map((name) => ({ name, imageUrl: null as string | null }));
+  }
+
+  const accessEarly = await requireMenuMembership();
+  if ("error" in accessEarly) return { error: accessEarly.error };
+
+  const resolvedIngredients: StoredMenuIngredient[] = [];
+  for (let index = 0; index < ingredientsDraft.length; index += 1) {
+    const draft = ingredientsDraft[index];
+    if (!draft?.name) continue;
+    const uploadedIngredient = await readCatalogImageFile(formData.get(`ingredientImage_${index}`));
+    if ("error" in uploadedIngredient) {
+      return { error: uploadedIngredient.error };
+    }
+    let imageUrl = draft.imageUrl ?? null;
+    if (formData.get(`removeIngredientImage_${index}`) === "true") {
+      imageUrl = null;
+    }
+    if (uploadedIngredient.file) {
+      const imagePath = buildProductImagePath({
+        organizationId: accessEarly.membership.organizationId,
+        fileName: `ingredient-${uploadedIngredient.file.fileName}`,
+      });
+      try {
+        imageUrl = await uploadPublicMedia({
+          bucket: PRODUCT_IMAGES_BUCKET,
+          path: imagePath,
+          bytes: uploadedIngredient.file.bytes,
+          mimeType: uploadedIngredient.file.mimeType,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "No se pudo subir la foto del ingrediente.";
+        return { error: menuSqlHint(message) };
+      }
+    }
+    resolvedIngredients.push({ name: draft.name, imageUrl });
+  }
 
   const comboItemIds = String(formData.get("comboItemIds") || "")
     .split(/[,;\s]+/)
@@ -270,7 +356,7 @@ export const saveMenuItemAction = async (formData: FormData): Promise<ActionResu
     comboItemIds,
     price: Number(formData.get("price")),
     currency: formData.get("currency") || undefined,
-    ingredients,
+    ingredients: toStoredIngredients(resolvedIngredients),
   };
 
   const uploaded = await readCatalogImageFile(formData.get("image"));

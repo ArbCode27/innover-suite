@@ -10,6 +10,8 @@ type SelfOrderProductClientProps = {
   org: PublicCatalogOrg;
   item: CatalogItem;
   drinkItems: CatalogItem[];
+  sideItems: CatalogItem[];
+  dessertItems: CatalogItem[];
 };
 
 export const SelfOrderProductClient = ({
@@ -17,6 +19,8 @@ export const SelfOrderProductClient = ({
   org,
   item,
   drinkItems,
+  sideItems,
+  dessertItems,
 }: SelfOrderProductClientProps) => {
   const [forceCartOpen, setForceCartOpen] = useState(false);
   const handleOpenCart = useCallback(() => setForceCartOpen(true), []);
@@ -27,6 +31,8 @@ export const SelfOrderProductClient = ({
         slug={slug}
         item={item}
         drinkItems={drinkItems}
+        sideItems={sideItems}
+        dessertItems={dessertItems}
         onOpenCart={handleOpenCart}
       />
       <SelfOrderCart

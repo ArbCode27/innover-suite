@@ -34,6 +34,8 @@ const ProductPage = async ({ params }: ProductPageProps) => {
   if (!item) notFound();
 
   const drinkItems = catalog.items.filter((entry) => entry.menuType === "drink");
+  const sideItems = catalog.items.filter((entry) => entry.menuType === "side");
+  const dessertItems = catalog.items.filter((entry) => entry.menuType === "dessert");
   const palette = parsePaletteId(catalog.organization.themePalette);
 
   return (
@@ -45,6 +47,8 @@ const ProductPage = async ({ params }: ProductPageProps) => {
           org={catalog.organization}
           item={item}
           drinkItems={drinkItems}
+          sideItems={sideItems}
+          dessertItems={dessertItems}
         />
       </Suspense>
     </>

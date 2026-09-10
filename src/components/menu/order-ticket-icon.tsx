@@ -12,7 +12,7 @@ export const OrderTicketIcon = ({ className }: OrderTicketIconProps) => (
     className={cn("relative mx-auto flex size-36 items-center justify-center", className)}
     aria-hidden
   >
-    <span className="order-ticket-glow absolute inset-6 rounded-full bg-primary/15 blur-2xl" />
+    <span className="order-ticket-glow absolute inset-6 rounded-full bg-primary/10 blur-2xl" />
 
     <svg
       viewBox="0 0 160 120"
