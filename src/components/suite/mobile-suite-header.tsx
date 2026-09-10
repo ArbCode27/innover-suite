@@ -42,7 +42,7 @@ export const MobileSuiteHeader = ({
   };
 
   return (
-    <header className="mb-3 flex items-center gap-2 md:hidden">
+    <header className="mb-3 flex items-center gap-2 min-[1400px]:hidden">
       <Link
         href="/home"
         prefetch={false}

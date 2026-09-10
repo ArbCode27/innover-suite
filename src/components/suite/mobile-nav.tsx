@@ -70,11 +70,13 @@ const SuiteNavLink = ({
   href,
   className,
   children,
+  title,
   ...props
 }: {
   href: string;
   className: string;
   children: ReactNode;
+  title?: string;
   "aria-current"?: "page";
 }) => {
   const [prefetch, setPrefetch] = useState(false);
@@ -87,6 +89,7 @@ const SuiteNavLink = ({
     <Link
       href={href}
       prefetch={prefetch}
+      title={title}
       onMouseEnter={handleEnablePrefetch}
       onFocus={handleEnablePrefetch}
       onTouchStart={handleEnablePrefetch}
@@ -154,12 +157,53 @@ export const MobileNav = ({ items }: MobileNavProps) => {
                 className={cn(
                   "flex h-14 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 text-[10px] font-medium transition-all",
                   isActive
-                ? "bg-primary text-primary-foreground shadow-sm shadow-primary/40"
+                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/40"
                     : "text-muted-foreground hover:bg-primary/8 hover:text-foreground",
                 )}
               >
                 <Icon className="size-5" aria-hidden />
                 <span className="max-w-full truncate">{item.label}</span>
+              </SuiteNavLink>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+};
+
+/** Dock flotante horizontal centrado para tablet. */
+export const TabletNav = ({ items }: MobileNavProps) => {
+  const pathname = usePathname();
+  const { hideMobileNav } = useMobileChrome();
+
+  if (hideMobileNav) return null;
+
+  return (
+    <nav
+      aria-label="Navegación principal"
+      className="pointer-events-none fixed inset-x-0 bottom-4 z-40 hidden justify-center px-4 md:flex min-[1400px]:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <ul className="pointer-events-auto flex max-w-[min(100%,42rem)] items-center gap-1 overflow-x-auto rounded-full border border-primary/25 bg-card/90 p-1.5 shadow-2xl shadow-primary/20 backdrop-blur-xl">
+        {items.map((item) => {
+          const Icon = NAV_ICONS[item.icon];
+          const isActive = isActivePath(pathname, item.href);
+          return (
+            <li key={item.href} className="shrink-0">
+              <SuiteNavLink
+                href={item.href}
+                aria-current={isActive ? "page" : undefined}
+                title={item.label}
+                className={cn(
+                  "flex min-w-14 flex-col items-center justify-center gap-0.5 rounded-full px-3 py-2 text-[10px] font-medium transition-all",
+                  isActive
+                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/40"
+                    : "text-muted-foreground hover:bg-primary/10 hover:text-foreground",
+                )}
+              >
+                <Icon className="size-4" aria-hidden />
+                <span className="max-w-16 truncate">{item.label}</span>
               </SuiteNavLink>
             </li>
           );

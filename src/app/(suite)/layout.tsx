@@ -31,6 +31,7 @@ import {
   MobileChromeProvider,
   MobileNav,
   SidebarNav,
+  TabletNav,
   type MobileNavIcon,
 } from "@/components/suite/mobile-nav";
 import { ThemeToggle } from "@/components/suite/theme-toggle";
@@ -139,7 +140,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
     <MobileChromeProvider>
       <div className="h-full overflow-hidden bg-background text-foreground">
         <div className="relative mx-auto flex h-full min-h-0 w-full max-w-[1800px] flex-col p-3 md:p-5">
-          <aside className="group/sidebar app-scroll fixed top-3 left-3 z-50 hidden h-[calc(100vh-1.5rem)] w-[78px] min-w-0 overflow-x-hidden overflow-y-auto rounded-3xl border border-primary/20 bg-card/80 p-3 shadow-2xl shadow-primary/15 backdrop-blur transition-all duration-300 hover:w-72 md:flex md:flex-col md:top-5 md:left-5 md:h-[calc(100vh-2.5rem)]">
+          <aside className="group/sidebar app-scroll fixed top-5 left-5 z-50 hidden h-[calc(100vh-2.5rem)] w-[78px] min-w-0 overflow-x-hidden overflow-y-auto rounded-3xl border border-primary/20 bg-card/80 p-3 shadow-2xl shadow-primary/15 backdrop-blur transition-all duration-300 hover:w-72 min-[1400px]:flex min-[1400px]:flex-col">
             <span className="mx-auto mb-2 flex size-10 items-center justify-center overflow-hidden rounded-xl bg-primary text-primary-foreground group-hover/sidebar:hidden">
               {membership.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -219,7 +220,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
               </form>
             </div>
           </aside>
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0 md:pl-[94px]">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] min-[1400px]:pb-0 min-[1400px]:pl-[94px]">
             <MobileSuiteHeader
               email={user.email ?? null}
               roleLabel={ROLE_LABELS[membership.role as OrganizationRole]}
@@ -232,6 +233,13 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
             </div>
           </main>
           <MobileNav
+            items={mobileNavItems.map((item) => ({
+              href: item.href,
+              label: item.label,
+              icon: item.iconKey,
+            }))}
+          />
+          <TabletNav
             items={mobileNavItems.map((item) => ({
               href: item.href,
               label: item.label,

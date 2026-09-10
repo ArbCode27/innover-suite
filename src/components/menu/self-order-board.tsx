@@ -401,7 +401,7 @@ export const SelfOrderBoard = ({ catalog }: SelfOrderBoardProps) => {
                       {section.items.length} opciones
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
                     {section.items.map((item) => (
                       <SelfOrderProductCard key={item.id} item={item} slug={org.slug} />
                     ))}
