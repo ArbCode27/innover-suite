@@ -10,6 +10,7 @@ import { LandingHero } from "@/components/landing/landing-hero";
 import { LandingIndustries } from "@/components/landing/landing-industries";
 import { LandingLayers } from "@/components/landing/landing-layers";
 import { LandingNavbar } from "@/components/landing/landing-navbar";
+import { LandingPricing } from "@/components/landing/landing-pricing";
 import { LandingSecurity } from "@/components/landing/landing-security";
 
 export const metadata: Metadata = {
@@ -35,6 +36,7 @@ const HomePage = async () => {
         <LandingFeatures />
         <LandingFlow />
         <LandingChannels />
+        <LandingPricing isLoggedIn={isLoggedIn} />
         <LandingSecurity />
         <LandingFaq />
         <LandingCta isLoggedIn={isLoggedIn} />

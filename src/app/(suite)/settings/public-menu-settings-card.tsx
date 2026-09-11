@@ -161,7 +161,7 @@ export const PublicSurfacesSettingsCard = ({
 
         {!canPublishMenu && !canPublishCatalog ? (
           <p className="text-sm text-muted-foreground">
-            Activa Catálogo o Inmuebles en Funciones del CRM para publicar vitrinas.
+            Activa Catálogo o Inmuebles en tu plan (vía administración) para publicar vitrinas.
           </p>
         ) : null}
 

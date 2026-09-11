@@ -537,6 +537,17 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
     return;
   }
 
+  const { canRunAiAgent } = await import("@/lib/billing/usage");
+  const aiGate = await canRunAiAgent(job.organizationId);
+  if (!aiGate.ok) {
+    logMetaWebhook("info", "agent.skipped_billing_gate", {
+      organizationId: job.organizationId,
+      conversationId: job.conversationId,
+      reason: aiGate.reason,
+    });
+    return;
+  }
+
   const claimed = await claimAgentTurn(job);
   if (!claimed) {
     return;
@@ -986,6 +997,12 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
       retryCount: claimed.retryCount,
       nextRetryAt: null,
     });
+    try {
+      const { incrementAiResponses } = await import("@/lib/billing/usage");
+      await incrementAiResponses(job.organizationId);
+    } catch (usageError) {
+      console.error("[AGENT] increment ai responses failed", usageError);
+    }
     await followUpIfNeeded();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

@@ -54,7 +54,7 @@ export const LandingCta = ({ isLoggedIn }: LandingCtaProps) => {
                 </Button>
               )}
               <Button asChild variant="outline" size="lg" className="h-11 px-6 font-semibold">
-                <Link href="#industrias">Ver por industria</Link>
+                <Link href="#planes">Ver planes</Link>
               </Button>
             </div>
           </div>

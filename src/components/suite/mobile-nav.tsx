@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -54,9 +60,16 @@ const MobileChromeContext = createContext<MobileChromeContextValue>({
 
 export const MobileChromeProvider = ({ children }: { children: ReactNode }) => {
   const [hideMobileNav, setHideMobileNav] = useState(false);
-  const value = useMemo(() => ({ hideMobileNav, setHideMobileNav }), [hideMobileNav]);
+  const value = useMemo(
+    () => ({ hideMobileNav, setHideMobileNav }),
+    [hideMobileNav],
+  );
 
-  return <MobileChromeContext.Provider value={value}>{children}</MobileChromeContext.Provider>;
+  return (
+    <MobileChromeContext.Provider value={value}>
+      {children}
+    </MobileChromeContext.Provider>
+  );
 };
 
 export const useMobileChrome = () => useContext(MobileChromeContext);
@@ -94,8 +107,7 @@ const SuiteNavLink = ({
       onFocus={handleEnablePrefetch}
       onTouchStart={handleEnablePrefetch}
       className={className}
-      {...props}
-    >
+      {...props}>
       {children}
     </Link>
   );
@@ -105,7 +117,9 @@ export const SidebarNav = ({ items }: MobileNavProps) => {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Navegación principal" className="space-y-2 group-hover/sidebar:mt-6">
+    <nav
+      aria-label="Navegación principal"
+      className="space-y-2 group-hover/sidebar:mt-6">
       {items.map((item) => {
         const Icon = NAV_ICONS[item.icon];
         const isActive = isActivePath(pathname, item.href);
@@ -120,8 +134,7 @@ export const SidebarNav = ({ items }: MobileNavProps) => {
               isActive
                 ? "bg-primary text-primary-foreground shadow-[0_0_22px_rgba(56,189,248,0.55)]"
                 : "text-muted-foreground hover:bg-primary/12 hover:text-foreground",
-            )}
-          >
+            )}>
             <Icon className="size-4" aria-hidden />
             <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover/sidebar:max-w-40 group-hover/sidebar:opacity-100">
               {item.label}
@@ -143,8 +156,7 @@ export const MobileNav = ({ items }: MobileNavProps) => {
     <nav
       aria-label="Navegación principal"
       className="fixed inset-x-0 bottom-0 z-30 border-t border-primary/20 bg-card/90 px-2 pt-1.5 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl md:hidden"
-      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
-    >
+      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
       <ul className="flex items-stretch justify-between gap-0.5 overflow-x-auto">
         {items.map((item) => {
           const Icon = NAV_ICONS[item.icon];
@@ -159,8 +171,7 @@ export const MobileNav = ({ items }: MobileNavProps) => {
                   isActive
                     ? "bg-primary text-primary-foreground shadow-sm shadow-primary/40"
                     : "text-muted-foreground hover:bg-primary/8 hover:text-foreground",
-                )}
-              >
+                )}>
                 <Icon className="size-5" aria-hidden />
                 <span className="max-w-full truncate">{item.label}</span>
               </SuiteNavLink>
@@ -182,10 +193,9 @@ export const TabletNav = ({ items }: MobileNavProps) => {
   return (
     <nav
       aria-label="Navegación principal"
-      className="pointer-events-none fixed inset-x-0 bottom-4 z-40 hidden justify-center px-4 md:flex min-[1400px]:hidden"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-    >
-      <ul className="pointer-events-auto flex max-w-[min(100%,42rem)] items-center gap-1 overflow-x-auto rounded-full border border-primary/25 bg-card/90 p-1.5 shadow-2xl shadow-primary/20 backdrop-blur-xl">
+      className="pointer-events-none fixed inset-x-0 bottom-4 z-40 hidden justify-center bg-transparent px-4 md:max-[1399px]:flex"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <ul className="pointer-events-auto flex max-w-[min(100%,42rem)] items-center gap-1 overflow-x-auto rounded-full border border-primary/25 bg-card/90 p-1.5 shadow-2xl shadow-primary/20 backdrop-blur-xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {items.map((item) => {
           const Icon = NAV_ICONS[item.icon];
           const isActive = isActivePath(pathname, item.href);
@@ -200,8 +210,7 @@ export const TabletNav = ({ items }: MobileNavProps) => {
                   isActive
                     ? "bg-primary text-primary-foreground shadow-sm shadow-primary/40"
                     : "text-muted-foreground hover:bg-primary/10 hover:text-foreground",
-                )}
-              >
+                )}>
                 <Icon className="size-4" aria-hidden />
                 <span className="max-w-16 truncate">{item.label}</span>
               </SuiteNavLink>

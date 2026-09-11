@@ -64,6 +64,17 @@ export const createOrganizationAction = async (rawValues: unknown) => {
         currency: parsed.data.currency.toUpperCase(),
         taxRate: parsed.data.taxRate,
       });
+      try {
+        const { provisionOrganizationSubscription } = await import("@/lib/billing/usage");
+        await provisionOrganizationSubscription({
+          organizationId: membership.organizationId,
+          templateId: parsed.data.templateId,
+          status: "trialing",
+          syncModules: false,
+        });
+      } catch (billingError) {
+        console.error("[ONBOARDING] provision subscription failed", billingError);
+      }
       await recordAuditEvent({
         organizationId: membership.organizationId,
         actorUserId: user.id,

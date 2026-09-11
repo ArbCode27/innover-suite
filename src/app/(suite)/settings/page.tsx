@@ -3,7 +3,6 @@ import { TeamAndIntegrationsForm } from "./team-and-integrations-form";
 import { AgentSettingsForm } from "./agent-settings-form";
 import { LeadRecoveryForm } from "./lead-recovery-form";
 import { OfficeHoursForm } from "./office-hours-form";
-import { ModulesSettingsForm } from "./modules-settings-form";
 import { CurrencySettingsForm } from "./currency-settings-form";
 import { BrowserNotificationsCard } from "./browser-notifications-card";
 import { OrganizationBrandSettingsCard } from "./organization-brand-settings-card";
@@ -145,7 +144,7 @@ export default async function SettingsPage() {
   return (
     <ModuleShell
       title="Configuración del CRM"
-      description={`Conecta canales, define las funciones del negocio, calendario, agente IA y equipo para ${membership?.organizationName || "tu organización"}. ${connectedCount} de 4 integraciones activas.`}
+      description={`Conecta canales, calendario, agente IA y equipo para ${membership?.organizationName || "tu organización"}. ${connectedCount} de 4 integraciones activas.`}
       eyebrow="Integraciones"
     >
       <div className="space-y-8">
@@ -196,7 +195,6 @@ export default async function SettingsPage() {
           themePalette={orgThemePalette}
         />
         <BrowserNotificationsCard />
-        <ModulesSettingsForm canManageOrganization={canManageOrganization} modules={modules} />
         <CurrencySettingsForm canManageOrganization={canManageOrganization} currencies={currencies} />
         <AgentSettingsForm
           canManageOrganization={canManageOrganization}
@@ -221,8 +219,13 @@ export default async function SettingsPage() {
         <SecuritySettingsForm />
         {orgBilling ? (
           <p className="text-sm text-muted-foreground">
-            Plan {orgBilling.plan || "starter"} · IVA {Math.round(Number(orgBilling.tax_rate ?? DEFAULT_TAX_RATE) * 100)}%. El cobro de
-            suscripción no está conectado; el IVA se aplica solo en el ticket.
+            Plan {orgBilling.plan || "starter"} · IVA{" "}
+            {Math.round(Number(orgBilling.tax_rate ?? DEFAULT_TAX_RATE) * 100)}%. Las funciones del CRM las
+            asigna el plan de suscripción.{" "}
+            <a href="/billing" className="font-medium text-primary underline-offset-2 hover:underline">
+              Ver facturación
+            </a>
+            .
           </p>
         ) : null}
       </div>

@@ -16,8 +16,9 @@ import {
   Building2,
   UtensilsCrossed,
 } from "lucide-react";
+import { loadCachedOrgEntitlements } from "@/lib/billing/entitlements";
+import { BillingUsageBanner } from "@/components/suite/billing-usage-banner";
 import { signOut } from "@/lib/auth/actions";
-import { loadCachedOrganizationModules } from "@/lib/modules/settings";
 import { redirectIfSetupIncomplete } from "@/lib/onboarding/guard";
 import {
   canManageCatalog,
@@ -62,9 +63,14 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
 
   await redirectIfSetupIncomplete(membership);
 
-  const modules = await loadCachedOrganizationModules(
+  const entitlements = await loadCachedOrgEntitlements(
     membership.organizationId,
   );
+  if (entitlements.suiteAccess === "blocked") {
+    redirect("/billing");
+  }
+
+  const modules = entitlements.effectiveModules;
   const initials = user.email?.slice(0, 2).toUpperCase() ?? "IS";
 
   const navItems: NavItem[] = [
@@ -134,13 +140,15 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
     },
   ];
   const items = navItems.filter((item) => item.show);
-  const mobileNavItems = items.filter((item) => item.href !== "/home" && item.href !== "/settings");
+  const mobileNavItems = items.filter(
+    (item) => item.href !== "/home" && item.href !== "/settings",
+  );
 
   return (
     <MobileChromeProvider>
       <div className="h-full overflow-hidden bg-background text-foreground">
         <div className="relative mx-auto flex h-full min-h-0 w-full max-w-[1800px] flex-col p-3 md:p-5">
-          <aside className="group/sidebar app-scroll fixed top-5 left-5 z-50 hidden h-[calc(100vh-2.5rem)] w-[78px] min-w-0 overflow-x-hidden overflow-y-auto rounded-3xl border border-primary/20 bg-card/80 p-3 shadow-2xl shadow-primary/15 backdrop-blur transition-all duration-300 hover:w-72 min-[1400px]:flex min-[1400px]:flex-col">
+          <aside className="group/sidebar fixed top-5 left-5 z-50 hidden h-[calc(100vh-2.5rem)] w-[78px] min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain rounded-3xl border border-primary/20 bg-card/80 p-3 shadow-2xl shadow-primary/15 backdrop-blur transition-all duration-300 [scrollbar-width:none] hover:w-72 [-ms-overflow-style:none] max-[1399px]:hidden min-[1400px]:flex min-[1400px]:flex-col [&::-webkit-scrollbar]:hidden">
             <span className="mx-auto mb-2 flex size-10 items-center justify-center overflow-hidden rounded-xl bg-primary text-primary-foreground group-hover/sidebar:hidden">
               {membership.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -220,7 +228,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
               </form>
             </div>
           </aside>
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] min-[1400px]:pb-0 min-[1400px]:pl-[94px]">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden min-[1400px]:pl-[94px]">
             <MobileSuiteHeader
               email={user.email ?? null}
               roleLabel={ROLE_LABELS[membership.role as OrganizationRole]}
@@ -228,7 +236,8 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
               organizationLogoUrl={membership.logoUrl}
               initials={initials}
             />
-            <div className="app-scroll flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
+            <div className="app-scroll flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:max-[1399px]:pb-[calc(5.5rem+env(safe-area-inset-bottom))] min-[1400px]:pb-0">
+              <BillingUsageBanner entitlements={entitlements} />
               {children}
             </div>
           </main>

@@ -46,6 +46,12 @@ export const LandingNavbar = ({ isLoggedIn }: LandingNavbarProps) => {
             Canales
           </Link>
           <Link
+            href="#planes"
+            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Planes
+          </Link>
+          <Link
             href="#seguridad"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >

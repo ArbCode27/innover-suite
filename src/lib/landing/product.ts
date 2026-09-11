@@ -44,6 +44,30 @@ export type LandingFlowStep = {
   detail: string;
 };
 
+export type LandingPlanTierId = "basic" | "pro" | "plus";
+
+export type LandingPlanTier = {
+  id: LandingPlanTierId;
+  name: string;
+  priceUsd: number;
+  featured?: boolean;
+  badge?: string;
+  users: number;
+  aiMessages: number;
+  extras: string[];
+};
+
+export type LandingPlanVertical = {
+  id: string;
+  label: string;
+  tagline: string;
+  idealFor: string;
+  icon: LucideIcon;
+  features: string[];
+  aiScope: string[];
+  tiers: LandingPlanTier[];
+};
+
 export const LANDING_INDUSTRIES: LandingIndustry[] = [
   {
     id: "restaurant",
@@ -223,6 +247,153 @@ export const LANDING_CAPABILITIES: LandingCapability[] = [
   },
 ];
 
+export const LANDING_PLAN_VERTICALS: LandingPlanVertical[] = [
+  {
+    id: "restaurant",
+    label: "Restaurante",
+    tagline: "Menú, pedidos y cocina por chat",
+    idealFor: "Locales de comida y delivery",
+    icon: UtensilsCrossed,
+    features: [
+      "Inbox WhatsApp, Instagram y Messenger",
+      "Contactos y dashboard operativo",
+      "Menú / carta e inventario",
+      "Pedidos y comandas de cocina",
+      "Menú público con enlace propio",
+    ],
+    aiScope: [
+      "Anfitrión 24/7 que guía el menú",
+      "Foto de plato y ticket con IVA",
+      "Crea el pedido al confirmar",
+      "Escala reclamos o alergias a humano",
+    ],
+    tiers: [
+      {
+        id: "basic",
+        name: "Básico",
+        priceUsd: 99,
+        users: 4,
+        aiMessages: 4000,
+        extras: ["1 canal Meta incluido", "Soporte por email"],
+      },
+      {
+        id: "pro",
+        name: "Pro",
+        priceUsd: 139,
+        featured: true,
+        badge: "Recomendado",
+        users: 8,
+        aiMessages: 7000,
+        extras: ["Lead recovery de pedidos", "Hasta 2 canales Meta", "Soporte prioritario"],
+      },
+      {
+        id: "plus",
+        name: "Plus",
+        priceUsd: 179,
+        users: 12,
+        aiMessages: 12000,
+        extras: ["Multi-local ligero", "Hasta 3 canales Meta", "Onboarding asistido"],
+      },
+    ],
+  },
+  {
+    id: "ventas",
+    label: "Ventas",
+    tagline: "Productos, servicios, embudo y citas",
+    idealFor: "Tiendas, asesorías y negocios que venden por chat",
+    icon: ChartColumn,
+    features: [
+      "Inbox omnicanal y contactos CRM",
+      "Catálogo, stock y pedidos por chat",
+      "Embudos Kanban hasta el cierre",
+      "Google Calendar para citas y demos",
+      "Dashboard BI de ventas",
+    ],
+    aiScope: [
+      "Vendedor/asesor 24/7 con stock real",
+      "Cierra pedidos y agenda citas",
+      "Mueve el lead en el embudo",
+      "Follow-up y handoff a tu equipo",
+    ],
+    tiers: [
+      {
+        id: "basic",
+        name: "Básico",
+        priceUsd: 119,
+        users: 5,
+        aiMessages: 5000,
+        extras: ["1 canal Meta incluido", "Catálogo + embudo + calendario"],
+      },
+      {
+        id: "pro",
+        name: "Pro",
+        priceUsd: 159,
+        featured: true,
+        badge: "Recomendado",
+        users: 8,
+        aiMessages: 8000,
+        extras: ["Lead recovery comercial", "Hasta 2 canales Meta", "BI ampliado"],
+      },
+      {
+        id: "plus",
+        name: "Plus",
+        priceUsd: 199,
+        users: 12,
+        aiMessages: 12000,
+        extras: ["Hasta 3 canales Meta", "Overages preferenciales", "Onboarding asistido"],
+      },
+    ],
+  },
+  {
+    id: "realestate",
+    label: "Inmobiliaria",
+    tagline: "Inmuebles, visitas y embudo de captación",
+    idealFor: "Agencias y asesores inmobiliarios",
+    icon: Building2,
+    features: [
+      "Inbox omnicanal y contactos CRM",
+      "Fichas de inmuebles con galería",
+      "Embudos de captación y cierre",
+      "Google Calendar para visitas",
+      "Dashboard de pipeline inmobiliario",
+    ],
+    aiScope: [
+      "Asesor 24/7 que califica zona y presupuesto",
+      "Busca y muestra inmuebles del inventario",
+      "Agenda visitas en el calendario",
+      "Avanza el embudo y escala a humano",
+    ],
+    tiers: [
+      {
+        id: "basic",
+        name: "Básico",
+        priceUsd: 119,
+        users: 5,
+        aiMessages: 5000,
+        extras: ["1 canal Meta incluido", "Inventario de inmuebles"],
+      },
+      {
+        id: "pro",
+        name: "Pro",
+        priceUsd: 159,
+        featured: true,
+        badge: "Recomendado",
+        users: 8,
+        aiMessages: 8000,
+        extras: ["Lead recovery de visitas", "Hasta 2 canales Meta", "Más capacidad de fichas"],
+      },
+      {
+        id: "plus",
+        name: "Plus",
+        priceUsd: 199,
+        users: 12,
+        aiMessages: 12000,
+        extras: ["Hasta 3 canales Meta", "Onboarding asistido", "Soporte prioritario"],
+      },
+    ],
+  },
+];
+
 export const LANDING_RESTAURANT_FLOW: LandingFlowStep[] = [
   {
     title: "Descubre",
@@ -276,6 +447,11 @@ export const LANDING_FAQS = [
     question: "¿Sirve para inmobiliaria y tienda en la misma plataforma?",
     answer:
       "Sí. Es la misma Suite: cambian los módulos activos. Una inmobiliaria usa inmuebles, calendario y embudos; una tienda, catálogo, pedidos y embudos. Inbox, contactos y dashboard están siempre disponibles.",
+  },
+  {
+    question: "¿Cuánto cuestan los planes?",
+    answer:
+      "Hay tres niveles (Básico, Pro y Plus) por modelo de negocio: Restaurante, Ventas e Inmobiliaria. Ventas cubre tienda y servicios (catálogo, pedidos, embudo y citas). Los precios van desde USD 99/mes hasta USD 199/mes. Cada nivel incluye las funciones del rubro, usuarios del equipo y un cupo mensual de respuestas del asistente IA. El cobro es en dólares.",
   },
   {
     question: "¿Cómo se protegen los datos?",

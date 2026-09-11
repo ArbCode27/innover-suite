@@ -58,6 +58,11 @@ export const LandingFooter = () => {
                   Canales Meta
                 </Link>
               </li>
+              <li>
+                <Link href="#planes" className="transition hover:text-foreground">
+                  Planes
+                </Link>
+              </li>
             </ul>
           </div>
 

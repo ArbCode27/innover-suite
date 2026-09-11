@@ -261,6 +261,13 @@ export const recoverIdleLeadConversations = async (): Promise<{
   }
 
   for (const row of (settingRows ?? []) as SettingsRow[]) {
+    const { canRunAiAgent } = await import("@/lib/billing/usage");
+    const aiGate = await canRunAiAgent(row.organization_id);
+    if (!aiGate.ok || !aiGate.entitlements.plan.leadRecovery) {
+      result.skipped += 1;
+      continue;
+    }
+
     const settings = await loadAgentSettings(row.organization_id);
     if (!settings.enabled || !settings.leadRecoveryEnabled) {
       result.skipped += 1;

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { ModuleKey } from "@/lib/modules/constants";
-import { loadCachedOrganizationModules } from "@/lib/modules/settings";
+import { loadCachedOrgEntitlements } from "@/lib/billing/entitlements";
 import { getCurrentMembership } from "@/lib/organizations/membership";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -10,11 +10,16 @@ export const requireSuiteModule = async (key: ModuleKey) => {
     redirect("/onboarding/organization");
   }
 
+  const entitlements = await loadCachedOrgEntitlements(membership.organizationId);
+  if (entitlements.suiteAccess === "blocked") {
+    redirect("/billing");
+  }
+
   const supabase = await createSupabaseServerClient();
-  const modules = await loadCachedOrganizationModules(membership.organizationId);
+  const modules = entitlements.effectiveModules;
   if (!modules[key]) {
     redirect("/settings");
   }
 
-  return { membership, supabase, modules };
+  return { membership, supabase, modules, entitlements };
 };

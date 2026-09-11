@@ -11,6 +11,7 @@ import {
 } from "@/lib/modules/constants";
 import { saveOrganizationModules } from "@/lib/modules/settings";
 import { hasOrganizationRole, loadCurrentMemberSession } from "@/lib/organizations/membership";
+import { isPlatformAdminEmail } from "@/lib/billing/platform-admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const saveModulesSchema = z.object({
@@ -36,12 +37,32 @@ export const saveOrganizationModulesAction = async (rawValues: unknown): Promise
   }
 
   const { membership, user } = await loadCurrentMemberSession();
-  if (!membership || !user || !hasOrganizationRole(membership, ["owner", "admin"])) {
+  if (!membership || !user) {
+    return { error: "Debes iniciar sesión." };
+  }
+
+  if (!isPlatformAdminEmail(user.email)) {
+    return {
+      error: "Las funciones del CRM las define el plan de suscripción. Contacta a soporte para cambios.",
+    };
+  }
+
+  if (!hasOrganizationRole(membership, ["owner", "admin"])) {
     return { error: "Solo owner o admin pueden cambiar las funciones del CRM." };
   }
 
   const supabase = await createSupabaseServerClient();
-  const modules = normalizeModules(parsed.data);
+  let modules = normalizeModules(parsed.data);
+
+  try {
+    const { loadOrgEntitlements } = await import("@/lib/billing/entitlements");
+    const { intersectModules } = await import("@/lib/billing/plans");
+    const entitlements = await loadOrgEntitlements(membership.organizationId);
+    modules = normalizeModules(intersectModules(entitlements.allowedModules, modules));
+  } catch (error) {
+    console.error("[MODULES] entitlements clamp skipped", error);
+  }
+
   const { error, modules: saved } = await saveOrganizationModules(
     supabase,
     membership.organizationId,

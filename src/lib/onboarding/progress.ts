@@ -48,7 +48,7 @@ export const buildSetupSteps = (progress: OnboardingProgress): SetupStepDefiniti
     {
       id: "modules",
       title: "Funciones del CRM",
-      description: "Activa catálogo, calendario, embudos y el resto de módulos que usa el negocio.",
+      description: "Revisa los módulos incluidos en tu plan. El administrador de plataforma los gestiona.",
       done: true,
       optional: false,
     },
