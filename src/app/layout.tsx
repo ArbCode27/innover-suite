@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   title: "Innover Suite",
   description:
     "CRM omnicanal para atención por IA/humana, agenda y embudos de venta.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
