@@ -102,6 +102,8 @@ export const handleMetaEvent = async (request: NextRequest, kind: MetaWebhookKin
   const rawBody = await request.text();
   const signatureHeader = request.headers.get("x-hub-signature-256");
 
+  console.log(`[WEBHOOK_${kind.toUpperCase()}] 📥 POST recibido en ${request.nextUrl.pathname} (longitud=${rawBody.length} bytes, hasSignature=${Boolean(signatureHeader)})`);
+
   logMetaWebhook("info", "request.payload_received", {
     requestId,
     kind,
@@ -111,6 +113,7 @@ export const handleMetaEvent = async (request: NextRequest, kind: MetaWebhookKin
 
   const signatureDiagnostics = getSignatureDiagnostics(rawBody, signatureHeader);
   if (!signatureDiagnostics.isValid) {
+    console.error(`[WEBHOOK_${kind.toUpperCase()}] ❌ Firma inválida (x-hub-signature-256): ${signatureDiagnostics.reason}`);
     logMetaWebhook("warn", "request.invalid_signature", {
       requestId,
       kind,
@@ -179,6 +182,8 @@ export const handleMetaEvent = async (request: NextRequest, kind: MetaWebhookKin
       ? normalizeWhatsappEvents(payload)
       : normalizeSocialEvents(payload);
 
+  console.log(`[WEBHOOK_${resolvedKind.toUpperCase()}] 📦 Eventos extraídos: ${events.length} (object: ${objectType})`);
+
   logMetaWebhook("info", "request.normalized", {
     requestId,
     channelGroup: resolvedKind,
@@ -187,6 +192,7 @@ export const handleMetaEvent = async (request: NextRequest, kind: MetaWebhookKin
   });
 
   if (events.length === 0) {
+    console.log(`[WEBHOOK_${resolvedKind.toUpperCase()}] ℹ️ No contiene mensajes entrantes (actualización de status/entrega/lectura).`);
     logMetaWebhook("info", "request.no_events", {
       requestId,
       channelGroup: resolvedKind,
@@ -233,16 +239,21 @@ export const handleMetaEvent = async (request: NextRequest, kind: MetaWebhookKin
       durationMs: Date.now() - startedAt,
     });
 
+    console.log(`[WEBHOOK_${resolvedKind.toUpperCase()}] 💾 Persistencia: ${result.processed} procesados, ${result.duplicates} duplicados, ${result.ignored} ignorados, ${result.agentJobs.length} jobs para agente IA`);
+
     if (result.mediaJobs.length || result.agentJobs.length) {
       after(() =>
         (async () => {
           if (result.mediaJobs.length) {
+            console.log(`[WEBHOOK_${resolvedKind.toUpperCase()}] 📥 Procesando ${result.mediaJobs.length} descarga(s) multimedia...`);
             await ingestInboundMediaJobs(result.mediaJobs);
           }
           if (result.agentJobs.length) {
+            console.log(`[WEBHOOK_${resolvedKind.toUpperCase()}] 🤖 Lanzando ${result.agentJobs.length} trabajo(s) de agente IA...`);
             await runConversationAgentJobs(result.agentJobs);
           }
         })().catch((error) => {
+          console.error(`[WEBHOOK_${resolvedKind.toUpperCase()}] 💥 Error en background jobs (media/agent):`, error);
           logMetaWebhook("error", "agent.jobs_failed", {
             requestId,
             error: error instanceof Error ? error.message : "Unknown error",

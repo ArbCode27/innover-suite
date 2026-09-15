@@ -171,11 +171,13 @@ export const sendAiOutboundMessage = async (params: {
   const typedConversation = conversation as ConversationSendContext;
   const recipientId = await resolveRecipientId(params.organizationId, typedConversation);
   if (!recipientId) {
+    console.error(`[AGENT_OUTBOUND] ❌ No se pudo resolver destinatario para conv=${params.conversationId}, canal=${typedConversation.channel}`);
     return { ok: false as const, error: "No se encontró el destinatario." };
   }
 
   const channelCredentials = await resolveChannelAccessToken(params.organizationId, typedConversation);
   if (!channelCredentials.accessToken || !channelCredentials.accountId) {
+    console.error(`[AGENT_OUTBOUND] ❌ Faltan credenciales de acceso para canal=${typedConversation.channel} (org=${params.organizationId}). Verifica la integración.`);
     return { ok: false as const, error: "Falta el token del canal conectado." };
   }
 
@@ -226,6 +228,12 @@ export const sendAiOutboundMessage = async (params: {
     mediaUrl: mediaUrl || undefined,
     attachmentKind: mediaUrl ? "image" : undefined,
   });
+
+  if (!outboundResult.ok) {
+    console.error(`[AGENT_OUTBOUND] ❌ Error en API de Meta (${typedConversation.channel}): ${outboundResult.errorMessage}`);
+  } else {
+    console.log(`[AGENT_OUTBOUND] ✅ Mensaje entregado a API de Meta (${typedConversation.channel}). MessageId=${outboundResult.externalMessageId}`);
+  }
 
   await admin
     .from("messages")

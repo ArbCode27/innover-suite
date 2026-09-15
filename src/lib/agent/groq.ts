@@ -131,6 +131,7 @@ const generateGroqTurnOnce = async (params: {
   tools: AgentToolDeclaration[];
 }): Promise<GroqTurnOutcome> => {
   if (!env.groqApiKey) {
+    console.error("[GROQ] ❌ Falta variable de entorno GROQ_API_KEY. Configúrala en .env.local para que la IA pueda responder.");
     return {
       ok: false,
       model: params.model,
@@ -147,6 +148,8 @@ const generateGroqTurnOnce = async (params: {
     ...params.messages,
   ];
 
+  console.log(`[GROQ] 🤖 Solicitando respuesta a Groq (${params.model}) con ${params.messages.length} mensajes y ${params.tools.length} herramientas...`);
+
   try {
     const response = await groq.chat.completions.create({
       model: params.model,
@@ -161,6 +164,7 @@ const generateGroqTurnOnce = async (params: {
 
     const choice = response.choices?.[0];
     if (!choice?.message) {
+      console.warn(`[GROQ] ⚠️ Groq no devolvió ningún mensaje de elección (choices vacío).`);
       return {
         ok: false,
         model: params.model,
@@ -186,6 +190,8 @@ const generateGroqTurnOnce = async (params: {
         }
       }
     }
+
+    console.log(`[GROQ] ✅ Respuesta exitosa de "${response.model || params.model}": finish_reason=${choice.finish_reason}, texto="${text ? text.slice(0, 100) : '(sin texto)'}...", function_calls=${functionCalls.length}`);
 
     const assistantChatMessage: GroqChatMessage = {
       role: "assistant",
@@ -218,6 +224,8 @@ const generateGroqTurnOnce = async (params: {
     const status = typeof errorRecord?.status === "number" ? errorRecord.status : null;
     const message =
       error instanceof Error ? error.message : "Error desconocido al llamar a Groq";
+
+    console.error(`[GROQ] ❌ Error en llamada a Groq (${params.model}): status=${status} - ${message}`);
 
     return {
       ok: false,

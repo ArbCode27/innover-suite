@@ -530,7 +530,10 @@ const handleUnrecoverableTurn = async (params: {
 export const runConversationAgent = async (job: AgentJob, options: RunAgentOptions = {}) => {
   const followUpsRemaining = options.followUpsRemaining ?? AGENT_MAX_SUPERSEDE_FOLLOWUPS;
 
+  console.log(`[AI_AGENT] 🚀 Procesando turno: orgId=${job.organizationId}, convId=${job.conversationId}, msgId=${job.inboundMessageId}`);
+
   if (!isGroqConfigured()) {
+    console.error(`[AI_AGENT] ❌ Saltando: GROQ_API_KEY no está configurada en .env.local.`);
     logMetaWebhook("warn", "agent.skipped_missing_groq_key", {
       organizationId: job.organizationId,
       conversationId: job.conversationId,
@@ -540,12 +543,14 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
 
   const settings = await loadAgentSettings(job.organizationId);
   if (!settings.enabled) {
+    console.warn(`[AI_AGENT] ⚠️ Saltando: El agente de IA está desactivado (enabled: false) en la configuración de la organización ${job.organizationId}.`);
     return;
   }
 
   const { canRunAiAgent } = await import("@/lib/billing/usage");
   const aiGate = await canRunAiAgent(job.organizationId);
   if (!aiGate.ok) {
+    console.warn(`[AI_AGENT] ⚠️ Saltando por facturación/cuota: ${aiGate.reason} (orgId=${job.organizationId})`);
     logMetaWebhook("info", "agent.skipped_billing_gate", {
       organizationId: job.organizationId,
       conversationId: job.conversationId,
@@ -556,6 +561,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
 
   const claimed = await claimAgentTurn(job);
   if (!claimed) {
+    console.warn(`[AI_AGENT] ⚠️ Saltando: No se pudo tomar el turno (ya existe un turno en ejecución para la conv ${job.conversationId}).`);
     return;
   }
 
@@ -585,6 +591,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
       .maybeSingle();
 
     if (!conversation?.id || !conversation.contact_id) {
+      console.warn(`[AI_AGENT] ⚠️ Conversación ${job.conversationId} no encontrada o sin contacto.`);
       await finishTurn(turnId, { status: "skipped", error: "Conversación no elegible para el agente." });
       return;
     }
@@ -595,6 +602,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
       isAfterHoursAiCoverage(settings.businessHours);
 
     if (conversation.mode !== "ai" && !shouldCoverAfterHours) {
+      console.warn(`[AI_AGENT] ⚠️ Saltando: La conversación ${job.conversationId} está en modo "${conversation.mode}". La IA solo atiende si el modo es "ai" o fuera de horario.`);
       await finishTurn(turnId, { status: "skipped", error: "Conversación no elegible para el agente." });
       return;
     }
@@ -639,7 +647,10 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
     );
     const lastInboundText = trailingInboundText(history);
 
+    console.log(`[AI_AGENT] 💬 Historial: ${chronological.length} mensajes en BD, ${contents.length} preparados para Groq. Último entrante: "${lastInboundText.slice(0, 100)}"`);
+
     if (!contents.length) {
+      console.warn(`[AI_AGENT] ⚠️ Historial sin contenido de texto para generar respuesta en conv ${job.conversationId}.`);
       await finishTurn(turnId, { status: "skipped", error: "Sin contenido para responder." });
       return;
     }
@@ -826,6 +837,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
       contents.push(generation.rawMessage);
 
       for (const call of generation.functionCalls) {
+        console.log(`[AI_AGENT] 🛠️ Ejecutando herramienta "${call.name}" con args:`, call.args);
         const executed = await executeAgentTool(
           {
             organizationId: job.organizationId,
@@ -841,6 +853,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
           call.name,
           call.args,
         );
+        console.log(`[AI_AGENT] 🛠️ Resultado de herramienta "${call.name}": ok=${executed.ok}`);
         contents.push({
           role: "tool",
           tool_call_id: call.id,
@@ -951,6 +964,8 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
       return;
     }
 
+    console.log(`[AI_AGENT] 📤 Enviando respuesta final a ${conversation.channel} (convId=${job.conversationId}): "${finalText.slice(0, 100)}..." (imagen: ${pendingImage ? "sí" : "no"})`);
+
     const sent = await sendAiOutboundMessage({
       organizationId: job.organizationId,
       conversationId: job.conversationId,
@@ -960,6 +975,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
     });
 
     if (!sent.ok) {
+      console.error(`[AI_AGENT] ❌ Falló el envío del mensaje al cliente: ${sent.error}`);
       const superseded = await handleUnrecoverableTurn({
         job,
         turnId,
@@ -985,6 +1001,8 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
       return;
     }
 
+    console.log(`[AI_AGENT] ✅ Mensaje saliente enviado con éxito a ${conversation.channel} (convId=${job.conversationId})`);
+
     await finishTurn(turnId, {
       status: "completed",
       lastModel,
@@ -998,9 +1016,11 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
     } catch (usageError) {
       console.error("[AGENT] increment ai responses failed", usageError);
     }
+    console.log(`[AI_AGENT] 🏁 Turno completado exitosamente (turnId=${turnId})`);
     await followUpIfNeeded();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[AI_AGENT] 💥 Excepción no controlada en el agente: ${message}`, error);
     const superseded = await handleUnrecoverableTurn({
       job,
       turnId,
@@ -1028,15 +1048,21 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
 };
 
 export const runConversationAgentJobs = async (jobs: AgentJob[]) => {
+  console.log(`[AI_AGENT] 📋 Recibidos ${jobs.length} job(s) de mensaje entrante para procesar.`);
   const latestByConversation = new Map<number, AgentJob>();
   for (const job of jobs) {
     latestByConversation.set(job.conversationId, job);
   }
 
   for (const job of latestByConversation.values()) {
+    console.log(`[AI_AGENT] ⏳ Esperando debounce (inbound quiet) para convId=${job.conversationId}...`);
     await waitForInboundQuiet(job.organizationId, job.conversationId);
     const latestInbound = await getLatestInboundMessage(job.organizationId, job.conversationId);
-    if (!latestInbound) continue;
+    if (!latestInbound) {
+      console.warn(`[AI_AGENT] ⚠️ No se encontró mensaje reciente para convId=${job.conversationId}.`);
+      continue;
+    }
+    console.log(`[AI_AGENT] ▶️ Disparando agente con mensaje #${latestInbound.id} para convId=${job.conversationId}`);
     await runConversationAgent({
       ...job,
       inboundMessageId: latestInbound.id,

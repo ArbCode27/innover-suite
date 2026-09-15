@@ -93,6 +93,7 @@ const resolveOrganizationContext = async (
   }
 
   if (!account?.organization_id || !account?.id) {
+    console.warn(`[PERSIST_INBOUND] ⚠️ No se encontró cuenta de ${event.channel} con external_account_id="${event.accountId}" en channel_accounts. Verifica la vinculación de este número en Ajustes.`);
     return null;
   }
 
@@ -543,6 +544,8 @@ const persistInboundMessage = async (
     preview: preview === "Sin mensajes recientes" ? CHANNEL_LABELS[event.channel] : preview,
   });
 
+  console.log(`[PERSIST_INBOUND] ✅ Mensaje entrante guardado (msgId=${insertedMessage.id}, convId=${conversationId}, orgId=${organizationContext.organizationId}, de="${contactName}", texto="${(event.text || "").slice(0, 80)}")`);
+
   return {
     status: "processed",
     job: {
@@ -574,6 +577,7 @@ export const persistInboundMessages = async (
       const outcome = await persistInboundMessage(supabase, event);
       if (outcome.status === "unmapped") {
         ignored += 1;
+        console.warn(`[PERSIST_INBOUND] ⚠️ Evento omitido: el canal ${event.channel} (${event.accountId}) no está vinculado a ninguna organización.`);
         logMetaWebhook("warn", "persist.unmapped_channel_account", {
           requestId: context?.requestId,
           channelGroup: context?.channelGroup,
@@ -584,6 +588,7 @@ export const persistInboundMessages = async (
         });
       } else if (outcome.status === "duplicate") {
         duplicates += 1;
+        console.log(`[PERSIST_INBOUND] ℹ️ Mensaje ya procesado previamente (duplicado: ${event.externalMessageId}).`);
       } else {
         processed += 1;
         if (outcome.job) {
