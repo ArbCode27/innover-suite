@@ -6,6 +6,7 @@ import { ChartColumn, ChevronRight, LogOut, Settings, Sparkles } from "lucide-re
 import { signOut } from "@/lib/auth/actions";
 import { SuiteHeaderBackButton } from "@/components/suite/suite-header-back-button";
 import { ThemeToggle } from "@/components/suite/theme-toggle";
+import { useMobileChrome } from "@/components/suite/mobile-nav";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -35,11 +36,16 @@ export const MobileSuiteHeader = ({
   organizationLogoUrl = null,
   initials,
 }: MobileSuiteHeaderProps) => {
+  const { hideMobileHeader, hideMobileNav } = useMobileChrome();
   const [open, setOpen] = useState(false);
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
   };
+
+  if (hideMobileHeader || hideMobileNav) {
+    return null;
+  }
 
   return (
     <header className="mb-3 flex items-center gap-2 min-[1400px]:hidden">

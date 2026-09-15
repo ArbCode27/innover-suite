@@ -99,6 +99,7 @@ export type OrderRecord = {
   contactId: number | null;
   conversationId: number | null;
   contactName: string | null;
+  contactPhone: string | null;
   items: OrderItemRecord[];
 };
 
@@ -131,9 +132,9 @@ export const MENU_TYPE_LABELS: Record<MenuType, string> = {
 };
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  received: "Nuevo",
+  received: "Nuevo pedido",
   preparing: "En preparación",
-  ready: "Listo",
+  ready: "Listo / Despacho",
   completed: "Entregado",
   cancelled: "Cancelado",
 };

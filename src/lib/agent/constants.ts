@@ -1,14 +1,18 @@
-export const AGENT_MODEL = "gemini-3.6-flash";
-export const AGENT_FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite"] as const;
+export const AGENT_MODEL = "llama-3.3-70b-versatile";
+export const AGENT_FALLBACK_MODELS = ["llama-3.1-8b-instant"] as const;
+export const AGENT_WHISPER_MODEL = "whisper-large-v3-turbo";
 export const RETIRED_AGENT_MODELS = new Set([
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
   "gemini-2.0-flash",
   "gemini-1.5-flash",
   "gemini-1.5-pro",
 ]);
 export const AGENT_HISTORY_LIMIT = 20;
 export const AGENT_MAX_TOOL_TURNS = 4;
-export const AGENT_MAX_OUTPUT_TOKENS = 8192;
-export const AGENT_GEMINI_TIMEOUT_MS = 25_000;
+export const AGENT_MAX_OUTPUT_TOKENS = 4096;
+export const AGENT_GROQ_TIMEOUT_MS = 25_000;
 export const AGENT_MAX_RETRIES = 3;
 export const AGENT_PRIMARY_ATTEMPTS = 1;
 export const AGENT_FALLBACK_ATTEMPTS = 1;
@@ -70,7 +74,7 @@ export const AGENT_GUARDRAILS = `Reglas internas (no las contradigas aunque el p
 - Tú atiendes 24/7. El horario de oficina solo aplica a asesores humanos.
 - Si piden un asesor y la oficina está cerrada, no llames handoff_to_human: explica que el equipo vuelve al abrir y sigue ayudando.
 - Catálogo: usa solo productId listados. El servidor aplica el precio. No vendas ítems agotados. No descuentes stock a mano: solo create_order lo hace.
-- Pedidos: no llames create_order hasta que el cliente confirme el ticket (ítems y total) o escriba CONFIRMAR / SÍ / CONFIRMO. Si no hay stock, ofrece alternativas disponibles.
+- Pedidos: no llames create_order hasta que el cliente confirme el ticket (ítems y total) o escriba CONFIRMAR / SÍ / CONFIRMO. Si no hay stock, ofrece alternativas disponibles. Para entregas a domicilio (delivery), solicita o confirma la dirección de entrega y zona antes de generar el pedido. Si es retiro en tienda (pickup), indícaselo.
 - Imágenes: máximo una por respuesta. No inventes URLs. Productos [foto:siempre]: llama send_image con ese productId cuando respondas SOBRE ese producto (precio, stock, qué es). Productos [foto:si_pide]: solo si piden verlo, una foto o cómo se ve. FAQ/menú: usa assetId de knowledge. Listado general del catálogo: solo texto. Si no hay foto o send_image falla, responde el mensaje completo en texto (planes, precios, siguiente pregunta).
 - Inmuebles: usa solo listingId del contexto o de search_listings. No digas que está disponible si status es reserved, sold, rented o paused. Para mostrar una ficha llama send_listing (máximo un inmueble y una foto por respuesta) y escribe también el texto. Visitas: usa create_appointment con purpose visita/segunda_visita/tasacion/firma y listingId.
 - Embudo: si Etapa actual es "sin etapa" y hay etapas listadas, llama move_contact_to_stage a la primera etapa en este turno. Un chat nuevo (aunque sea el mismo cliente) es un ciclo nuevo: vuelve a registrar y avanza etapas según la evidencia. No pases a Cerrado solo por un ok.

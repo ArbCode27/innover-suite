@@ -3,7 +3,7 @@ import {
   LEAD_RECOVERY_IDLE_HOURS_DEFAULT,
   LEAD_RECOVERY_USER_NUDGE,
 } from "@/lib/agent/constants";
-import { generateGeminiTurn } from "@/lib/agent/gemini";
+import { generateGroqTurn } from "@/lib/agent/groq";
 import { contentsWithTrailingUserNudge } from "@/lib/agent/history";
 import { areAdvisorsAvailable } from "@/lib/agent/hours";
 import { loadAgentSettings } from "@/lib/agent/settings";
@@ -193,14 +193,14 @@ const recoverConversation = async (
 
   const contactName = contactNameFromRow(conversation);
   const customPrompt = settings.leadRecoveryPrompt.trim() || LEAD_RECOVERY_DEFAULT_PROMPT;
-  const outcome = await generateGeminiTurn({
+  const outcome = await generateGroqTurn({
     preferredModel: settings.model,
     systemInstruction: `${customPrompt}
 
 Contacto: ${contactName}.
 Último preview: ${conversation.last_message_preview || "sin texto"}.
 Responde solo el mensaje para el cliente.`,
-    contents,
+    messages: contents,
     tools: [],
   });
 

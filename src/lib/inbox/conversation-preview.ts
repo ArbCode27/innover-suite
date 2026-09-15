@@ -11,7 +11,9 @@ type ConversationUpdateResult = {
 const clipPreview = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return "Sin mensajes recientes";
-  return trimmed.slice(0, CONVERSATION_PREVIEW_MAX_CHARS);
+  const chars = Array.from(trimmed);
+  if (chars.length <= CONVERSATION_PREVIEW_MAX_CHARS) return trimmed;
+  return chars.slice(0, CONVERSATION_PREVIEW_MAX_CHARS).join("");
 };
 
 export const buildMessagePreview = (params: {

@@ -14,14 +14,14 @@ import {
 } from "@/lib/agent/constants";
 import { executeAgentTool } from "@/lib/agent/execute";
 import {
-  generateGeminiTurn,
-  isGeminiConfigured,
-  type GeminiContent,
-  type GeminiTurnFailure,
-} from "@/lib/agent/gemini";
+  generateGroqTurn,
+  isGroqConfigured,
+  type GroqChatMessage,
+  type GroqTurnFailure,
+} from "@/lib/agent/groq";
 import {
-  buildCoalescedGeminiContents,
-  ensureGeminiHistoryForGenerate,
+  buildCoalescedGroqMessages,
+  ensureGroqHistoryForGenerate,
   historyThroughInbound,
   trailingInboundIds,
   trailingInboundText,
@@ -382,7 +382,13 @@ const buildSystemInstruction = (params: {
   const commerceBlock = params.commerceContext
     ? `
 ${params.commerceContext}
-- Confirmación de pedido: resume el ticket (ítems, IVA, envío y total) y espera un sí o CONFIRMAR antes de create_order.`
+- Flujo de pedidos y ventas de productos:
+  1. Asesora al cliente con los productos disponibles del catálogo. Si un ítem está agotado, ofrece alternativas.
+  2. Si el cliente desea comprar, indaga la modalidad de entrega: Delivery o Retiro en tienda.
+  3. Si es Delivery, solicita la dirección exacta de entrega y la zona.
+  4. Resume el ticket final (productos, cantidades, subtotal, IVA, costo de envío y total en USD).
+  5. Pide confirmación explícita (ej: "¿Deseas que confirme y procese tu pedido?").
+  6. Solo cuando el cliente responda afirmativamente (SÍ, CONFIRMO, DE ACUERDO), ejecuta la herramienta create_order.`
     : "";
   const listingsBlock = params.listingsContext ? `\n${params.listingsContext}` : "";
   const knowledgeBlock = params.knowledgeContext ? `\n${params.knowledgeContext}` : "";
@@ -414,7 +420,7 @@ const handleUnrecoverableTurn = async (params: {
   turnId: number;
   retryCount: number;
   courtesySent: boolean;
-  failure: GeminiTurnFailure;
+  failure: GroqTurnFailure;
   advisorsAvailable: boolean;
   closedMessage: string;
 }) => {
@@ -524,8 +530,8 @@ const handleUnrecoverableTurn = async (params: {
 export const runConversationAgent = async (job: AgentJob, options: RunAgentOptions = {}) => {
   const followUpsRemaining = options.followUpsRemaining ?? AGENT_MAX_SUPERSEDE_FOLLOWUPS;
 
-  if (!isGeminiConfigured()) {
-    logMetaWebhook("warn", "agent.skipped_missing_gemini_key", {
+  if (!isGroqConfigured()) {
+    logMetaWebhook("warn", "agent.skipped_missing_groq_key", {
       organizationId: job.organizationId,
       conversationId: job.conversationId,
     });
@@ -628,8 +634,8 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
     const chronological = [...(messageRows ?? [])].reverse().filter((row) => row.sender_type !== "system");
     const history = historyThroughInbound(chronological, job.inboundMessageId);
     const burstIds = trailingInboundIds(history);
-    const contents: GeminiContent[] = ensureGeminiHistoryForGenerate(
-      await buildCoalescedGeminiContents(history, burstIds),
+    const contents: GroqChatMessage[] = ensureGroqHistoryForGenerate(
+      await buildCoalescedGroqMessages(history, burstIds),
     );
     const lastInboundText = trailingInboundText(history);
 
@@ -745,10 +751,10 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
     const imagesSentThisTurn = { count: 0 };
 
     const generate = async (tools: typeof toolDeclarations) => {
-      const outcome = await generateGeminiTurn({
+      const outcome = await generateGroqTurn({
         preferredModel: pinnedModel,
         systemInstruction,
-        contents,
+        messages: contents,
         tools,
       });
       if (outcome.ok) {
@@ -769,7 +775,7 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
     };
 
     const generateTextOnly = async (hint: string) => {
-      contents.push({ role: "user", parts: [{ text: hint }] });
+      contents.push({ role: "user", content: hint });
       return generate([]);
     };
 
@@ -817,16 +823,8 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
         break;
       }
 
-      contents.push({
-        role: "model",
-        parts: generation.modelParts.length
-          ? generation.modelParts
-          : generation.functionCalls.map((call) => ({
-              functionCall: { name: call.name, args: call.args },
-            })),
-      });
+      contents.push(generation.rawMessage);
 
-      const responseParts = [];
       for (const call of generation.functionCalls) {
         const executed = await executeAgentTool(
           {
@@ -843,11 +841,10 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
           call.name,
           call.args,
         );
-        responseParts.push({
-          functionResponse: {
-            name: call.name,
-            response: executed.result,
-          },
+        contents.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify(executed.result),
         });
         if (executed.handoff) {
           handoff = true;
@@ -859,8 +856,6 @@ export const runConversationAgent = async (job: AgentJob, options: RunAgentOptio
           imageFailed = true;
         }
       }
-
-      contents.push({ role: "user", parts: responseParts });
 
       if (imageFailed && !pendingImage) {
         const fallback = await generateTextOnly(IMAGE_FAILED_HINT);

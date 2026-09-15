@@ -100,193 +100,216 @@ export const sendImageArgsSchema = z
     }
   });
 
-export type GeminiFunctionDeclaration = {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
+export type AgentToolDeclaration = {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
 };
 
 export const buildAgentToolDeclarations = (
   settings: AgentSettings,
   modules?: OrganizationModules,
-): GeminiFunctionDeclaration[] => {
-  const tools: GeminiFunctionDeclaration[] = [];
+): AgentToolDeclaration[] => {
+  const tools: AgentToolDeclaration[] = [];
 
   if (settings.toolsCalendar && modules?.calendar !== false) {
     tools.push({
-      name: "create_appointment",
-      description:
-        "Crea una cita en Google Calendar y en el CRM para este contacto. Solo úsala cuando tengas fecha, hora y, si aplica, confirmación explícita del cliente.",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          date: { type: "STRING", description: `Fecha local YYYY-MM-DD en ${CALENDAR_TIME_ZONE}.` },
-          startTime: { type: "STRING", description: "Hora de inicio HH:mm (24h)." },
-          endTime: { type: "STRING", description: "Hora de fin HH:mm. Si omites, se usa +30 minutos." },
-          purpose: {
-            type: "STRING",
-            format: "enum",
-            enum: [...APPOINTMENT_PURPOSES],
-            description: "Motivo de la cita.",
+      type: "function",
+      function: {
+        name: "create_appointment",
+        description:
+          "Crea una cita en Google Calendar y en el CRM para este contacto. Solo úsala cuando tengas fecha, hora y, si aplica, confirmación explícita del cliente.",
+        parameters: {
+          type: "object",
+          properties: {
+            date: { type: "string", description: `Fecha local YYYY-MM-DD en ${CALENDAR_TIME_ZONE}.` },
+            startTime: { type: "string", description: "Hora de inicio HH:mm (24h)." },
+            endTime: { type: "string", description: "Hora de fin HH:mm. Si omites, se usa +30 minutos." },
+            purpose: {
+              type: "string",
+              enum: [...APPOINTMENT_PURPOSES],
+              description: "Motivo de la cita.",
+            },
+            notes: { type: "string", description: "Notas internas opcionales." },
+            createMeet: { type: "boolean", description: "Si true, crea enlace de Google Meet. Default true." },
+            confirmedByCustomer: {
+              type: "boolean",
+              description: "true solo si el cliente confirmó explícitamente ese horario.",
+            },
+            listingId: {
+              type: "integer",
+              description: "ID del inmueble si la cita es una visita, tasación o firma. Sale de search_listings o del contexto.",
+            },
           },
-          notes: { type: "STRING", description: "Notas internas opcionales." },
-          createMeet: { type: "BOOLEAN", description: "Si true, crea enlace de Google Meet. Default true." },
-          confirmedByCustomer: {
-            type: "BOOLEAN",
-            description: "true solo si el cliente confirmó explícitamente ese horario.",
-          },
-          listingId: {
-            type: "INTEGER",
-            description: "ID del inmueble si la cita es una visita, tasación o firma. Sale de search_listings o del contexto.",
-          },
+          required: ["date", "startTime", "purpose", "confirmedByCustomer"],
         },
-        required: ["date", "startTime", "purpose", "confirmedByCustomer"],
       },
     });
   }
 
   if (settings.toolsFunnel && modules?.funnels !== false) {
     tools.push({
-      name: "move_contact_to_stage",
-      description:
-        "Crea o mueve la oportunidad del contacto a una etapa del embudo. stageId debe ser uno de los IDs del contexto. Si etapa actual es sin etapa, regístralo en la primera etapa en este turno. Cada chat nuevo es un ciclo nuevo. No saltes etapas por un saludo o un ok vacío.",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          stageId: { type: "INTEGER", description: "ID de la etapa destino." },
-          reason: { type: "STRING", description: "Evidencia breve tomada de la conversación." },
-          valueAmount: { type: "NUMBER", description: "Valor estimado opcional." },
+      type: "function",
+      function: {
+        name: "move_contact_to_stage",
+        description:
+          "Crea o mueve la oportunidad del contacto a una etapa del embudo. stageId debe ser uno de los IDs del contexto. Si etapa actual es sin etapa, regístralo en la primera etapa en este turno. Cada chat nuevo es un ciclo nuevo. No saltes etapas por un saludo o un ok vacío.",
+        parameters: {
+          type: "object",
+          properties: {
+            stageId: { type: "integer", description: "ID de la etapa destino." },
+            reason: { type: "string", description: "Evidencia breve tomada de la conversación." },
+            valueAmount: { type: "number", description: "Valor estimado opcional." },
+          },
+          required: ["stageId", "reason"],
         },
-        required: ["stageId", "reason"],
       },
     });
   }
 
   if (settings.toolsHandoff) {
     tools.push({
-      name: "handoff_to_human",
-      description:
-        "Cede la conversación a un asesor humano y detiene al agente. Úsala solo si hay asesores disponibles (horario de oficina). Si la oficina está cerrada, no la uses: sigue tú atendiendo.",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          reason: { type: "STRING", description: "Por qué escalas." },
+      type: "function",
+      function: {
+        name: "handoff_to_human",
+        description:
+          "Cede la conversación a un asesor humano y detiene al agente. Úsala solo si hay asesores disponibles (horario de oficina). Si la oficina está cerrada, no la uses: sigue tú atendiendo.",
+        parameters: {
+          type: "object",
+          properties: {
+            reason: { type: "string", description: "Por qué escalas." },
+          },
+          required: ["reason"],
         },
-        required: ["reason"],
       },
     });
   }
 
   if (modules?.orders) {
     tools.push({
-      name: "create_order",
-      description:
-        "Crea un pedido con precios e inventario del catálogo. Solo úsala cuando el cliente confirmó los ítems. El servidor descuenta stock; si falta existencias, la tool falla y debes ofrecer alternativas.",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          items: {
-            type: "ARRAY",
-            description: "Líneas del pedido. productId sale del catálogo del contexto.",
+      type: "function",
+      function: {
+        name: "create_order",
+        description:
+          "Crea un pedido con productos del catálogo y descuenta inventario. Solo úsala cuando el cliente haya seleccionado los productos y confirmado explícitamente la compra. Para entregas a domicilio (delivery), solicita o confirma la dirección de entrega antes de ejecutarla.",
+        parameters: {
+          type: "object",
+          properties: {
             items: {
-              type: "OBJECT",
-              properties: {
-                productId: { type: "INTEGER", description: "ID del producto del catálogo." },
-                quantity: { type: "NUMBER", description: "Cantidad pedida." },
-                notes: { type: "STRING", description: "Notas de la línea, por ejemplo sin cebolla." },
+              type: "array",
+              description: "Líneas del pedido. productId debe ser un ID válido del catálogo del contexto.",
+              items: {
+                type: "object",
+                properties: {
+                  productId: { type: "integer", description: "ID del producto del catálogo." },
+                  quantity: { type: "number", description: "Cantidad pedida." },
+                  notes: { type: "string", description: "Notas o especificaciones del producto (talla, color, etc.)." },
+                },
+                required: ["productId", "quantity"],
               },
-              required: ["productId", "quantity"],
+            },
+            fulfillment: {
+              type: "string",
+              enum: [...FULFILLMENT_TYPES],
+              description: "delivery (entrega a domicilio), pickup (retiro en tienda), dine_in o unspecified.",
+            },
+            customerNote: { type: "string", description: "Nota general o instrucciones de entrega del cliente." },
+            deliveryAddress: { type: "string", description: "Dirección completa de entrega si es delivery." },
+            deliveryZone: { type: "string", description: "Nombre de zona de delivery del contexto para calcular tarifa de envío." },
+            confirmedByCustomer: {
+              type: "boolean",
+              description: "true si el cliente confirmó explícitamente el pedido (dijo Sí, Confirmo, Lo quiero, etc.).",
             },
           },
-          fulfillment: {
-            type: "STRING",
-            format: "enum",
-            enum: [...FULFILLMENT_TYPES],
-            description: "pickup, delivery, dine_in o unspecified.",
-          },
-          customerNote: { type: "STRING", description: "Nota general del cliente." },
-          deliveryAddress: { type: "STRING", description: "Dirección de entrega si es delivery." },
-          deliveryZone: { type: "STRING", description: "Nombre de zona de delivery del contexto." },
-          confirmedByCustomer: {
-            type: "BOOLEAN",
-            description: "true si el cliente confirmó el pedido o escribió CONFIRMAR / SÍ / CONFIRMO.",
-          },
+          required: ["items", "confirmedByCustomer"],
         },
-        required: ["items", "confirmedByCustomer"],
       },
     });
     tools.push({
-      name: "cancel_order",
-      description: "Cancela un pedido de este negocio y restaura el inventario descontado.",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          orderId: { type: "INTEGER", description: "ID del pedido a cancelar." },
-          reason: { type: "STRING", description: "Por qué se cancela." },
+      type: "function",
+      function: {
+        name: "cancel_order",
+        description: "Cancela un pedido de este negocio y restaura el inventario descontado.",
+        parameters: {
+          type: "object",
+          properties: {
+            orderId: { type: "integer", description: "ID del pedido a cancelar." },
+            reason: { type: "string", description: "Por qué se cancela." },
+          },
+          required: ["orderId", "reason"],
         },
-        required: ["orderId", "reason"],
       },
     });
   }
 
   if (modules?.listings) {
     tools.push({
-      name: "search_listings",
-      description:
-        "Busca inmuebles del inventario interno. Úsala si el cliente pide zona, precio, habitaciones o un código. No inventes fichas que no salgan aquí.",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          query: { type: "STRING", description: "Texto libre: estado, ciudad, zona, código o título." },
-          operation: {
-            type: "STRING",
-            format: "enum",
-            enum: [...LISTING_OPERATIONS],
-            description: "sale, rent o both.",
-          },
-          city: { type: "STRING", description: "Ciudad o municipio." },
-          bedrooms: { type: "INTEGER", description: "Habitaciones mínimas." },
-          maxPrice: { type: "NUMBER", description: "Precio máximo en la moneda del inmueble." },
-          status: {
-            type: "STRING",
-            format: "enum",
-            enum: [...LISTING_STATUSES],
-            description: "Si omites, se buscan disponibles y reservados.",
+      type: "function",
+      function: {
+        name: "search_listings",
+        description:
+          "Busca inmuebles del inventario interno. Úsala si el cliente pide zona, precio, habitaciones o un código. No inventes fichas que no salgan aquí.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Texto libre: estado, ciudad, zona, código o título." },
+            operation: {
+              type: "string",
+              enum: [...LISTING_OPERATIONS],
+              description: "sale, rent o both.",
+            },
+            city: { type: "string", description: "Ciudad o municipio." },
+            bedrooms: { type: "integer", description: "Habitaciones mínimas." },
+            maxPrice: { type: "number", description: "Precio máximo en la moneda del inmueble." },
+            status: {
+              type: "string",
+              enum: [...LISTING_STATUSES],
+              description: "Si omites, se buscan disponibles y reservados.",
+            },
           },
         },
       },
     });
     tools.push({
-      name: "send_listing",
-      description:
-        "Envía la ficha de un inmueble y, si hay foto, una imagen. Máximo un inmueble y una foto por respuesta. Escribe también el mensaje en texto. No digas que está disponible si status no es available.",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          listingId: { type: "INTEGER", description: "ID del inmueble." },
-          caption: { type: "STRING", description: "Pie de foto corto opcional." },
+      type: "function",
+      function: {
+        name: "send_listing",
+        description:
+          "Envía la ficha de un inmueble y, si hay foto, una imagen. Máximo un inmueble y una foto por respuesta. Escribe también el mensaje en texto. No digas que está disponible si status no es available.",
+        parameters: {
+          type: "object",
+          properties: {
+            listingId: { type: "integer", description: "ID del inmueble." },
+            caption: { type: "string", description: "Pie de foto corto opcional." },
+          },
+          required: ["listingId"],
         },
-        required: ["listingId"],
       },
     });
   }
 
   tools.push({
-    name: "send_image",
-    description:
-      "Envía una foto al cliente. Escribe también el mensaje completo en texto en el mismo turno; la foto no reemplaza la frase. Para un producto del catálogo usa productId. Para FAQ/menú de la base de conocimiento usa assetId. Máximo una imagen por respuesta. No inventes URLs.",
-    parameters: {
-      type: "OBJECT",
-      properties: {
-        productId: {
-          type: "INTEGER",
-          description: "ID del producto con [foto:siempre] o [foto:si_pide] en el catálogo.",
+    type: "function",
+    function: {
+      name: "send_image",
+      description:
+        "Envía una foto al cliente. Escribe también el mensaje completo en texto en el mismo turno; la foto no reemplaza la frase. Para un producto del catálogo usa productId. Para FAQ/menú de la base de conocimiento usa assetId. Máximo una imagen por respuesta. No inventes URLs.",
+      parameters: {
+        type: "object",
+        properties: {
+          productId: {
+            type: "integer",
+            description: "ID del producto con [foto:siempre] o [foto:si_pide] en el catálogo.",
+          },
+          assetId: {
+            type: "integer",
+            description: "ID de una imagen de la base de conocimiento (no es un productId).",
+          },
+          caption: { type: "string", description: "Pie de foto corto opcional." },
         },
-        assetId: {
-          type: "INTEGER",
-          description: "ID de una imagen de la base de conocimiento (no es un productId).",
-        },
-        caption: { type: "STRING", description: "Pie de foto corto opcional." },
       },
     },
   });

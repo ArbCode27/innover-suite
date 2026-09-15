@@ -200,7 +200,7 @@ export default async function SettingsPage() {
           canManageOrganization={canManageOrganization}
           settings={agentSettings}
           modules={modules}
-          geminiConfigured={Boolean(env.geminiApiKey)}
+          groqConfigured={Boolean(env.groqApiKey)}
           articles={articles}
         />
         {modules.funnels ? (

@@ -144,7 +144,7 @@ const PlanTierCard = ({ vertical, tier, ctaHref, ctaLabel }: PlanTierCardProps) 
 };
 
 export const LandingPricing = ({ isLoggedIn }: LandingPricingProps) => {
-  const ctaHref = isLoggedIn ? "/home" : "/login";
+  const ctaHref = isLoggedIn ? "/home" : "/login?next=/solicitud";
   const ctaLabel = isLoggedIn ? "Ir al CRM" : "Empezar con este plan";
   const defaultVertical = LANDING_PLAN_VERTICALS[0]?.id ?? "restaurant";
 

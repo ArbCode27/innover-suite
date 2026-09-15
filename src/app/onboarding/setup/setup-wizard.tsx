@@ -20,7 +20,7 @@ type SetupWizardProps = {
   currentStep: SetupStepId;
   progress: OnboardingProgress;
   agentSettings: AgentSettings;
-  geminiConfigured: boolean;
+  groqConfigured: boolean;
   calendarEmail: string | null;
   instagramLabel: string | null;
   instagramConnected: boolean;
@@ -33,7 +33,7 @@ export const SetupWizard = ({
   currentStep,
   progress,
   agentSettings,
-  geminiConfigured,
+  groqConfigured,
   calendarEmail,
   instagramLabel,
   instagramConnected,
@@ -142,7 +142,7 @@ export const SetupWizard = ({
                 <CalendarPanel connected={progress.hasCalendar} email={calendarEmail} />
               ) : null}
               {current.id === "agent" ? (
-                <AgentPanel settings={agentSettings} geminiConfigured={geminiConfigured} />
+                <AgentPanel settings={agentSettings} groqConfigured={groqConfigured} />
               ) : null}
               {current.id === "channel" ? (
                 <ChannelPanel

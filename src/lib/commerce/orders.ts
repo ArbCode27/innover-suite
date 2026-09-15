@@ -28,7 +28,10 @@ type OrderRow = {
   updated_at: string;
   contact_id: number | null;
   conversation_id: number | null;
-  contacts: { full_name?: string | null } | { full_name?: string | null }[] | null;
+  contacts:
+    | { full_name?: string | null; phone?: string | null }
+    | { full_name?: string | null; phone?: string | null }[]
+    | null;
   order_items:
     | Array<{
         id: number;
@@ -59,6 +62,11 @@ const contactName = (
   return nameFromCustomerNote(customerNote) || "Cliente";
 };
 
+const contactPhone = (value: OrderRow["contacts"]) => {
+  const row = Array.isArray(value) ? value[0] : value;
+  return row?.phone?.trim() || null;
+};
+
 export const mapOrderRow = (row: OrderRow): OrderRecord => ({
   id: row.id,
   status: isOrderStatus(row.status) ? row.status : "received",
@@ -80,6 +88,7 @@ export const mapOrderRow = (row: OrderRow): OrderRecord => ({
   contactId: row.contact_id,
   conversationId: row.conversation_id,
   contactName: contactName(row.contacts, row.customer_note),
+  contactPhone: contactPhone(row.contacts),
   items: (row.order_items ?? []).map(
     (item): OrderItemRecord => ({
       id: item.id,
@@ -93,7 +102,7 @@ export const mapOrderRow = (row: OrderRow): OrderRecord => ({
 });
 
 export const ORDER_SELECT =
-  "id, status, fulfillment, channel, customer_note, subtotal, discount_amount, tax_amount, delivery_fee, total, delivery_address, delivery_zone, eta_minutes, payment_status, payment_method, created_at, updated_at, contact_id, conversation_id, contacts(full_name), order_items(id, product_id, name_snapshot, quantity, unit_price, notes)";
+  "id, status, fulfillment, channel, customer_note, subtotal, discount_amount, tax_amount, delivery_fee, total, delivery_address, delivery_zone, eta_minutes, payment_status, payment_method, created_at, updated_at, contact_id, conversation_id, contacts(full_name, phone), order_items(id, product_id, name_snapshot, quantity, unit_price, notes)";
 
 export const loadOrders = async (supabase: SupabaseClient, organizationId: number, limit = 80) => {
   const { data, error } = await supabase
@@ -107,7 +116,7 @@ export const loadOrders = async (supabase: SupabaseClient, organizationId: numbe
     const fallback = await supabase
       .from("orders")
       .select(
-        "id, status, fulfillment, channel, customer_note, subtotal, total, created_at, updated_at, contact_id, conversation_id, contacts(full_name), order_items(id, product_id, name_snapshot, quantity, unit_price, notes)",
+        "id, status, fulfillment, channel, customer_note, subtotal, total, created_at, updated_at, contact_id, conversation_id, contacts(full_name, phone), order_items(id, product_id, name_snapshot, quantity, unit_price, notes)",
       )
       .eq("organization_id", organizationId)
       .order("created_at", { ascending: false })
@@ -143,7 +152,7 @@ export const loadOrdersByDateRange = async (
     const fallback = await supabase
       .from("orders")
       .select(
-        "id, status, fulfillment, channel, customer_note, subtotal, total, created_at, updated_at, contact_id, conversation_id, contacts(full_name), order_items(id, product_id, name_snapshot, quantity, unit_price, notes)",
+        "id, status, fulfillment, channel, customer_note, subtotal, total, created_at, updated_at, contact_id, conversation_id, contacts(full_name, phone), order_items(id, product_id, name_snapshot, quantity, unit_price, notes)",
       )
       .eq("organization_id", organizationId)
       .gte("created_at", fromIso)

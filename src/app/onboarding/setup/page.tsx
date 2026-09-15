@@ -116,7 +116,7 @@ export default async function OnboardingSetupPage({ searchParams }: OnboardingSe
         currentStep={currentStep}
         progress={progress}
         agentSettings={agentSettings}
-        geminiConfigured={Boolean(env.geminiApiKey)}
+        groqConfigured={Boolean(env.groqApiKey)}
         calendarEmail={googleResult.data?.email ?? null}
         instagramLabel={
           instagramResult.data?.instagram_username

@@ -20,7 +20,7 @@ type AgentSettingsFormProps = {
   canManageOrganization: boolean;
   settings: AgentSettings;
   modules: OrganizationModules;
-  geminiConfigured: boolean;
+  groqConfigured: boolean;
   articles: KnowledgeArticle[];
 };
 
@@ -28,7 +28,7 @@ export const AgentSettingsForm = ({
   canManageOrganization,
   settings,
   modules,
-  geminiConfigured,
+  groqConfigured,
   articles,
 }: AgentSettingsFormProps) => {
   const [enabled, setEnabled] = useState(settings.enabled);
@@ -110,15 +110,15 @@ export const AgentSettingsForm = ({
               </CardDescription>
             </div>
           </div>
-          <Badge variant={enabled && geminiConfigured ? "default" : "outline"}>
-            {enabled && geminiConfigured ? "Listo" : "Inactivo"}
+          <Badge variant={enabled && groqConfigured ? "default" : "outline"}>
+            {enabled && groqConfigured ? "Listo" : "Inactivo"}
           </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {geminiConfigured ? null : (
+        {groqConfigured ? null : (
           <p className="text-sm text-destructive">
-            Falta GEMINI_API_KEY en el entorno. El prompt se puede guardar, pero el agente no responderá.
+            Falta GROQ_API_KEY en el entorno. El prompt se puede guardar, pero el agente no responderá.
           </p>
         )}
 

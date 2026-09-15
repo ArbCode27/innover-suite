@@ -26,12 +26,21 @@ import {
   type MenuType,
   type StoredMenuIngredient,
 } from "@/lib/menu/crm-types";
-import { DEFAULT_CURRENCY, type OrganizationCurrencySettings } from "@/lib/organizations/currencies";
+import {
+  DEFAULT_CURRENCY,
+  type OrganizationCurrencySettings,
+} from "@/lib/organizations/currencies";
 import { cn } from "@/lib/utils";
 import { AppSelect } from "@/components/ui/app-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,7 +82,9 @@ const emptyForm = {
   comboItemIds: [] as number[],
 };
 
-const toIngredientRows = (ingredients: StoredMenuIngredient[]): IngredientFormRow[] =>
+const toIngredientRows = (
+  ingredients: StoredMenuIngredient[],
+): IngredientFormRow[] =>
   ingredients.map((ingredient, index) => ({
     key: `ing-${index}-${ingredient.name}`,
     name: ingredient.name,
@@ -83,10 +94,17 @@ const toIngredientRows = (ingredients: StoredMenuIngredient[]): IngredientFormRo
     removeImage: false,
   }));
 
-export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => {
+export const MenuBoard = ({
+  dishes,
+  currencies,
+  canManage,
+}: MenuBoardProps) => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState({ ...emptyForm, currency: currencies.defaultCode });
+  const [form, setForm] = useState({
+    ...emptyForm,
+    currency: currencies.defaultCode,
+  });
   const [ingredientRows, setIngredientRows] = useState<IngredientFormRow[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | MenuType>("all");
@@ -99,7 +117,10 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
   const comboCandidates = useMemo(
     () =>
       dishes.filter(
-        (dish) => dish.itemType !== "combo" && dish.itemType !== "promo" && dish.id !== editingId,
+        (dish) =>
+          dish.itemType !== "combo" &&
+          dish.itemType !== "promo" &&
+          dish.id !== editingId,
       ),
     [dishes, editingId],
   );
@@ -108,7 +129,8 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
     const query = searchTerm.trim().toLowerCase();
     return dishes.filter((dish) => {
       if (typeFilter !== "all" && dish.itemType !== typeFilter) return false;
-      const haystack = `${dish.name} ${dish.category ?? ""} ${dish.itemType}`.toLowerCase();
+      const haystack =
+        `${dish.name} ${dish.category ?? ""} ${dish.itemType}`.toLowerCase();
       return !query || haystack.includes(query);
     });
   }, [dishes, searchTerm, typeFilter]);
@@ -171,7 +193,8 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
     );
     ingredientRows.forEach((row, index) => {
       if (row.imageFile) payload.set(`ingredientImage_${index}`, row.imageFile);
-      if (row.removeImage) payload.set(`removeIngredientImage_${index}`, "true");
+      if (row.removeImage)
+        payload.set(`removeIngredientImage_${index}`, "true");
     });
     if (imageFile) payload.set("image", imageFile);
     if (removeExistingImage) payload.set("removeImage", "true");
@@ -225,7 +248,7 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
           <div>
             <CardTitle>Carta del menú</CardTitle>
             <CardDescription>
-              Los ítems viven en menu_items · Se publican en /menu/… · Inventario es aparte.
+              Gestiona platos, bebidas, postres, combos y promos en la carta.
             </CardDescription>
           </div>
           {canManage ? (
@@ -265,38 +288,47 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
           </div>
 
           {filtered.length ? (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {filtered.map((dish) => (
                 <article
                   key={dish.id}
                   className={cn(
                     "flex flex-col overflow-hidden rounded-2xl border border-primary/10 bg-background/70",
                     !dish.active && "opacity-60",
-                  )}
-                >
-                  <div className="relative h-36 bg-muted">
+                  )}>
+                  <div className="relative h-60 bg-muted">
                     {dish.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={dish.imageUrl} alt="" className="size-full object-cover" />
+                      <img
+                        src={dish.imageUrl}
+                        alt=""
+                        className="size-full object-cover"
+                      />
                     ) : (
                       <div className="flex h-full items-center justify-center text-muted-foreground">
                         <UtensilsCrossed className="size-8" />
                       </div>
                     )}
                     <div className="absolute top-2 left-2 flex flex-wrap gap-1">
-                      <Badge variant="secondary">{MENU_TYPE_LABELS[dish.itemType]}</Badge>
+                      <Badge variant="secondary">
+                        {MENU_TYPE_LABELS[dish.itemType]}
+                      </Badge>
                       {dish.isFeatured ? <Badge>Destacado</Badge> : null}
                     </div>
                   </div>
                   <div className="flex flex-1 flex-col gap-2 p-3">
                     <div>
-                      <h3 className="font-semibold tracking-tight">{dish.name}</h3>
+                      <h3 className="font-semibold tracking-tight">
+                        {dish.name}
+                      </h3>
                       <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
                         {dish.description || dish.category || "Sin descripción"}
                       </p>
                     </div>
                     <div className="mt-auto flex items-center justify-between gap-2">
-                      <p className="text-sm font-bold">{formatMoney(dish.price, dish.currency)}</p>
+                      <p className="text-sm font-bold">
+                        {formatMoney(dish.price, dish.currency)}
+                      </p>
                       {canManage ? (
                         <div className="flex gap-1">
                           <Button
@@ -304,8 +336,7 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                             size="icon"
                             variant="outline"
                             aria-label={`Editar ${dish.name}`}
-                            onClick={() => handleOpenEdit(dish)}
-                          >
+                            onClick={() => handleOpenEdit(dish)}>
                             <Pencil className="size-3.5" />
                           </Button>
                           <Button
@@ -314,8 +345,7 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                             variant="ghost"
                             aria-label={`Eliminar ${dish.name}`}
                             disabled={isPending}
-                            onClick={() => handleDelete(dish)}
-                          >
+                            onClick={() => handleDelete(dish)}>
                             <Trash2 className="size-3.5" />
                           </Button>
                         </div>
@@ -336,9 +366,12 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetContent className="flex w-full flex-col gap-0 overflow-hidden sm:max-w-lg">
           <SheetHeader>
-            <SheetTitle>{editingId ? "Editar plato" : "Nuevo plato"}</SheetTitle>
+            <SheetTitle>
+              {editingId ? "Editar plato" : "Nuevo plato"}
+            </SheetTitle>
             <SheetDescription>
-              Define tipo, precio e ingredientes removibles para el menú público.
+              Define tipo, precio e ingredientes removibles para el menú
+              público.
             </SheetDescription>
           </SheetHeader>
           <div className="flex-1 space-y-4 overflow-y-auto px-4 py-2">
@@ -347,7 +380,12 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
               <Input
                 id="menu-name"
                 value={form.name}
-                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -356,7 +394,10 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                 <AppSelect
                   value={form.itemType}
                   onValueChange={(value) =>
-                    setForm((current) => ({ ...current, itemType: value as MenuType }))
+                    setForm((current) => ({
+                      ...current,
+                      itemType: value as MenuType,
+                    }))
                   }
                   options={MENU_TYPES.map((type) => ({
                     value: type,
@@ -371,7 +412,10 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                   placeholder="Ej. Entradas, Pizzas"
                   value={form.category}
                   onChange={(event) =>
-                    setForm((current) => ({ ...current, category: event.target.value }))
+                    setForm((current) => ({
+                      ...current,
+                      category: event.target.value,
+                    }))
                   }
                 />
               </div>
@@ -382,8 +426,12 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
               amount={form.price}
               currency={form.currency}
               currencies={currencies}
-              onAmountChange={(value) => setForm((current) => ({ ...current, price: value }))}
-              onCurrencyChange={(value) => setForm((current) => ({ ...current, currency: value }))}
+              onAmountChange={(value) =>
+                setForm((current) => ({ ...current, price: value }))
+              }
+              onCurrencyChange={(value) =>
+                setForm((current) => ({ ...current, currency: value }))
+              }
             />
             <div className="space-y-1.5">
               <Label htmlFor="menu-description">Descripción</Label>
@@ -391,7 +439,10 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                 id="menu-description"
                 value={form.description}
                 onChange={(event) =>
-                  setForm((current) => ({ ...current, description: event.target.value }))
+                  setForm((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
                 }
               />
             </div>
@@ -414,8 +465,7 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                         removeImage: false,
                       },
                     ])
-                  }
-                >
+                  }>
                   <Plus />
                   Agregar
                 </Button>
@@ -424,16 +474,20 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                 <div className="space-y-2">
                   {ingredientRows.map((row, index) => {
                     const preview =
-                      row.imagePreview || (!row.removeImage && row.imageUrl ? row.imageUrl : null);
+                      row.imagePreview ||
+                      (!row.removeImage && row.imageUrl ? row.imageUrl : null);
                     return (
                       <div
                         key={row.key}
-                        className="flex items-start gap-2 rounded-xl border border-border/70 p-2.5"
-                      >
+                        className="flex items-start gap-2 rounded-xl border border-border/70 p-2.5">
                         <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
                           {preview ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={preview} alt="" className="size-full object-cover" />
+                            <img
+                              src={preview}
+                              alt=""
+                              className="size-full object-cover"
+                            />
                           ) : (
                             <ImagePlus className="size-4 text-muted-foreground" />
                           )}
@@ -477,7 +531,11 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                                   event.target.value = "";
                                 }}
                               />
-                              <Button type="button" size="sm" variant="outline" asChild>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                asChild>
                                 <span>
                                   <ImagePlus />
                                   Foto
@@ -502,8 +560,7 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                                         : item,
                                     ),
                                   )
-                                }
-                              >
+                                }>
                                 <X />
                                 Quitar foto
                               </Button>
@@ -515,10 +572,11 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                               className="text-destructive"
                               onClick={() =>
                                 setIngredientRows((current) =>
-                                  current.filter((_, itemIndex) => itemIndex !== index),
+                                  current.filter(
+                                    (_, itemIndex) => itemIndex !== index,
+                                  ),
                                 )
-                              }
-                            >
+                              }>
                               <Trash2 />
                               Quitar
                             </Button>
@@ -530,7 +588,8 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                 </div>
               ) : (
                 <p className="rounded-xl border border-dashed border-border/70 px-3 py-4 text-xs text-muted-foreground">
-                  Agrega ingredientes que el cliente pueda quitar al pedir. La foto es opcional.
+                  Agrega ingredientes que el cliente pueda quitar al pedir. La
+                  foto es opcional.
                 </p>
               )}
             </div>
@@ -545,13 +604,16 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                       return (
                         <label
                           key={item.id}
-                          className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/60 px-2 py-1.5"
-                        >
+                          className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/60 px-2 py-1.5">
                           <Checkbox
                             checked={checked}
-                            onCheckedChange={(value) => handleToggleComboItem(item.id, value === true)}
+                            onCheckedChange={(value) =>
+                              handleToggleComboItem(item.id, value === true)
+                            }
                           />
-                          <span className="min-w-0 flex-1 truncate text-sm">{item.name}</span>
+                          <span className="min-w-0 flex-1 truncate text-sm">
+                            {item.name}
+                          </span>
                           <span className="text-xs text-muted-foreground">
                             {MENU_TYPE_LABELS[item.itemType]}
                           </span>
@@ -582,7 +644,8 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
               <Label>Foto</Label>
               <div className="flex items-center gap-3">
                 <div className="flex size-16 items-center justify-center overflow-hidden rounded-xl bg-muted">
-                  {imagePreview || (existingImageUrl && !removeExistingImage) ? (
+                  {imagePreview ||
+                  (existingImageUrl && !removeExistingImage) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={imagePreview || existingImageUrl || ""}
@@ -602,7 +665,9 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                       onChange={(event) => {
                         const file = event.target.files?.[0] ?? null;
                         setImageFile(file);
-                        setImagePreview(file ? URL.createObjectURL(file) : null);
+                        setImagePreview(
+                          file ? URL.createObjectURL(file) : null,
+                        );
                         setRemoveExistingImage(false);
                         event.target.value = "";
                       }}
@@ -614,7 +679,8 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                       </span>
                     </Button>
                   </label>
-                  {(imagePreview || existingImageUrl) && !removeExistingImage ? (
+                  {(imagePreview || existingImageUrl) &&
+                  !removeExistingImage ? (
                     <Button
                       type="button"
                       variant="ghost"
@@ -622,8 +688,7 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
                         setImageFile(null);
                         setImagePreview(null);
                         setRemoveExistingImage(true);
-                      }}
-                    >
+                      }}>
                       <X />
                       Quitar
                     </Button>
@@ -633,10 +698,16 @@ export const MenuBoard = ({ dishes, currencies, canManage }: MenuBoardProps) => 
             </div>
           </div>
           <SheetFooter>
-            <Button type="button" variant="outline" onClick={() => setIsSheetOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsSheetOpen(false)}>
               Cancelar
             </Button>
-            <Button type="button" disabled={isPending || !canManage} onClick={handleSave}>
+            <Button
+              type="button"
+              disabled={isPending || !canManage}
+              onClick={handleSave}>
               {isPending ? <Loader2 className="animate-spin" /> : null}
               Guardar
             </Button>
@@ -664,8 +735,7 @@ const FilterChip = ({
       active
         ? "border-primary bg-primary text-primary-foreground"
         : "border-border bg-card text-foreground hover:bg-muted",
-    )}
-  >
+    )}>
     {label}
   </button>
 );

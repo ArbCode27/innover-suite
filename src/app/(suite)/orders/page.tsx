@@ -26,9 +26,9 @@ export default async function OrdersPage() {
       description={
         kitchenMode
           ? "Pedidos que entra la IA desde WhatsApp, Instagram o Messenger. Avanza cada comanda en cocina."
-          : "Pedidos generados por la IA. El inventario ya se descontó al confirmar."
+          : "Gestiona los pedidos de productos generados por la IA o el equipo. Controla empaque, logística de entrega y pagos."
       }
-      eyebrow={kitchenMode ? "Cocina" : "Ventas"}
+      eyebrow={kitchenMode ? "Cocina" : "Ventas & Logística"}
       actions={
         <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary">
           <ClipboardList className="size-3.5" aria-hidden />

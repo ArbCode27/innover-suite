@@ -43,7 +43,13 @@ import { useMobileChrome } from "@/components/suite/mobile-nav";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,7 +64,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { toastActionError } from "@/lib/auth/action-toast";
-import { CHANNEL_BADGE_CLASSNAMES, CHANNEL_LABELS } from "@/lib/contacts/display";
+import {
+  CHANNEL_BADGE_CLASSNAMES,
+  CHANNEL_LABELS,
+} from "@/lib/contacts/display";
 import { attachmentPreviewLabel } from "@/lib/media/parse";
 import { MESSAGE_ATTACHMENTS_BUCKET } from "@/lib/media/types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -72,10 +81,24 @@ import {
   setConversationModeAction,
 } from "./actions";
 import { suggestReplyAction } from "@/lib/inbox/suggest";
-import { mapConversationListRow, mergeInboxConversations, previewFromMessageRow, type ConversationListRow } from "@/lib/inbox/board";
+import {
+  mapConversationListRow,
+  mergeInboxConversations,
+  previewFromMessageRow,
+  type ConversationListRow,
+} from "@/lib/inbox/board";
 import { MessageMedia } from "./message-media";
-import type { FileAttachmentKind, InboxConversation, InboxFilter, InboxMessage } from "./types";
-import { normalizeInboxMessage, sortInboxMessages, upsertInboxMessage } from "./types";
+import type {
+  FileAttachmentKind,
+  InboxConversation,
+  InboxFilter,
+  InboxMessage,
+} from "./types";
+import {
+  normalizeInboxMessage,
+  sortInboxMessages,
+  upsertInboxMessage,
+} from "./types";
 
 type InboxPanelProps = {
   organizationId: number;
@@ -98,11 +121,20 @@ const inboxFilters: Array<{ key: InboxFilter; label: string }> = [
   { key: "unread", label: "No leídas" },
   { key: "ai", label: "Bot IA" },
   { key: "human", label: "Humano" },
-  { key: "mine", label: "Mías" },
-  { key: "unassigned", label: "Cola" },
 ];
 
-const emojiOptions = ["😀", "😍", "😂", "🔥", "👍", "🙏", "🎉", "📌", "👀", "✅"];
+const emojiOptions = [
+  "😀",
+  "😍",
+  "😂",
+  "🔥",
+  "👍",
+  "🙏",
+  "🎉",
+  "📌",
+  "👀",
+  "✅",
+];
 const attachmentBucket = MESSAGE_ATTACHMENTS_BUCKET;
 
 const attachmentAccept: Record<FileAttachmentKind, string> = {
@@ -119,44 +151,26 @@ const formatTime = (value: string) =>
     minute: "2-digit",
   }).format(new Date(value));
 
-const resolveModeLabel = (mode: InboxConversation["mode"]) => (mode === "ai" ? "IA" : "Humano");
+const resolveModeLabel = (mode: InboxConversation["mode"]) =>
+  mode === "ai" ? "IA" : "Humano";
 
-const GeminiIcon = () => {
-  const gradientId = `gemini-${useId().replace(/:/g, "")}`;
-
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="size-3.5">
-      <defs>
-        <linearGradient id={gradientId} x1="4%" y1="8%" x2="96%" y2="92%">
-          <stop offset="0%" stopColor="#4B90FF" />
-          <stop offset="50%" stopColor="#9B72F0" />
-          <stop offset="100%" stopColor="#FF8BCB" />
-        </linearGradient>
-      </defs>
-      <path
-        fill={`url(#${gradientId})`}
-        d="M12 2c0 5.523 4.477 10 10 10-5.523 0-10 4.477-10 10 0-5.523-4.477-10-10-10 5.523 0 10-4.477 10-10Z"
-      />
-    </svg>
-  );
-};
 const resolveAttachmentLabel = (kind: FileAttachmentKind | null) =>
   attachmentPreviewLabel(kind ?? "document");
 
 const resolveInitials = (name: string) => {
-  const words = name
-    .replace(/^@/, "")
-    .trim()
-    .split(" ")
-    .filter(Boolean);
+  const words = name.replace(/^@/, "").trim().split(" ").filter(Boolean);
   if (!words.length) return "SN";
   if (words.length === 1) return words[0]!.slice(0, 2).toUpperCase();
   return `${words[0]![0]}${words[1]![0]}`.toUpperCase();
 };
 
 const limitPreview = (text: string) => {
-  if (text.length <= previewCharLimit) return text;
-  return `${text.slice(0, previewCharLimit - 1).trimEnd()}…`;
+  const chars = Array.from(text);
+  if (chars.length <= previewCharLimit) return text;
+  return `${chars
+    .slice(0, previewCharLimit - 1)
+    .join("")
+    .trimEnd()}…`;
 };
 
 const resolveChannelIcon = (channel: InboxConversation["channel"]) => {
@@ -165,13 +179,19 @@ const resolveChannelIcon = (channel: InboxConversation["channel"]) => {
   return MessageCircle;
 };
 
-const ChannelBadge = ({ channel }: { channel: InboxConversation["channel"] }) => {
+const ChannelBadge = ({
+  channel,
+}: {
+  channel: InboxConversation["channel"];
+}) => {
   const Icon = resolveChannelIcon(channel);
   return (
     <Badge
       variant="outline"
-      className={cn("h-7 px-2.5 text-[13px] [&>svg]:size-3.5!", CHANNEL_BADGE_CLASSNAMES[channel])}
-    >
+      className={cn(
+        "h-7 px-2.5 text-[13px] [&>svg]:size-3.5!",
+        CHANNEL_BADGE_CLASSNAMES[channel],
+      )}>
       <Icon aria-hidden />
       {CHANNEL_LABELS[channel]}
     </Badge>
@@ -181,7 +201,9 @@ const ChannelBadge = ({ channel }: { channel: InboxConversation["channel"] }) =>
 const resolveConversationSubtitle = (conversation: InboxConversation) => {
   const channelLabel = CHANNEL_LABELS[conversation.channel];
   if (conversation.channel === "whatsapp") {
-    return [conversation.contactPhone, channelLabel].filter(Boolean).join(" · ");
+    return [conversation.contactPhone, channelLabel]
+      .filter(Boolean)
+      .join(" · ");
   }
 
   const handle = conversation.contactUsername?.trim().replace(/^@/, "") || null;
@@ -200,19 +222,25 @@ export const InboxPanel = ({
   const [conversations, setConversations] = useState(initialConversations);
   const [activeFilter, setActiveFilter] = useState<InboxFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedConversationId, setSelectedConversationId] = useState<number | null>(initialConversationId);
-  const [isMobileThreadOpen, setIsMobileThreadOpen] = useState(Boolean(initialConversationId));
-  const { setHideMobileNav } = useMobileChrome();
-  const [messagesByConversation, setMessagesByConversation] = useState<Record<number, InboxMessage[]>>(
-    initialMessagesByConversation,
+  const [selectedConversationId, setSelectedConversationId] = useState<
+    number | null
+  >(initialConversationId);
+  const [isMobileThreadOpen, setIsMobileThreadOpen] = useState(
+    Boolean(initialConversationId),
   );
+  const { setHideMobileNav, setHideMobileHeader } = useMobileChrome();
+  const [messagesByConversation, setMessagesByConversation] = useState<
+    Record<number, InboxMessage[]>
+  >(initialMessagesByConversation);
   const [composerText, setComposerText] = useState("");
-  const [composerAttachment, setComposerAttachment] = useState<ComposerAttachment | null>(null);
+  const [composerAttachment, setComposerAttachment] =
+    useState<ComposerAttachment | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [pendingAttachmentKind, setPendingAttachmentKind] = useState<FileAttachmentKind>("document");
+  const [pendingAttachmentKind, setPendingAttachmentKind] =
+    useState<FileAttachmentKind>("document");
   const [isRecording, setIsRecording] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -230,31 +258,39 @@ export const InboxPanel = ({
         if (activeFilter === "all") return true;
         if (activeFilter === "ai") return conversation.mode === "ai";
         if (activeFilter === "human") return conversation.mode === "human";
-        if (activeFilter === "mine") return conversation.assignedUserId === currentUserId;
-        if (activeFilter === "unassigned") return conversation.mode === "human" && !conversation.assignedUserId;
+        if (activeFilter === "mine")
+          return conversation.assignedUserId === currentUserId;
+        if (activeFilter === "unassigned")
+          return conversation.mode === "human" && !conversation.assignedUserId;
         return conversation.unreadCount > 0;
       })
       .filter((conversation) => {
         if (!loweredTerm) return true;
-        const haystack = `${conversation.contactName} ${conversation.contactUsername ?? ""} ${conversation.contactPhone ?? ""} ${CHANNEL_LABELS[conversation.channel]} ${conversation.lastMessagePreview}`.toLowerCase();
+        const haystack =
+          `${conversation.contactName} ${conversation.contactUsername ?? ""} ${conversation.contactPhone ?? ""} ${CHANNEL_LABELS[conversation.channel]} ${conversation.lastMessagePreview}`.toLowerCase();
         return haystack.includes(loweredTerm);
       });
   }, [activeFilter, conversations, currentUserId, searchTerm]);
 
   const activeConversationId = useMemo(() => {
     if (!selectedConversationId) return null;
-    if (filteredConversations.some((item) => item.id === selectedConversationId)) {
+    if (
+      filteredConversations.some((item) => item.id === selectedConversationId)
+    ) {
       return selectedConversationId;
     }
     return null;
   }, [filteredConversations, selectedConversationId]);
 
   const selectedConversation = useMemo(
-    () => conversations.find((item) => item.id === activeConversationId) ?? null,
+    () =>
+      conversations.find((item) => item.id === activeConversationId) ?? null,
     [activeConversationId, conversations],
   );
 
-  const selectedMessages = activeConversationId ? messagesByConversation[activeConversationId] ?? [] : [];
+  const selectedMessages = activeConversationId
+    ? (messagesByConversation[activeConversationId] ?? [])
+    : [];
 
   activeConversationIdRef.current = activeConversationId;
 
@@ -266,7 +302,9 @@ export const InboxPanel = ({
     markReadInFlightRef.current.add(conversationId);
     setConversations((current) =>
       current.map((conversation) =>
-        conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation,
+        conversation.id === conversationId
+          ? { ...conversation, unreadCount: 0 }
+          : conversation,
       ),
     );
 
@@ -286,17 +324,16 @@ export const InboxPanel = ({
       .order("updated_at", { ascending: false })
       .limit(50);
 
-    const result =
-      error?.message?.includes("last_message_preview")
-        ? await supabase
-            .from("conversations")
-            .select(
-              "id, contact_id, channel, status, mode, assigned_user_id, updated_at, last_message_at, metadata, customer_phone, contacts(full_name, phone, metadata)",
-            )
-            .eq("organization_id", organizationId)
-            .order("updated_at", { ascending: false })
-            .limit(50)
-        : { data, error };
+    const result = error?.message?.includes("last_message_preview")
+      ? await supabase
+          .from("conversations")
+          .select(
+            "id, contact_id, channel, status, mode, assigned_user_id, updated_at, last_message_at, metadata, customer_phone, contacts(full_name, phone, metadata)",
+          )
+          .eq("organization_id", organizationId)
+          .order("updated_at", { ascending: false })
+          .limit(50)
+      : { data, error };
 
     if (result.error) {
       return;
@@ -333,7 +370,13 @@ export const InboxPanel = ({
         markConversationRead(mapped.id);
       }
 
-      setConversations((current) => mergeInboxConversations(current, mapped, activeConversationIdRef.current));
+      setConversations((current) =>
+        mergeInboxConversations(
+          current,
+          mapped,
+          activeConversationIdRef.current,
+        ),
+      );
     },
     [markConversationRead],
   );
@@ -345,7 +388,9 @@ export const InboxPanel = ({
     const supabase = createSupabaseBrowserClient();
     const { data, error } = await supabase
       .from("messages")
-      .select("id, conversation_id, direction, sender_type, content, media_url, metadata, created_at")
+      .select(
+        "id, conversation_id, direction, sender_type, content, media_url, metadata, created_at",
+      )
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
@@ -359,13 +404,18 @@ export const InboxPanel = ({
 
     setMessagesByConversation((current) => ({
       ...current,
-      [conversationId]: sortInboxMessages((data ?? []).map(normalizeInboxMessage)),
+      [conversationId]: sortInboxMessages(
+        (data ?? []).map(normalizeInboxMessage),
+      ),
     }));
     setIsLoadingMessages(false);
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
   }, [activeConversationId, selectedMessages.length]);
 
   useEffect(() => {
@@ -401,11 +451,18 @@ export const InboxPanel = ({
 
           setMessagesByConversation((current) => {
             const existing = current[activeConversationId] ?? [];
-            return { ...current, [activeConversationId]: upsertInboxMessage(existing, message) };
+            return {
+              ...current,
+              [activeConversationId]: upsertInboxMessage(existing, message),
+            };
           });
 
           const preview =
-            message.content?.trim() || attachmentPreviewLabel(message.attachmentKind ?? "document", message.isVoice);
+            message.content?.trim() ||
+            attachmentPreviewLabel(
+              message.attachmentKind ?? "document",
+              message.isVoice,
+            );
           setConversations((current) =>
             current.map((conversation) =>
               conversation.id === activeConversationId
@@ -443,11 +500,14 @@ export const InboxPanel = ({
         (payload) => {
           if (payload.eventType === "DELETE") {
             const oldRow = payload.old;
-            if (!oldRow || typeof oldRow !== "object" || !("id" in oldRow)) return;
+            if (!oldRow || typeof oldRow !== "object" || !("id" in oldRow))
+              return;
             const deletedId = Number((oldRow as { id: unknown }).id);
             if (!Number.isInteger(deletedId) || deletedId <= 0) return;
 
-            setConversations((current) => current.filter((conversation) => conversation.id !== deletedId));
+            setConversations((current) =>
+              current.filter((conversation) => conversation.id !== deletedId),
+            );
             setMessagesByConversation((current) => {
               const next = { ...current };
               delete next[deletedId];
@@ -483,7 +543,10 @@ export const InboxPanel = ({
                 created_at?: string;
               }
             | undefined;
-          if (!row?.conversation_id || row.conversation_id === activeConversationIdRef.current) {
+          if (
+            !row?.conversation_id ||
+            row.conversation_id === activeConversationIdRef.current
+          ) {
             return;
           }
 
@@ -575,7 +638,9 @@ export const InboxPanel = ({
 
   useEffect(() => {
     const handlePopState = () => {
-      const conversationId = Number(new URLSearchParams(window.location.search).get("conversation"));
+      const conversationId = Number(
+        new URLSearchParams(window.location.search).get("conversation"),
+      );
       if (Number.isInteger(conversationId) && conversationId > 0) {
         setSelectedConversationId(conversationId);
         setIsMobileThreadOpen(true);
@@ -591,8 +656,12 @@ export const InboxPanel = ({
 
   useEffect(() => {
     setHideMobileNav(isMobileThreadOpen);
-    return () => setHideMobileNav(false);
-  }, [isMobileThreadOpen, setHideMobileNav]);
+    setHideMobileHeader(isMobileThreadOpen);
+    return () => {
+      setHideMobileNav(false);
+      setHideMobileHeader(false);
+    };
+  }, [isMobileThreadOpen, setHideMobileNav, setHideMobileHeader]);
 
   const handleSelectAttachmentKind = (kind: FileAttachmentKind) => {
     setPendingAttachmentKind(kind);
@@ -693,7 +762,10 @@ export const InboxPanel = ({
           const sentMessage = result.data.message;
           setMessagesByConversation((current) => ({
             ...current,
-            [selectedConversation.id]: upsertInboxMessage(current[selectedConversation.id] ?? [], sentMessage),
+            [selectedConversation.id]: upsertInboxMessage(
+              current[selectedConversation.id] ?? [],
+              sentMessage,
+            ),
           }));
           setConversations((current) =>
             current.map((conversation) =>
@@ -756,7 +828,10 @@ export const InboxPanel = ({
   const handleAssignConversation = (assignToMe: boolean) => {
     if (!activeConversationId) return;
     startTransition(async () => {
-      const result = await assignConversationAction({ conversationId: activeConversationId, assignToMe });
+      const result = await assignConversationAction({
+        conversationId: activeConversationId,
+        assignToMe,
+      });
       if (result.error) {
         toastActionError(result);
         return;
@@ -793,7 +868,9 @@ export const InboxPanel = ({
         return;
       }
 
-      setConversations((current) => current.filter((conversation) => conversation.id !== conversationId));
+      setConversations((current) =>
+        current.filter((conversation) => conversation.id !== conversationId),
+      );
       setMessagesByConversation((current) => {
         const next = { ...current };
         delete next[conversationId];
@@ -816,7 +893,9 @@ export const InboxPanel = ({
   const handleSuggestReply = () => {
     if (!activeConversationId) return;
     startTransition(async () => {
-      const result = await suggestReplyAction({ conversationId: activeConversationId });
+      const result = await suggestReplyAction({
+        conversationId: activeConversationId,
+      });
       if (result.error) {
         toastActionError(result);
         return;
@@ -848,8 +927,13 @@ export const InboxPanel = ({
     });
   };
 
-  const uploadAttachment = async (conversationId: number, attachment: ComposerAttachment) => {
-    const extension = attachment.file.name.includes(".") ? attachment.file.name.split(".").pop() : "";
+  const uploadAttachment = async (
+    conversationId: number,
+    attachment: ComposerAttachment,
+  ) => {
+    const extension = attachment.file.name.includes(".")
+      ? attachment.file.name.split(".").pop()
+      : "";
     const suffix = extension ? `.${extension}` : "";
     const fileName = `${Date.now()}-${crypto.randomUUID()}${suffix}`;
     const path = `conversations/${conversationId}/${fileName}`;
@@ -857,7 +941,10 @@ export const InboxPanel = ({
     const supabase = createSupabaseBrowserClient();
     const { error: uploadError } = await supabase.storage
       .from(attachmentBucket)
-      .upload(path, attachment.file, { cacheControl: "3600", contentType: attachment.file.type || undefined });
+      .upload(path, attachment.file, {
+        cacheControl: "3600",
+        contentType: attachment.file.type || undefined,
+      });
 
     if (uploadError) {
       throw new Error(
@@ -888,10 +975,14 @@ export const InboxPanel = ({
     try {
       if (composerAttachment) {
         setIsUploadingAttachment(true);
-        mediaUrl = await uploadAttachment(selectedConversation.id, composerAttachment);
+        mediaUrl = await uploadAttachment(
+          selectedConversation.id,
+          composerAttachment,
+        );
       }
     } catch (error) {
-      const uploadMessage = error instanceof Error ? error.message : "No se pudo subir el archivo.";
+      const uploadMessage =
+        error instanceof Error ? error.message : "No se pudo subir el archivo.";
       setComposerError(uploadMessage);
       setIsUploadingAttachment(false);
       return;
@@ -919,11 +1010,17 @@ export const InboxPanel = ({
       const now = new Date().toISOString();
       const previewText =
         sentMessage.content?.trim() ||
-        attachmentPreviewLabel(sentMessage.attachmentKind ?? "document", sentMessage.isVoice);
+        attachmentPreviewLabel(
+          sentMessage.attachmentKind ?? "document",
+          sentMessage.isVoice,
+        );
 
       setMessagesByConversation((current) => ({
         ...current,
-        [selectedConversation.id]: upsertInboxMessage(current[selectedConversation.id] ?? [], sentMessage),
+        [selectedConversation.id]: upsertInboxMessage(
+          current[selectedConversation.id] ?? [],
+          sentMessage,
+        ),
       }));
 
       setConversations((current) =>
@@ -955,8 +1052,11 @@ export const InboxPanel = ({
     }
   };
 
-  const showAudioQuickAction = !composerText.trim() && !composerAttachment && !isRecording;
-  const hasComposerMeta = Boolean(composerAttachment || composerError || isRecording);
+  const showAudioQuickAction =
+    !composerText.trim() && !composerAttachment && !isRecording;
+  const hasComposerMeta = Boolean(
+    composerAttachment || composerError || isRecording,
+  );
 
   return (
     <div className="grid h-full min-h-0 gap-3 overflow-hidden lg:grid-cols-[330px_1fr]">
@@ -964,13 +1064,14 @@ export const InboxPanel = ({
         className={cn(
           "flex h-full min-h-0 flex-col border-primary/15 bg-card/70",
           isMobileThreadOpen && "max-lg:hidden",
-        )}
-      >
+        )}>
         <CardHeader className="shrink-0 space-y-3 p-3">
           <div className="flex items-start justify-between gap-2">
             <div>
               <CardTitle>Conversaciones</CardTitle>
-              <CardDescription>{filteredConversations.length} chats en vista</CardDescription>
+              <CardDescription>
+                {filteredConversations.length} chats en vista
+              </CardDescription>
             </div>
             <Badge variant="outline" className="max-w-32 truncate">
               {organizationName}
@@ -978,7 +1079,8 @@ export const InboxPanel = ({
           </div>
           {officeClosed ? (
             <p className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-950 dark:text-amber-100">
-              Oficina cerrada. La IA sigue atendiendo; los asesores están inactivos hasta el próximo horario.
+              Oficina cerrada. La IA sigue atendiendo; los asesores están
+              inactivos hasta el próximo horario.
             </p>
           ) : null}
 
@@ -1000,8 +1102,7 @@ export const InboxPanel = ({
                 size="xs"
                 variant={activeFilter === filter.key ? "default" : "outline"}
                 aria-pressed={activeFilter === filter.key}
-                onClick={() => setActiveFilter(filter.key)}
-              >
+                onClick={() => setActiveFilter(filter.key)}>
                 {filter.label}
               </Button>
             ))}
@@ -1011,7 +1112,7 @@ export const InboxPanel = ({
         <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
           {filteredConversations.length ? (
             <ScrollArea className="min-h-0 flex-1">
-              <div className="space-y-1 p-2">
+              <div className="space-y-1 p-2 md:max-[1399px]:pb-20">
                 {filteredConversations.map((conversation) => {
                   const isSelected = activeConversationId === conversation.id;
                   const isAiActive = conversation.mode === "ai";
@@ -1025,21 +1126,34 @@ export const InboxPanel = ({
                           ? "border-primary/30 bg-primary/10"
                           : "border-primary/10 bg-background/70 hover:bg-accent/70",
                       )}
-                      onClick={() => handleSelectConversation(conversation.id)}
-                    >
+                      onClick={() => handleSelectConversation(conversation.id)}>
                       <div className="flex items-start gap-3">
                         <Avatar size="sm">
-                          <AvatarFallback>{resolveInitials(conversation.contactName)}</AvatarFallback>
+                          <AvatarFallback>
+                            {resolveInitials(conversation.contactName)}
+                          </AvatarFallback>
                         </Avatar>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-sm font-medium">{conversation.contactName}</p>
-                            <span className="shrink-0 text-[11px] text-muted-foreground">
-                              {formatTime(conversation.lastMessageAt ?? conversation.updatedAt)}
+                            <p className="truncate text-sm font-medium">
+                              {conversation.contactName}
+                            </p>
+                            <span
+                              className="shrink-0 text-[11px] text-muted-foreground"
+                              suppressHydrationWarning>
+                              {formatTime(
+                                conversation.lastMessageAt ??
+                                  conversation.updatedAt,
+                              )}
                             </span>
                           </div>
-                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                            {limitPreview(conversation.lastMessagePreview || "Sin mensajes recientes")}
+                          <p
+                            className="mt-0.5 truncate text-xs text-muted-foreground"
+                            suppressHydrationWarning>
+                            {limitPreview(
+                              conversation.lastMessagePreview ||
+                                "Sin mensajes recientes",
+                            )}
                           </p>
                           <div className="mt-1.5 flex items-center gap-1.5">
                             <ChannelBadge channel={conversation.channel} />
@@ -1049,13 +1163,16 @@ export const InboxPanel = ({
                                 "h-7 px-2.5 text-[13px] [&>svg]:size-3.5!",
                                 isAiActive &&
                                   "border-cyan-400 shadow-[0_0_0_1px_rgba(34,211,238,0.55),0_0_10px_rgba(34,211,238,0.4)] bg-cyan-400/15 text-cyan-700 dark:text-cyan-300",
-                              )}
-                            >
-                              {isAiActive ? <GeminiIcon /> : null}
+                              )}>
+                              {isAiActive ? (
+                                <Sparkles className="size-3.5" aria-hidden />
+                              ) : null}
                               {resolveModeLabel(conversation.mode)}
                             </Badge>
                             {conversation.unreadCount > 0 ? (
-                              <Badge className="h-7 min-w-7 px-2.5 text-[13px]">{conversation.unreadCount}</Badge>
+                              <Badge className="h-7 min-w-7 px-2.5 text-[13px]">
+                                {conversation.unreadCount}
+                              </Badge>
                             ) : null}
                           </div>
                         </div>
@@ -1068,8 +1185,12 @@ export const InboxPanel = ({
           ) : (
             <div className="p-3">
               <div className="rounded-xl border border-dashed border-primary/20 bg-primary/8 p-4 text-center">
-                <p className="font-medium">No hay conversaciones en este filtro</p>
-                <p className="mt-2 text-sm text-muted-foreground">Prueba con otra búsqueda o cambia el filtro.</p>
+                <p className="font-medium">
+                  No hay conversaciones en este filtro
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Prueba con otra búsqueda o cambia el filtro.
+                </p>
               </div>
             </div>
           )}
@@ -1080,11 +1201,10 @@ export const InboxPanel = ({
         <Card
           className={cn(
             "flex h-full min-h-0 flex-col border-primary/15 bg-card/70",
-            "max-lg:fixed max-lg:inset-0 max-lg:z-40 max-lg:h-dvh max-lg:rounded-none max-lg:border-0",
+            "max-lg:fixed max-lg:inset-0 max-lg:z-40 max-lg:h-dvh max-lg:rounded-none max-lg:border-0 max-lg:bg-background",
             !isMobileThreadOpen && "max-lg:hidden",
-          )}
-        >
-          <CardHeader className="shrink-0 border-b border-primary/10 p-3">
+          )}>
+          <CardHeader className="shrink-0 border-b border-primary/10 p-3 bg-card max-lg:bg-background">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <Button
@@ -1093,15 +1213,18 @@ export const InboxPanel = ({
                   variant="ghost"
                   className="lg:hidden"
                   aria-label="Volver al inbox"
-                  onClick={handleBackToInbox}
-                >
+                  onClick={handleBackToInbox}>
                   <ArrowLeft />
                 </Button>
                 <Avatar>
-                  <AvatarFallback>{resolveInitials(selectedConversation.contactName)}</AvatarFallback>
+                  <AvatarFallback>
+                    {resolveInitials(selectedConversation.contactName)}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{selectedConversation.contactName}</p>
+                  <p className="truncate font-medium">
+                    {selectedConversation.contactName}
+                  </p>
                   <p className="truncate text-xs text-muted-foreground">
                     {resolveConversationSubtitle(selectedConversation)}
                   </p>
@@ -1114,9 +1237,10 @@ export const InboxPanel = ({
                     selectedConversation.mode === "ai"
                       ? "border-cyan-400 bg-cyan-400/10 shadow-[0_0_0_1px_rgba(34,211,238,0.55),0_0_10px_rgba(34,211,238,0.4)]"
                       : "border-primary/15 bg-background/70",
-                  )}
-                >
-                  <Label htmlFor="conversation-ai-mode" className="text-xs text-muted-foreground">
+                  )}>
+                  <Label
+                    htmlFor="conversation-ai-mode"
+                    className="text-xs text-muted-foreground">
                     Agente IA
                   </Label>
                   <Switch
@@ -1136,27 +1260,39 @@ export const InboxPanel = ({
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button type="button" size="icon-sm" variant="ghost" aria-label="Opciones de conversación">
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label="Opciones de conversación">
                       <MoreVertical />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Conversación</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleSendToFunnel} disabled={isPending}>
+                    <DropdownMenuItem
+                      onClick={handleSendToFunnel}
+                      disabled={isPending}>
                       <KanbanSquare />
                       Enviar al embudo
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => handleAssignConversation(selectedConversation.assignedUserId !== currentUserId)}
-                      disabled={isPending}
-                    >
+                      onClick={() =>
+                        handleAssignConversation(
+                          selectedConversation.assignedUserId !== currentUserId,
+                        )
+                      }
+                      disabled={isPending}>
                       <UserPlus />
-                      {selectedConversation.assignedUserId === currentUserId ? "Liberar chat" : "Asignarme este chat"}
+                      {selectedConversation.assignedUserId === currentUserId
+                        ? "Liberar chat"
+                        : "Asignarme este chat"}
                     </DropdownMenuItem>
                     {selectedConversation.contactId ? (
                       <DropdownMenuItem asChild>
-                        <Link href={`/contacts/${selectedConversation.contactId}`}>
+                        <Link
+                          href={`/contacts/${selectedConversation.contactId}`}>
                           <MessageCircle />
                           Ver ficha
                         </Link>
@@ -1166,8 +1302,7 @@ export const InboxPanel = ({
                     <DropdownMenuItem
                       variant="destructive"
                       disabled={isPending}
-                      onClick={handleDeleteConversation}
-                    >
+                      onClick={handleDeleteConversation}>
                       <Trash2 />
                       Borrar chat
                     </DropdownMenuItem>
@@ -1191,7 +1326,9 @@ export const InboxPanel = ({
 
                     if (message.senderType === "system") {
                       return (
-                        <p key={message.id} className="px-4 py-1 text-center text-[11px] text-muted-foreground">
+                        <p
+                          key={message.id}
+                          className="px-4 py-1 text-center text-[11px] text-muted-foreground">
                           {message.content}
                         </p>
                       );
@@ -1200,40 +1337,50 @@ export const InboxPanel = ({
                     return (
                       <div
                         key={message.id}
-                        className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}
-                      >
+                        className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
                         <article
                           className={`max-w-[min(22rem,85%)] overflow-hidden rounded-2xl border px-3 py-2 text-sm shadow-sm ${
                             isOutbound
                               ? "border-primary/30 bg-primary/15 text-foreground"
                               : "border-border bg-background"
-                          }`}
-                        >
+                          }`}>
                           {message.senderType === "ai" ? (
                             <p className="mb-1 flex items-center gap-1 text-[11px] font-medium text-primary">
                               <Bot className="size-3" aria-hidden />
                               Agente IA
                             </p>
                           ) : null}
-                          {message.content && message.attachmentKind !== "location" ? (
-                            <p className="whitespace-pre-wrap">{message.content}</p>
+                          {message.content &&
+                          message.attachmentKind !== "location" ? (
+                            <p className="whitespace-pre-wrap">
+                              {message.content}
+                            </p>
                           ) : null}
 
                           <MessageMedia message={message} />
 
                           <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
-                            <span>{formatTime(message.createdAt)}</span>
-                            {isOutbound && message.deliveryStatus === "failed" ? (
+                            <span suppressHydrationWarning>
+                              {formatTime(message.createdAt)}
+                            </span>
+                            {isOutbound &&
+                            message.deliveryStatus === "failed" ? (
                               <AlertCircle
                                 className="size-3 text-destructive"
                                 aria-label="No se entregó al canal"
                               />
                             ) : null}
-                            {isOutbound && message.deliveryStatus === "pending" ? (
+                            {isOutbound &&
+                            message.deliveryStatus === "pending" ? (
                               <Clock className="size-3" aria-label="Enviando" />
                             ) : null}
-                            {isOutbound && message.deliveryStatus !== "failed" && message.deliveryStatus !== "pending" ? (
-                              <CheckCircle2 className="size-3" aria-label="Enviado" />
+                            {isOutbound &&
+                            message.deliveryStatus !== "failed" &&
+                            message.deliveryStatus !== "pending" ? (
+                              <CheckCircle2
+                                className="size-3"
+                                aria-label="Enviado"
+                              />
                             ) : null}
                           </div>
                         </article>
@@ -1252,15 +1399,21 @@ export const InboxPanel = ({
             <div
               className={`shrink-0 border-t border-primary/10 px-2 ${
                 hasComposerMeta ? "py-2" : "py-1.5"
-              }`}
-            >
+              }`}>
               {isRecording ? (
                 <div className="mb-2 flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
                   <span className="inline-flex items-center gap-2">
-                    <span className="size-2 animate-pulse rounded-full bg-destructive" aria-hidden />
+                    <span
+                      className="size-2 animate-pulse rounded-full bg-destructive"
+                      aria-hidden
+                    />
                     Grabando nota de voz…
                   </span>
-                  <Button type="button" variant="ghost" size="xs" onClick={() => void handleToggleRecording()}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => void handleToggleRecording()}>
                     Detener
                   </Button>
                 </div>
@@ -1269,14 +1422,14 @@ export const InboxPanel = ({
               {composerAttachment ? (
                 <div className="mb-2 flex items-center justify-between rounded-lg border border-primary/20 bg-primary/8 px-2.5 py-1.5 text-xs">
                   <span className="truncate">
-                    {resolveAttachmentLabel(composerAttachment.kind)}: {composerAttachment.file.name}
+                    {resolveAttachmentLabel(composerAttachment.kind)}:{" "}
+                    {composerAttachment.file.name}
                   </span>
                   <Button
                     type="button"
                     variant="ghost"
                     size="xs"
-                    onClick={() => setComposerAttachment(null)}
-                  >
+                    onClick={() => setComposerAttachment(null)}>
                     Quitar
                   </Button>
                 </div>
@@ -1289,7 +1442,11 @@ export const InboxPanel = ({
               <div className="flex h-10 items-center gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" size="icon" aria-label="Insertar emoji">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label="Insertar emoji">
                       <Smile />
                     </Button>
                   </DropdownMenuTrigger>
@@ -1302,8 +1459,7 @@ export const InboxPanel = ({
                           key={emoji}
                           type="button"
                           className="flex size-8 items-center justify-center rounded-md hover:bg-accent"
-                          onClick={() => handleInsertEmoji(emoji)}
-                        >
+                          onClick={() => handleInsertEmoji(emoji)}>
                           <span className="text-base">{emoji}</span>
                         </button>
                       ))}
@@ -1313,30 +1469,40 @@ export const InboxPanel = ({
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" size="icon" aria-label="Agregar archivo">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label="Agregar archivo">
                       <Paperclip />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
                     <DropdownMenuLabel>Adjuntar</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={() => handleSelectAttachmentKind("image")}>
+                    <DropdownMenuItem
+                      onSelect={() => handleSelectAttachmentKind("image")}>
                       <ImageIcon />
                       Imagen
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleSelectAttachmentKind("video")}>
+                    <DropdownMenuItem
+                      onSelect={() => handleSelectAttachmentKind("video")}>
                       <Video />
                       Video
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleSelectAttachmentKind("audio")}>
+                    <DropdownMenuItem
+                      onSelect={() => handleSelectAttachmentKind("audio")}>
                       <Mic />
                       Audio
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleSelectAttachmentKind("document")}>
+                    <DropdownMenuItem
+                      onSelect={() => handleSelectAttachmentKind("document")}>
                       <FileText />
                       Documento
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={handleShareLocation} disabled={isPending}>
+                    <DropdownMenuItem
+                      onSelect={handleShareLocation}
+                      disabled={isPending}>
                       <MapPin />
                       Ubicación
                     </DropdownMenuItem>
@@ -1348,9 +1514,12 @@ export const InboxPanel = ({
                   variant="outline"
                   size="icon"
                   aria-label="Sugerir respuesta con IA"
-                  disabled={!selectedConversation || selectedConversation.mode === "ai" || isPending}
-                  onClick={handleSuggestReply}
-                >
+                  disabled={
+                    !selectedConversation ||
+                    selectedConversation.mode === "ai" ||
+                    isPending
+                  }
+                  onClick={handleSuggestReply}>
                   <Sparkles />
                 </Button>
                 <Input
@@ -1360,7 +1529,9 @@ export const InboxPanel = ({
                   value={composerText}
                   onChange={(event) => setComposerText(event.target.value)}
                   onKeyDown={handleComposerKeyDown}
-                  disabled={!selectedConversation || isPending || isUploadingAttachment}
+                  disabled={
+                    !selectedConversation || isPending || isUploadingAttachment
+                  }
                 />
 
                 <Button
@@ -1382,9 +1553,11 @@ export const InboxPanel = ({
                     !selectedConversation ||
                     isPending ||
                     isUploadingAttachment ||
-                    (!isRecording && !showAudioQuickAction && !composerText.trim() && !composerAttachment)
-                  }
-                >
+                    (!isRecording &&
+                      !showAudioQuickAction &&
+                      !composerText.trim() &&
+                      !composerAttachment)
+                  }>
                   {isPending || isUploadingAttachment ? (
                     <Loader2 className="animate-spin" />
                   ) : isRecording ? (

@@ -47,7 +47,7 @@ export const LandingCta = ({ isLoggedIn }: LandingCtaProps) => {
                 </Button>
               ) : (
                 <Button asChild size="lg" className="h-11 px-7 font-semibold shadow-md shadow-primary/25">
-                  <Link href="/login">
+                  <Link href="/login?next=/solicitud">
                     Empezar ahora
                     <ArrowRight className="size-4" aria-hidden />
                   </Link>

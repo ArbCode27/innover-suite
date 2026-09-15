@@ -40,10 +40,11 @@ export const PRODUCT_IMAGES_BUCKET = "product-images";
 export const LISTING_IMAGES_BUCKET = "listing-images";
 export const KNOWLEDGE_IMAGES_BUCKET = "knowledge-images";
 export const ORGANIZATION_IMAGES_BUCKET = "organization-images";
+export const PAYMENT_RECEIPTS_BUCKET = "payment-receipts";
 export const MAX_INBOUND_MEDIA_BYTES = 20 * 1024 * 1024;
 export const MAX_KNOWLEDGE_IMAGE_BYTES = 5 * 1024 * 1024;
 export const KNOWLEDGE_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-export const MAX_GEMINI_INLINE_BYTES = 4 * 1024 * 1024;
+export const MAX_MEDIA_INLINE_BYTES = 4 * 1024 * 1024;
 export const FACEBOOK_GRAPH_VERSION = "v26.0";
 
 export const isMessageAttachmentKind = (value: unknown): value is MessageAttachmentKind =>

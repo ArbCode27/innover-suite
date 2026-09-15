@@ -691,6 +691,41 @@ export const updateOrderPaymentAction = async (rawValues: unknown): Promise<Acti
   return { success: parsed.data.paymentStatus === "paid" ? "Pedido marcado como pagado." : "Pago actualizado." };
 };
 
+const updateDeliverySchema = z.object({
+  orderId: z.number().int().positive(),
+  deliveryAddress: z.string().trim().max(240).optional().nullable(),
+  deliveryZone: z.string().trim().max(80).optional().nullable(),
+  customerNote: z.string().trim().max(400).optional().nullable(),
+});
+
+export const updateOrderDeliveryAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = updateDeliverySchema.safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: "Los datos de entrega no son válidos." };
+  }
+
+  const access = await requireOrdersMembership();
+  if ("error" in access) return { error: access.error };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      delivery_address: parsed.data.deliveryAddress || null,
+      delivery_zone: parsed.data.deliveryZone || null,
+      customer_note: parsed.data.customerNote || null,
+    })
+    .eq("id", parsed.data.orderId)
+    .eq("organization_id", access.membership.organizationId);
+
+  if (error) {
+    return { error: error.message || "No se pudo actualizar los datos de entrega." };
+  }
+
+  revalidatePath("/orders");
+  return { success: "Datos de entrega actualizados correctamente." };
+};
+
 export const importCatalogCsvAction = async (csvText: string): Promise<ActionResult> => {
   const rows = parseCatalogCsv(csvText);
   if (!rows.length) {

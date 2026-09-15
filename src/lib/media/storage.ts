@@ -4,6 +4,7 @@ import {
   LISTING_IMAGES_BUCKET,
   MESSAGE_ATTACHMENTS_BUCKET,
   ORGANIZATION_IMAGES_BUCKET,
+  PAYMENT_RECEIPTS_BUCKET,
   PRODUCT_IMAGES_BUCKET,
 } from "@/lib/media/types";
 
@@ -70,6 +71,22 @@ export const uploadMessageMedia = async (params: {
     bytes: params.bytes,
     mimeType: params.mimeType,
   });
+
+export const uploadPaymentReceipt = async (params: {
+  userId: string;
+  fileName: string;
+  bytes: Uint8Array;
+  mimeType: string | null;
+}) => {
+  const path = `receipts/${params.userId}/${crypto.randomUUID()}-${safeFileName(params.fileName)}`;
+  const publicUrl = await uploadPublicMedia({
+    bucket: PAYMENT_RECEIPTS_BUCKET,
+    path,
+    bytes: params.bytes,
+    mimeType: params.mimeType,
+  });
+  return { publicUrl, path };
+};
 
 export const removeStoredMedia = async (params: {
   bucket: string;

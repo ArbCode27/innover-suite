@@ -51,18 +51,28 @@ type MobileNavProps = {
 type MobileChromeContextValue = {
   hideMobileNav: boolean;
   setHideMobileNav: (hidden: boolean) => void;
+  hideMobileHeader: boolean;
+  setHideMobileHeader: (hidden: boolean) => void;
 };
 
 const MobileChromeContext = createContext<MobileChromeContextValue>({
   hideMobileNav: false,
   setHideMobileNav: () => undefined,
+  hideMobileHeader: false,
+  setHideMobileHeader: () => undefined,
 });
 
 export const MobileChromeProvider = ({ children }: { children: ReactNode }) => {
   const [hideMobileNav, setHideMobileNav] = useState(false);
+  const [hideMobileHeader, setHideMobileHeader] = useState(false);
   const value = useMemo(
-    () => ({ hideMobileNav, setHideMobileNav }),
-    [hideMobileNav],
+    () => ({
+      hideMobileNav,
+      setHideMobileNav,
+      hideMobileHeader,
+      setHideMobileHeader,
+    }),
+    [hideMobileNav, hideMobileHeader],
   );
 
   return (

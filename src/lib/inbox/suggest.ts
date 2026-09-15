@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { generateGeminiTurn } from "@/lib/agent/gemini";
+import { generateGroqTurn } from "@/lib/agent/groq";
 import { contentsFromPlainHistory } from "@/lib/agent/history";
 import { loadAgentSettings } from "@/lib/agent/settings";
 import { getCurrentMembership, hasOrganizationRole } from "@/lib/organizations/membership";
@@ -40,12 +40,12 @@ export const suggestReplyAction = async (rawValues: unknown) => {
   }
 
   const settings = await loadAgentSettings(membership.organizationId);
-  const outcome = await generateGeminiTurn({
+  const outcome = await generateGroqTurn({
     preferredModel: settings.model,
     systemInstruction: `${settings.systemPrompt}
 
 Redacta UNA respuesta corta en español para que un asesor humano la envíe ahora. No menciones que eres IA. No uses tools. No hagas preguntas de más.`,
-    contents,
+    messages: contents,
     tools: [],
   });
 

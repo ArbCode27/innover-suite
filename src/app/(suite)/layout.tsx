@@ -58,7 +58,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
   }
 
   if (!membership) {
-    redirect("/onboarding/organization");
+    redirect("/solicitud");
   }
 
   await redirectIfSetupIncomplete(membership);
@@ -236,7 +236,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
               organizationLogoUrl={membership.logoUrl}
               initials={initials}
             />
-            <div className="app-scroll flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:max-[1399px]:pb-[calc(5.5rem+env(safe-area-inset-bottom))] min-[1400px]:pb-0">
+            <div className="app-scroll flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0">
               <BillingUsageBanner entitlements={entitlements} />
               {children}
             </div>

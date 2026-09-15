@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { Clock, ArrowRight } from "lucide-react";
+import { loadPendingJoinRequestsCount } from "@/lib/billing/join-requests";
 import { requirePlatformAdminSession } from "@/lib/billing/require-platform-admin";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -36,6 +39,7 @@ type UsageRow = {
 const AdminOrganizationsPage = async () => {
   await requirePlatformAdminSession();
   const admin = getSupabaseAdminClient();
+  const pendingRequestsCount = await loadPendingJoinRequestsCount();
 
   const { data: orgs } = await admin
     .from("organizations")
@@ -76,12 +80,47 @@ const AdminOrganizationsPage = async () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Organizaciones</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Plan, estado de suscripción y consumo de respuestas IA.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Organizaciones</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Plan, estado de suscripción y consumo de respuestas IA.
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/admin/solicitudes" className="flex items-center gap-2">
+            <Clock className="size-4 text-amber-500" />
+            <span>Ver Solicitudes</span>
+            {pendingRequestsCount > 0 ? (
+              <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-400 border-none text-[11px] px-1.5 py-0">
+                {pendingRequestsCount} pendientes
+              </Badge>
+            ) : null}
+          </Link>
+        </Button>
       </div>
+
+      {pendingRequestsCount > 0 ? (
+        <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="flex items-center gap-3">
+            <Clock className="size-5 text-amber-600 dark:text-amber-400" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Hay {pendingRequestsCount} {pendingRequestsCount === 1 ? "solicitud" : "solicitudes"} de ingreso pendiente con comprobante
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Revisa los comprobantes bancarios y aprueba o rechaza el acceso al CRM.
+              </p>
+            </div>
+          </div>
+          <Button asChild size="sm" className="bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs">
+            <Link href="/admin/solicitudes" className="flex items-center gap-1.5">
+              <span>Revisar solicitudes</span>
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </Button>
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-border/60">
         <Table>

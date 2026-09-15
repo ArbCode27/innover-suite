@@ -12,10 +12,10 @@ import { Label } from "@/components/ui/label";
 
 type AgentPanelProps = {
   settings: AgentSettings;
-  geminiConfigured: boolean;
+  groqConfigured: boolean;
 };
 
-export const AgentPanel = ({ settings, geminiConfigured }: AgentPanelProps) => {
+export const AgentPanel = ({ settings, groqConfigured }: AgentPanelProps) => {
   const [systemPrompt, setSystemPrompt] = useState(settings.systemPrompt);
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -45,8 +45,8 @@ export const AgentPanel = ({ settings, geminiConfigured }: AgentPanelProps) => {
       <p className="text-sm text-muted-foreground">
         El prompt ya se adaptó a tu tipo de negocio. Ajústalo si quieres otro tono; el agente atiende 24/7.
       </p>
-      {geminiConfigured ? null : (
-        <p className="text-sm text-destructive">Falta configurar Gemini en el servidor. El agente no responderá aún.</p>
+      {groqConfigured ? null : (
+        <p className="text-sm text-destructive">Falta configurar Groq (GROQ_API_KEY) en el servidor. El agente no responderá aún.</p>
       )}
       <div className="space-y-1.5">
         <Label htmlFor="onboarding-agent-prompt">Prompt del agente</Label>
