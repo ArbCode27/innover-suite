@@ -13,6 +13,7 @@ export const env = {
   ),
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "",
   groqApiKey: process.env.GROQ_API_KEY?.trim() || "",
+  groqBaseUrl: process.env.GROQ_BASE_URL?.trim() || "",
   platformAdminEmails: process.env.PLATFORM_ADMIN_EMAILS?.trim() || "",
   metaAccessToken: process.env.META_ACCESS_TOKEN?.trim() || "",
   metaAppSecret: process.env.META_APP_SECRET?.trim() || "",

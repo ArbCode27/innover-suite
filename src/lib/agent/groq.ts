@@ -7,6 +7,7 @@ import {
   AGENT_MAX_OUTPUT_TOKENS,
   AGENT_MODEL,
   AGENT_PRIMARY_ATTEMPTS,
+  AGENT_VISION_MODEL,
   AGENT_WHISPER_MODEL,
   RETIRED_AGENT_MODELS,
 } from "@/lib/agent/constants";
@@ -61,6 +62,7 @@ const getGroqClient = (): Groq => {
   if (!cachedGroqClient) {
     cachedGroqClient = new Groq({
       apiKey: env.groqApiKey,
+      baseURL: env.groqBaseUrl || undefined,
       timeout: AGENT_GROQ_TIMEOUT_MS,
     });
   }
@@ -92,6 +94,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const isRetryableError = (status: number | null, message: string): boolean => {
   if (
+    status === 404 ||
     status === 408 ||
     status === 429 ||
     status === 500 ||
@@ -104,6 +107,8 @@ const isRetryableError = (status: number | null, message: string): boolean => {
 
   const normalized = message.toLowerCase();
   return (
+    normalized.includes("not_found") ||
+    normalized.includes("does not exist") ||
     normalized.includes("rate_limit") ||
     normalized.includes("overloaded") ||
     normalized.includes("timeout") ||
@@ -250,6 +255,8 @@ export const generateGroqTurn = async (params: {
     const model = models[modelIndex]!;
     const maxAttempts = modelIndex === 0 ? AGENT_PRIMARY_ATTEMPTS : AGENT_FALLBACK_ATTEMPTS;
 
+    console.log(`[GROQ_CASCADE] Intentando con modelo (${modelIndex + 1}/${models.length}): "${model}"...`);
+
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const outcome = await generateGroqTurnOnce({
         model,
@@ -263,6 +270,8 @@ export const generateGroqTurn = async (params: {
       }
 
       lastFailure = outcome;
+      console.warn(`[GROQ_CASCADE] ⚠️ Falló intento ${attempt}/${maxAttempts} con "${model}": ${outcome.error} (status=${outcome.status})`);
+
       if (!outcome.retryable) {
         break;
       }
@@ -315,6 +324,56 @@ export const transcribeAudioWithGroq = async (params: {
     return transcription.text?.trim() || null;
   } catch (error) {
     console.error("[GROQ_WHISPER] Audio transcription failed:", error);
+    return null;
+  }
+};
+
+export const describeImageWithVision = async (params: {
+  bytes: Uint8Array;
+  mimeType?: string;
+}): Promise<string | null> => {
+  if (!env.groqApiKey) return null;
+
+  try {
+    const groq = getGroqClient();
+    const mimeType = params.mimeType || "image/jpeg";
+    const base64 = Buffer.from(params.bytes).toString("base64");
+    const dataUrl = `data:${mimeType};base64,${base64}`;
+
+    console.log(`[GROQ_VISION] 👁️ Analizando imagen del cliente con modelo "${AGENT_VISION_MODEL}"...`);
+
+    const response = await groq.chat.completions.create({
+      model: AGENT_VISION_MODEL,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Describe breve y detalladamente el contenido de esta imagen para que el asistente de ventas pueda responder al cliente. Si es un comprobante de pago o transferencia bancaria, extrae monto, referencia, banco y fecha si son legibles. Si es un producto, indica cuál es. Sé conciso y objetivo.",
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: dataUrl,
+              },
+            },
+          ] as unknown as string,
+        },
+      ],
+      temperature: 0.2,
+      max_completion_tokens: 500,
+    });
+
+    const description = response.choices?.[0]?.message?.content?.trim() || null;
+    if (description) {
+      console.log(`[GROQ_VISION] ✅ Análisis de imagen completado: "${description.slice(0, 100)}..."`);
+    } else {
+      console.warn(`[GROQ_VISION] ⚠️ No se generó descripción para la imagen.`);
+    }
+    return description;
+  } catch (error) {
+    console.error("[GROQ_VISION] ❌ Falló el análisis de imagen con visión:", error);
     return null;
   }
 };

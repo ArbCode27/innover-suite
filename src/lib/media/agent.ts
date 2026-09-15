@@ -1,4 +1,4 @@
-import { transcribeAudioWithGroq } from "@/lib/agent/groq";
+import { describeImageWithVision, transcribeAudioWithGroq } from "@/lib/agent/groq";
 import { describeAttachmentForAgent, parseMessageAttachment } from "@/lib/media/parse";
 import { downloadStoredMessageMedia } from "@/lib/media/storage";
 import { MAX_MEDIA_INLINE_BYTES } from "@/lib/media/types";
@@ -39,6 +39,29 @@ export const buildAgentMessageContent = async (params: {
       }
     } catch (error) {
       console.warn("[AGENT_MEDIA] Fallback to attachment description after transcription failure:", error);
+    }
+  }
+
+  if (
+    attachment.kind === "image" &&
+    attachment.status === "ready" &&
+    attachment.storagePath
+  ) {
+    try {
+      const bytes = await downloadStoredMessageMedia(attachment.storagePath);
+      if (bytes.byteLength > 0 && bytes.byteLength <= MAX_MEDIA_INLINE_BYTES) {
+        const imageDescription = await describeImageWithVision({
+          bytes,
+          mimeType: attachment.mimeType ?? undefined,
+        });
+
+        if (imageDescription) {
+          const prefix = `[Imagen enviada por el cliente analizada]: "${imageDescription}"`;
+          return text ? `${text}\n${prefix}` : prefix;
+        }
+      }
+    } catch (error) {
+      console.warn("[AGENT_MEDIA] Fallback to attachment description after image vision failure:", error);
     }
   }
 

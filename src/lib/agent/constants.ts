@@ -1,7 +1,9 @@
-export const AGENT_MODEL = "llama-3.3-70b-versatile";
-export const AGENT_FALLBACK_MODELS = ["llama-3.1-8b-instant"] as const;
+export const AGENT_MODEL = "openai/gpt-oss-20b";
+export const AGENT_FALLBACK_MODELS = ["llama-3.3-70b-versatile"] as const;
+export const AGENT_VISION_MODEL = "qwen/qwen3.6-27b";
 export const AGENT_WHISPER_MODEL = "whisper-large-v3-turbo";
 export const RETIRED_AGENT_MODELS = new Set([
+  "llama-3.1-8b-instant",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
   "gemini-3.5-flash-lite",
