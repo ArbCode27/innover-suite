@@ -16,10 +16,12 @@ import {
   AlertCircle,
   ArrowLeft,
   Bot,
+  Calendar,
   Camera,
   CheckCircle2,
   Clock,
   FileText,
+  History,
   ImageIcon,
   KanbanSquare,
   Loader2,
@@ -75,8 +77,10 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   format,
   isAfter,
+  isThisWeek,
   isToday,
   isYesterday,
+  parseISO,
   startOfMonth,
   subDays,
 } from "date-fns";
@@ -99,6 +103,8 @@ import {
   type ConversationListRow,
 } from "@/lib/inbox/board";
 import { ResolveConversationDialog } from "@/components/inbox/resolve-conversation-dialog";
+import { ResolvedStoriesBar } from "@/components/inbox/resolved-stories-bar";
+import { ResolvedStoryViewerDialog } from "@/components/inbox/resolved-story-viewer-dialog";
 import {
   InboxDateFilter,
   type InboxDateFilterKey,
@@ -148,6 +154,19 @@ const getDateSeparatorLabel = (value: string) => {
     return format(date, "EEEE, d 'de' MMMM, yyyy", { locale: es });
   } catch {
     return value;
+  }
+};
+
+const getDateGroupTitle = (isoString: string | null | undefined) => {
+  if (!isoString) return "Fecha no especificada";
+  try {
+    const date = parseISO(isoString);
+    if (isToday(date)) return "Hoy";
+    if (isYesterday(date)) return "Ayer";
+    if (isThisWeek(date, { weekStartsOn: 1 })) return "Esta semana";
+    return format(date, "MMMM yyyy", { locale: es }).replace(/^\w/, (c) => c.toUpperCase());
+  } catch {
+    return "Fecha archivada";
   }
 };
 
@@ -271,6 +290,9 @@ export const InboxPanel = ({
   const [pendingAttachmentKind, setPendingAttachmentKind] =
     useState<FileAttachmentKind>("document");
   const [isRecording, setIsRecording] = useState(false);
+  const [activeStoryConversation, setActiveStoryConversation] =
+    useState<InboxConversation | null>(null);
+  const [isStoryViewerOpen, setIsStoryViewerOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -321,6 +343,29 @@ export const InboxPanel = ({
         return haystack.includes(loweredTerm);
       });
   }, [activeFilter, conversations, currentUserId, dateFilter, searchTerm]);
+
+  const resolvedConversations = useMemo(
+    () => conversations.filter((item) => item.status === "resolved"),
+    [conversations],
+  );
+
+  const groupedResolvedConversations = useMemo(() => {
+    if (activeFilter !== "resolved") return [];
+    const groups: Array<{ title: string; items: InboxConversation[] }> = [];
+    const map = new Map<string, InboxConversation[]>();
+
+    filteredConversations.forEach((conv) => {
+      const dateStr = conv.resolvedAt || conv.lastMessageAt || conv.updatedAt;
+      const groupKey = getDateGroupTitle(dateStr);
+      if (!map.has(groupKey)) {
+        map.set(groupKey, []);
+        groups.push({ title: groupKey, items: map.get(groupKey)! });
+      }
+      map.get(groupKey)!.push(conv);
+    });
+
+    return groups;
+  }, [activeFilter, filteredConversations]);
 
   const activeConversationId = useMemo(() => {
     if (!selectedConversationId) return null;
@@ -940,16 +985,14 @@ export const InboxPanel = ({
     });
   };
 
-  const handleReopenConversation = () => {
-    if (!selectedConversation) return;
-    const conversationId = selectedConversation.id;
+  const handleReopenConversationById = (conversationId: number) => {
     startTransition(async () => {
       const result = await reopenConversationAction({ conversationId });
       if (result.error) {
         toastActionError(result);
         return;
       }
-      toast.success(result.success ?? "Conversación reabierta.");
+      toast.success(result.success ?? "Conversación reabierta con éxito.");
       setConversations((current) =>
         current.map((item) =>
           item.id === conversationId
@@ -958,6 +1001,11 @@ export const InboxPanel = ({
         ),
       );
     });
+  };
+
+  const handleReopenConversation = () => {
+    if (!selectedConversation) return;
+    handleReopenConversationById(selectedConversation.id);
   };
 
   const handleConversationResolved = () => {
@@ -1195,94 +1243,215 @@ export const InboxPanel = ({
         </CardHeader>
 
         <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+          {resolvedConversations.length > 0 ? (
+            <ResolvedStoriesBar
+              resolvedConversations={resolvedConversations}
+              activeConversationId={activeConversationId}
+              onSelectStory={(story) => {
+                setActiveStoryConversation(story);
+                setIsStoryViewerOpen(true);
+              }}
+            />
+          ) : null}
+
           {filteredConversations.length ? (
             <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-1 p-2 md:max-[1399px]:pb-20">
-                {filteredConversations.map((conversation) => {
-                  const isSelected = activeConversationId === conversation.id;
-                  const isAiActive = conversation.mode === "ai";
-                  return (
-                    <button
-                      key={conversation.id}
-                      type="button"
-                      className={cn(
-                        "w-full rounded-lg border px-2.5 py-2 text-left transition",
-                        isSelected
-                          ? "border-primary/30 bg-primary/10"
-                          : "border-primary/10 bg-background/70 hover:bg-accent/70",
-                      )}
-                      onClick={() => handleSelectConversation(conversation.id)}>
-                      <div className="flex items-start gap-3">
-                        <Avatar size="sm">
-                          <AvatarFallback>
-                            {resolveInitials(conversation.contactName)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-sm font-medium">
-                              {conversation.contactName}
-                            </p>
-                            <span
-                              className="shrink-0 text-[11px] text-muted-foreground"
-                              suppressHydrationWarning>
-                              {formatTime(
-                                conversation.lastMessageAt ??
-                                  conversation.updatedAt,
-                              )}
-                            </span>
-                          </div>
-                          <p
-                            className="mt-0.5 truncate text-xs text-muted-foreground"
-                            suppressHydrationWarning>
-                            {limitPreview(
-                              conversation.lastMessagePreview ||
-                                "Sin mensajes recientes",
-                            )}
-                          </p>
-                          <div className="mt-1.5 flex items-center gap-1.5">
-                            <ChannelBadge channel={conversation.channel} />
-                            {conversation.status === "resolved" ? (
-                              <Badge
-                                variant="outline"
-                                className="h-7 gap-1 border-emerald-500/35 bg-emerald-500/10 px-2 text-[12px] text-emerald-600 dark:border-emerald-500/40 dark:text-emerald-400">
-                                <CheckCircle2 className="size-3" />
-                                Resuelta
-                              </Badge>
-                            ) : null}
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "h-7 px-2.5 text-[13px] [&>svg]:size-3.5!",
-                                isAiActive &&
-                                  "border-cyan-400 shadow-[0_0_0_1px_rgba(34,211,238,0.55),0_0_10px_rgba(34,211,238,0.4)] bg-cyan-400/15 text-cyan-700 dark:text-cyan-300",
-                              )}>
-                              {isAiActive ? (
-                                <Sparkles className="size-3.5" aria-hidden />
-                              ) : null}
-                              {resolveModeLabel(conversation.mode)}
-                            </Badge>
-                            {conversation.unreadCount > 0 ? (
-                              <Badge className="h-7 min-w-7 px-2.5 text-[13px]">
-                                {conversation.unreadCount}
-                              </Badge>
-                            ) : null}
-                          </div>
+                {activeFilter === "resolved" ? (
+                  <div className="space-y-4 pt-1">
+                    {groupedResolvedConversations.map((group) => (
+                      <div key={group.title} className="space-y-1.5">
+                        <div className="sticky top-0 z-10 flex items-center justify-between rounded-lg bg-background/95 px-2 py-1 backdrop-blur-xs">
+                          <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground/80">
+                            <Calendar className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                            {group.title}
+                          </span>
+                          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                            {group.items.length} {group.items.length === 1 ? "archivada" : "archivadas"}
+                          </span>
+                        </div>
+
+                        <div className="ml-3.5 space-y-2 border-l-2 border-emerald-500/25 pl-3">
+                          {group.items.map((conversation) => {
+                            const isSelected = activeConversationId === conversation.id;
+                            const isSuccessful = conversation.resolutionOutcome !== "unresolved";
+
+                            return (
+                              <div
+                                key={conversation.id}
+                                className={cn(
+                                  "group relative flex flex-col gap-1.5 rounded-xl border p-2.5 transition-all text-left",
+                                  isSelected
+                                    ? "border-emerald-500/40 bg-emerald-500/10 shadow-xs"
+                                    : "border-primary/10 bg-background/80 hover:border-emerald-500/30 hover:bg-accent/70",
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    "absolute -left-[19px] top-4 size-2.5 rounded-full border-2 border-background",
+                                    isSuccessful ? "bg-emerald-500" : "bg-amber-500",
+                                  )}
+                                  aria-hidden
+                                />
+
+                                <div className="flex items-start justify-between gap-2">
+                                  <button
+                                    type="button"
+                                    className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
+                                    onClick={() => handleSelectConversation(conversation.id)}
+                                  >
+                                    <Avatar size="sm" className="shrink-0">
+                                      <AvatarFallback>
+                                        {resolveInitials(conversation.contactName)}
+                                      </AvatarFallback>
+                                    </Avatar>
+
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <p className="truncate text-sm font-medium">
+                                          {conversation.contactName}
+                                        </p>
+                                        <span className="shrink-0 text-[11px] text-muted-foreground" suppressHydrationWarning>
+                                          {formatTime(conversation.resolvedAt ?? conversation.lastMessageAt ?? conversation.updatedAt)}
+                                        </span>
+                                      </div>
+
+                                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                        <ChannelBadge channel={conversation.channel} />
+                                        <Badge
+                                          variant="outline"
+                                          className={cn(
+                                            "h-5 gap-1 px-1.5 text-[10px]",
+                                            isSuccessful
+                                              ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                              : "border-amber-500/35 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                                          )}
+                                        >
+                                          <CheckCircle2 className="size-2.5" />
+                                          {conversation.resolutionReason || (isSuccessful ? "Resuelta" : "Sin concretar")}
+                                        </Badge>
+                                      </div>
+
+                                      <p className="mt-1 truncate text-xs text-muted-foreground" suppressHydrationWarning>
+                                        {limitPreview(conversation.lastMessagePreview || "Sin mensajes recientes")}
+                                      </p>
+                                    </div>
+                                  </button>
+
+                                  <Button
+                                    type="button"
+                                    size="xs"
+                                    variant="outline"
+                                    className="shrink-0 gap-1 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/15 hover:text-emerald-700 dark:text-emerald-400"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleReopenConversationById(conversation.id);
+                                    }}
+                                    disabled={isPending}
+                                    title="Reabrir conversación y reactivarla"
+                                  >
+                                    <RotateCcw className="size-3" />
+                                    <span className="hidden sm:inline">Reabrir</span>
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                    </button>
-                  );
-                })}
+                    ))}
+                  </div>
+                ) : (
+                  filteredConversations.map((conversation) => {
+                    const isSelected = activeConversationId === conversation.id;
+                    const isAiActive = conversation.mode === "ai";
+                    return (
+                      <button
+                        key={conversation.id}
+                        type="button"
+                        className={cn(
+                          "w-full rounded-lg border px-2.5 py-2 text-left transition",
+                          isSelected
+                            ? "border-primary/30 bg-primary/10"
+                            : "border-primary/10 bg-background/70 hover:bg-accent/70",
+                        )}
+                        onClick={() => handleSelectConversation(conversation.id)}>
+                        <div className="flex items-start gap-3">
+                          <Avatar size="sm">
+                            <AvatarFallback>
+                              {resolveInitials(conversation.contactName)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-medium">
+                                {conversation.contactName}
+                              </p>
+                              <span
+                                className="shrink-0 text-[11px] text-muted-foreground"
+                                suppressHydrationWarning>
+                                {formatTime(
+                                  conversation.lastMessageAt ??
+                                    conversation.updatedAt,
+                                )}
+                              </span>
+                            </div>
+                            <p
+                              className="mt-0.5 truncate text-xs text-muted-foreground"
+                              suppressHydrationWarning>
+                              {limitPreview(
+                                conversation.lastMessagePreview ||
+                                  "Sin mensajes recientes",
+                              )}
+                            </p>
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                              <ChannelBadge channel={conversation.channel} />
+                              {conversation.status === "resolved" ? (
+                                <Badge
+                                  variant="outline"
+                                  className="h-7 gap-1 border-emerald-500/35 bg-emerald-500/10 px-2 text-[12px] text-emerald-600 dark:border-emerald-500/40 dark:text-emerald-400">
+                                  <CheckCircle2 className="size-3" />
+                                  Resuelta
+                                </Badge>
+                              ) : null}
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "h-7 px-2.5 text-[13px] [&>svg]:size-3.5!",
+                                  isAiActive &&
+                                    "border-cyan-400 shadow-[0_0_0_1px_rgba(34,211,238,0.55),0_0_10px_rgba(34,211,238,0.4)] bg-cyan-400/15 text-cyan-700 dark:text-cyan-300",
+                                )}>
+                                {isAiActive ? (
+                                  <Sparkles className="size-3.5" aria-hidden />
+                                ) : null}
+                                {resolveModeLabel(conversation.mode)}
+                              </Badge>
+                              {conversation.unreadCount > 0 ? (
+                                <Badge className="h-7 min-w-7 px-2.5 text-[13px]">
+                                  {conversation.unreadCount}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </ScrollArea>
           ) : (
             <div className="p-3">
               <div className="rounded-xl border border-dashed border-primary/20 bg-primary/8 p-4 text-center">
                 <p className="font-medium">
-                  No hay conversaciones en este filtro
+                  {activeFilter === "resolved"
+                    ? "No hay conversaciones archivadas"
+                    : "No hay conversaciones en este filtro"}
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Prueba con otra búsqueda o cambia el filtro.
+                  {activeFilter === "resolved"
+                    ? "Al culminar un chat, quedará registrado aquí en el historial de historias cronológico."
+                    : "Prueba con otra búsqueda o cambia el filtro."}
                 </p>
               </div>
             </div>
@@ -1762,6 +1931,19 @@ export const InboxPanel = ({
           />
         </div>
       )}
+
+      <ResolvedStoryViewerDialog
+        conversation={activeStoryConversation}
+        stories={resolvedConversations}
+        isOpen={isStoryViewerOpen}
+        onOpenChange={setIsStoryViewerOpen}
+        onSelectConversation={(id) => {
+          handleSelectConversation(id);
+        }}
+        onReopenConversation={(id) => {
+          handleReopenConversationById(id);
+        }}
+      />
     </div>
   );
 };
