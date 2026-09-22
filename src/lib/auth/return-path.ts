@@ -1,5 +1,6 @@
 const SAFE_RETURN_PREFIXES = [
   "/home",
+  "/solicitud",
   "/inbox",
   "/invite",
   "/settings",

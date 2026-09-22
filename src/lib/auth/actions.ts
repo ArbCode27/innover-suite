@@ -7,6 +7,7 @@ import { getAuthErrorCode, getAuthErrorMessage } from "@/lib/auth/errors";
 import { getRequestOrigin } from "@/lib/auth/origin";
 import {
   AUTH_CONFIRM_PATH,
+  isSafeReturnPath,
   LOGIN_RESET_PATH,
   PASSWORD_RECOVERY_COOKIE,
   resolvePostAuthPath,
@@ -17,6 +18,7 @@ import {
   loginSchema,
   resendConfirmationSchema,
   resetPasswordSchema,
+  signUpSchema,
 } from "@/lib/auth/schema";
 import { RECOVERY_EXPIRED_CODE, sessionExpiredResult } from "@/lib/auth/session-result";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -53,6 +55,54 @@ export const signIn = async (rawValues: unknown, nextPath?: string | null) => {
   }
 
   redirect(resolvePostAuthPath(nextPath));
+};
+
+export const signUp = async (rawValues: unknown, nextPath?: string | null) => {
+  const parsed = signUpSchema.safeParse(rawValues);
+
+  if (!parsed.success) {
+    return {
+      error: zodErrorMessage(parsed.error, "Revisa los datos del formulario."),
+    };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const origin = await getRequestOrigin();
+  const targetNext = isSafeReturnPath(nextPath) ? nextPath : "/solicitud";
+
+  const { data, error } = await supabase.auth.signUp({
+    email: parsed.data.email,
+    password: parsed.data.password,
+    options: {
+      data: {
+        full_name: parsed.data.fullName,
+      },
+      emailRedirectTo: `${origin}${AUTH_CONFIRM_PATH}?next=${encodeURIComponent(targetNext)}`,
+    },
+  });
+
+  if (error) {
+    return {
+      error: getAuthErrorMessage(error.message, "No se pudo registrar la cuenta. Inténtalo de nuevo."),
+      code: getAuthErrorCode(error.message),
+    };
+  }
+
+  if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    return {
+      error: "Ya existe una cuenta con este correo. Por favor inicia sesión.",
+    };
+  }
+
+  if (data?.session) {
+    redirect(resolvePostAuthPath(targetNext));
+  }
+
+  return {
+    success:
+      "Cuenta creada exitosamente. Hemos enviado un correo de confirmación a tu dirección para activar tu acceso.",
+    requiresConfirmation: true,
+  };
 };
 
 export const requestPasswordReset = async (rawValues: unknown) => {

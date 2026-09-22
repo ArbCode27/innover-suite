@@ -51,8 +51,24 @@ export const resendConfirmationSchema = z.object({
   email: z.email("Ingresa un correo válido"),
 });
 
+export const signUpSchema = z
+  .object({
+    fullName: z
+      .string()
+      .trim()
+      .min(2, "Ingresa tu nombre y apellido")
+      .max(100, "El nombre no puede exceder 100 caracteres"),
+    email: z.string().trim().email("Ingresa un correo válido"),
+    ...passwordPairShape,
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Las contraseñas no coinciden",
+    path: ["confirmPassword"],
+  });
+
 export type LoginValues = z.infer<typeof loginSchema>;
 export type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
 export type ChangePasswordValues = z.infer<typeof changePasswordSchema>;
 export type InviteSignUpValues = z.infer<typeof inviteSignUpSchema>;
+export type SignUpValues = z.infer<typeof signUpSchema>;

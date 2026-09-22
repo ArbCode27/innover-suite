@@ -24,9 +24,15 @@ type InventoryOpsProps = {
   zones: DeliveryZoneRecord[];
   currencies: OrganizationCurrencySettings;
   canManage: boolean;
+  isRestaurant?: boolean;
 };
 
-export const InventoryOps = ({ zones, currencies, canManage }: InventoryOpsProps) => {
+export const InventoryOps = ({
+  zones,
+  currencies,
+  canManage,
+  isRestaurant = false,
+}: InventoryOpsProps) => {
   const [zoneForm, setZoneForm] = useState({
     name: "",
     fee: "",
@@ -79,8 +85,12 @@ export const InventoryOps = ({ zones, currencies, canManage }: InventoryOpsProps
     <Card className="border-primary/15 bg-card/80">
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <CardTitle>Zonas de delivery</CardTitle>
-          <CardDescription>La IA usa el nombre de la zona; el servidor aplica el fee y el IVA.</CardDescription>
+          <CardTitle>{isRestaurant ? "Zonas de delivery" : "Zonas de despacho / entrega"}</CardTitle>
+          <CardDescription>
+            {isRestaurant
+              ? "La IA usa el nombre de la zona; el servidor aplica el fee y el IVA."
+              : "Tarifas de envío a domicilio. La IA cotizará el flete según la zona indicada por el cliente."}
+          </CardDescription>
         </div>
         <Badge variant="outline">
           {activeCount} activa{activeCount === 1 ? "" : "s"} · {zones.length} total
@@ -197,9 +207,13 @@ export const InventoryOps = ({ zones, currencies, canManage }: InventoryOpsProps
         ) : (
           <div className="rounded-xl border border-dashed border-primary/20 bg-primary/8 px-4 py-8 text-center">
             <MapPin className="mx-auto size-5 text-primary" aria-hidden />
-            <p className="mt-2 text-sm font-medium">Sin zonas de delivery</p>
+            <p className="mt-2 text-sm font-medium">
+              {isRestaurant ? "Sin zonas de delivery" : "Sin zonas de despacho configuradas"}
+            </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Crea al menos una si vendes a domicilio. La IA usará estos nombres.
+              {isRestaurant
+                ? "Crea al menos una si vendes a domicilio. La IA usará estos nombres."
+                : "Agrega zonas de entrega si realizas despachos o envíos a domicilio para tus clientes."}
             </p>
           </div>
         )}

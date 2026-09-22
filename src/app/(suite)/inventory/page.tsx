@@ -9,9 +9,10 @@ import { canManageCatalog } from "@/lib/organizations/membership";
 import { loadOrganizationCurrencies } from "@/lib/organizations/currencies";
 
 export default async function InventoryPage() {
-  const { membership, supabase } = await requireSuiteModule("catalog");
+  const { membership, supabase, modules } = await requireSuiteModule("catalog");
   const canManage = canManageCatalog(membership);
   const currencies = await loadOrganizationCurrencies(supabase, membership.organizationId);
+  const isRestaurant = Boolean(modules.kitchen);
 
   let products: ProductRecord[] = [];
   let promotions: PromotionRecord[] = [];
@@ -33,7 +34,11 @@ export default async function InventoryPage() {
   return (
     <ModuleShell
       title="Inventario"
-      description="Productos físicos, servicios e insumos. Los platos del menú se gestionan en Menú."
+      description={
+        isRestaurant
+          ? "Productos físicos, servicios e insumos. Los platos del menú se gestionan en Menú."
+          : "Control de stock, productos físicos, servicios y precios de tu catálogo comercial."
+      }
       eyebrow="Comercio"
       actions={
         <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary">
@@ -48,13 +53,19 @@ export default async function InventoryPage() {
         </p>
       ) : (
         <>
-          <InventoryOps zones={zones} currencies={currencies} canManage={canManage} />
+          <InventoryOps
+            zones={zones}
+            currencies={currencies}
+            canManage={canManage}
+            isRestaurant={isRestaurant}
+          />
           <InventoryBoard
             products={products}
             promotions={promotions}
             movements={movements}
             currencies={currencies}
             canManage={canManage}
+            isRestaurant={isRestaurant}
           />
         </>
       )}

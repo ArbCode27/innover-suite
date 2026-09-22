@@ -49,6 +49,7 @@ type InventoryBoardProps = {
   movements: InventoryMovementRecord[];
   currencies: OrganizationCurrencySettings;
   canManage: boolean;
+  isRestaurant?: boolean;
 };
 
 const PAGE_SIZE = 8;
@@ -104,7 +105,14 @@ const isLowStock = (product: ProductRecord) =>
       product.onHand <= product.reorderPoint,
   );
 
-export const InventoryBoard = ({ products, promotions, movements, currencies, canManage }: InventoryBoardProps) => {
+export const InventoryBoard = ({
+  products,
+  promotions,
+  movements,
+  currencies,
+  canManage,
+  isRestaurant = false,
+}: InventoryBoardProps) => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState({ ...emptyProductForm, currency: currencies.defaultCode });
@@ -418,7 +426,9 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
           <div>
             <CardTitle>Catálogo e inventario</CardTitle>
             <CardDescription>
-              Productos físicos y servicios. Los platos se gestionan en Menú.
+              {isRestaurant
+                ? "Productos físicos y servicios. Los platos se gestionan en Menú."
+                : "Catálogo de productos físicos, stock disponible y servicios para ventas."}
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -981,18 +991,20 @@ export const InventoryBoard = ({ products, promotions, movements, currencies, ca
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="product-ingredients">Ingredientes (auto-pedido)</Label>
-              <Input
-                id="product-ingredients"
-                value={form.menuIngredients}
-                onChange={(event) => setForm((current) => ({ ...current, menuIngredients: event.target.value }))}
-                placeholder="Ej. pan, carne, queso, lechuga, tomate"
-              />
-              <p className="text-xs text-muted-foreground">
-                Separa con comas. El cliente podrá desmarcar ingredientes al ordenar en el menú público.
-              </p>
-            </div>
+            {isRestaurant ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="product-ingredients">Ingredientes (auto-pedido)</Label>
+                <Input
+                  id="product-ingredients"
+                  value={form.menuIngredients}
+                  onChange={(event) => setForm((current) => ({ ...current, menuIngredients: event.target.value }))}
+                  placeholder="Ej. pan, carne, queso, lechuga, tomate"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separa con comas. El cliente podrá desmarcar ingredientes al ordenar en el menú público.
+                </p>
+              </div>
+            ) : null}
             {editingId ? null : (
               <div className="space-y-1.5">
                 <Label htmlFor="product-stock">

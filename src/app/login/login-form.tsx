@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,6 +23,16 @@ export const LoginForm = () => {
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [registerHref, setRegisterHref] = useState("/register?next=/solicitud");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
+    if (next) {
+      setRegisterHref(`/register?next=${encodeURIComponent(next)}`);
+    }
+  }, []);
+
   const {
     register,
     handleSubmit,
@@ -136,6 +146,16 @@ export const LoginForm = () => {
           "Entrar"
         )}
       </Button>
+
+      <div className="pt-2 text-center text-xs text-muted-foreground">
+        ¿No tienes cuenta?{" "}
+        <Link
+          href={registerHref}
+          className="font-medium text-primary underline-offset-4 hover:underline"
+        >
+          Regístrate aquí
+        </Link>
+      </div>
     </form>
   );
 };

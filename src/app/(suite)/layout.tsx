@@ -94,7 +94,7 @@ const SuiteLayout = async ({ children }: { children: ReactNode }) => {
       label: "Menú",
       icon: UtensilsCrossed,
       iconKey: "menu",
-      show: Boolean(modules.catalog && canManageCatalog(membership)),
+      show: Boolean(modules.kitchen && modules.catalog && canManageCatalog(membership)),
     },
     {
       href: "/inventory",

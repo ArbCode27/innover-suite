@@ -9,6 +9,7 @@ import {
 const PUBLIC_PATHS = [
   "/",
   "/login",
+  "/register",
   "/privacy",
   "/terms",
   "/invite",
@@ -130,8 +131,8 @@ export const updateSession = async (request: NextRequest) => {
   //   return redirectTo(request, sessionResponse, "/home");
   // }
 
-  // Protected routes: do not block on getUser. /login still confirms the session.
-  if (pathname !== "/login" || !hasSupabaseAuthCookie(request)) {
+  // Protected routes: do not block on getUser. /login and /register still confirm the session.
+  if ((pathname !== "/login" && pathname !== "/register") || !hasSupabaseAuthCookie(request)) {
     return sessionResponse;
   }
 
@@ -157,7 +158,7 @@ export const updateSession = async (request: NextRequest) => {
     return response;
   }
 
-  if (user && pathname === "/login") {
+  if (user && (pathname === "/login" || pathname === "/register")) {
     const nextPath = request.nextUrl.searchParams.get("next");
     if (nextPath && isSafeWhatsAppOAuthReturnPath(nextPath)) {
       const resumeUrl = request.nextUrl.clone();

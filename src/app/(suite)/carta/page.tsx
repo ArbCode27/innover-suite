@@ -8,7 +8,7 @@ import { canManageCatalog } from "@/lib/organizations/membership";
 import { loadOrganizationCurrencies } from "@/lib/organizations/currencies";
 
 export default async function CartaPage() {
-  const { membership, supabase } = await requireSuiteModule("catalog");
+  const { membership, supabase } = await requireSuiteModule("kitchen");
   const canManage = canManageCatalog(membership);
   const currencies = await loadOrganizationCurrencies(supabase, membership.organizationId);
 
