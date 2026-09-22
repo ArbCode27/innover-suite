@@ -16,12 +16,41 @@ export type ContactNote = {
   createdAt: string;
 };
 
+export type ContactResolutionEntry = {
+  id?: string;
+  resolvedAt: string;
+  resolvedBy?: string | null;
+  outcome?: string | null;
+  reason?: string | null;
+  summary?: string | null;
+};
+
+export type ContactConversationItem = {
+  id: number;
+  channel: string;
+  status: "open" | "in_progress" | "resolved";
+  mode: string;
+  updatedAt: string;
+  createdAt: string;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  resolutionOutcome: string | null;
+  resolutionReason: string | null;
+  resolutionSummary: string | null;
+  resolutionHistory: ContactResolutionEntry[];
+};
+
 export type ContactDetail = ContactListItem & {
-  conversations: Array<{ id: number; channel: string; mode: string; updatedAt: string }>;
+  conversations: ContactConversationItem[];
   orders: Array<{ id: number; total: number; status: string; createdAt: string }>;
   notes: ContactNote[];
   funnelStage: string | null;
 };
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
 const mapTags = (links: unknown) => {
   if (!Array.isArray(links)) return [] as string[];
@@ -111,21 +140,36 @@ export const loadContactDetail = async (
 
   if (!base?.id) return null;
 
-  const [{ data: conversations }, { data: orders }, notesResult, { data: card }] = await Promise.all([
-    supabase
-      .from("conversations")
-      .select("id, channel, mode, updated_at")
-      .eq("organization_id", organizationId)
-      .eq("contact_id", contactId)
-      .order("updated_at", { ascending: false })
-      .limit(10),
+  const conversationQueryWithPreview = supabase
+    .from("conversations")
+    .select("id, channel, status, mode, updated_at, created_at, last_message_at, last_message_preview, metadata")
+    .eq("organization_id", organizationId)
+    .eq("contact_id", contactId)
+    .order("updated_at", { ascending: false })
+    .limit(50);
+
+  const conversationQueryFallback = supabase
+    .from("conversations")
+    .select("id, channel, status, mode, updated_at, created_at, last_message_at, metadata")
+    .eq("organization_id", organizationId)
+    .eq("contact_id", contactId)
+    .order("updated_at", { ascending: false })
+    .limit(50);
+
+  const [conversationsResult, { data: orders }, notesResult, { data: card }] = await Promise.all([
+    conversationQueryWithPreview.then(async (res) => {
+      if (res.error?.message?.includes("last_message_preview")) {
+        return conversationQueryFallback;
+      }
+      return res;
+    }),
     supabase
       .from("orders")
       .select("id, total, status, created_at")
       .eq("organization_id", organizationId)
       .eq("contact_id", contactId)
       .order("created_at", { ascending: false })
-      .limit(10),
+      .limit(20),
     supabase
       .from("contact_notes")
       .select("id, body, visible_to_agent, created_at")
@@ -144,6 +188,60 @@ export const loadContactDetail = async (
   const stageRaw = card?.funnel_stages as { name?: string } | { name?: string }[] | null | undefined;
   const funnelStage = Array.isArray(stageRaw) ? stageRaw[0]?.name : stageRaw?.name;
 
+  const rawConversations = (conversationsResult.data ?? []) as unknown as Array<{
+    id: number;
+    channel: string;
+    status: string;
+    mode: string;
+    updated_at: string;
+    created_at?: string;
+    last_message_at?: string | null;
+    last_message_preview?: string | null;
+    metadata: unknown;
+  }>;
+
+  const mappedConversations: ContactConversationItem[] = rawConversations.map((row) => {
+    const meta = asRecord(row.metadata);
+    const rawHistory = Array.isArray(meta.resolution_history) ? meta.resolution_history : [];
+    const resolutionHistory: ContactResolutionEntry[] = rawHistory
+      .map((item) => {
+        const record = asRecord(item);
+        return {
+          id: typeof record.id === "string" ? record.id : undefined,
+          resolvedAt: typeof record.resolved_at === "string" ? record.resolved_at : "",
+          resolvedBy: typeof record.resolved_by === "string" ? record.resolved_by : null,
+          outcome: typeof record.outcome === "string" ? record.outcome : null,
+          reason: typeof record.reason === "string" ? record.reason : null,
+          summary: typeof record.summary === "string" ? record.summary : null,
+        };
+      })
+      .filter((item) => Boolean(item.resolvedAt));
+
+    const statusVal =
+      row.status === "resolved" || row.status === "in_progress" || row.status === "open"
+        ? row.status
+        : "open";
+
+    return {
+      id: row.id,
+      channel: row.channel,
+      status: statusVal,
+      mode: row.mode,
+      updatedAt: row.updated_at || new Date().toISOString(),
+      createdAt: row.created_at || row.updated_at || new Date().toISOString(),
+      lastMessageAt: row.last_message_at ?? null,
+      lastMessagePreview:
+        row.last_message_preview?.trim() ||
+        (typeof meta.last_message_preview === "string" ? meta.last_message_preview.trim() : null),
+      resolvedAt: typeof meta.resolved_at === "string" ? meta.resolved_at : null,
+      resolvedBy: typeof meta.resolved_by === "string" ? meta.resolved_by : null,
+      resolutionOutcome: typeof meta.resolution_outcome === "string" ? meta.resolution_outcome : null,
+      resolutionReason: typeof meta.resolution_reason === "string" ? meta.resolution_reason : null,
+      resolutionSummary: typeof meta.resolution_summary === "string" ? meta.resolution_summary : null,
+      resolutionHistory,
+    };
+  });
+
   return {
     id: base.id as number,
     fullName: (base.full_name as string) || "Contacto sin nombre",
@@ -151,12 +249,7 @@ export const loadContactDetail = async (
     email: (base.email as string | null) ?? null,
     updatedAt: base.updated_at as string,
     tags: mapTags((base as { contact_tag_links?: unknown }).contact_tag_links),
-    conversations: (conversations ?? []).map((row) => ({
-      id: row.id as number,
-      channel: row.channel as string,
-      mode: row.mode as string,
-      updatedAt: row.updated_at as string,
-    })),
+    conversations: mappedConversations,
     orders: (orders ?? []).map((row) => ({
       id: row.id as number,
       total: Number(row.total ?? 0),

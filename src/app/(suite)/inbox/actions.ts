@@ -554,4 +554,191 @@ export const deleteConversationAction = async (rawValues: unknown): Promise<Acti
   return { success: "Chat borrado." };
 };
 
+const resolveConversationSchema = z.object({
+  conversationId: z.number().int().positive(),
+  outcome: z.enum(["successful", "unresolved", "abandoned"]).default("successful"),
+  reason: z.string().trim().min(1, "El motivo de culminación es requerido.").max(120),
+  summary: z.string().trim().max(1000).optional(),
+});
+
+const reopenConversationSchema = z.object({
+  conversationId: z.number().int().positive(),
+});
+
+export const resolveConversationAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = resolveConversationSchema.safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: zodErrorMessage(parsed.error, "Datos inválidos para resolver la conversación.") };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin", "agent"])) {
+    return { error: "No tienes permisos para resolver conversaciones." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return sessionExpiredResult();
+  }
+
+  const { data: conversation, error: fetchError } = await supabase
+    .from("conversations")
+    .select("id, contact_id, channel, status, mode, metadata")
+    .eq("id", parsed.data.conversationId)
+    .eq("organization_id", membership.organizationId)
+    .maybeSingle();
+
+  if (fetchError || !conversation?.id) {
+    return { error: fetchError?.message || "La conversación no existe." };
+  }
+
+  const now = new Date().toISOString();
+  const currentMeta = asMetadata(conversation.metadata);
+  const existingHistory = Array.isArray(currentMeta.resolution_history)
+    ? (currentMeta.resolution_history as Array<Record<string, unknown>>)
+    : [];
+
+  const resolutionId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `res_${Date.now()}`;
+
+  const resolutionEntry = {
+    id: resolutionId,
+    resolved_at: now,
+    resolved_by: user.id,
+    outcome: parsed.data.outcome,
+    reason: parsed.data.reason,
+    summary: parsed.data.summary || null,
+  };
+
+  const nextMeta = {
+    ...currentMeta,
+    resolved_at: now,
+    resolved_by: user.id,
+    resolution_outcome: parsed.data.outcome,
+    resolution_reason: parsed.data.reason,
+    resolution_summary: parsed.data.summary || null,
+    resolution_history: [...existingHistory, resolutionEntry],
+    unread_count: 0,
+  };
+
+  const { error: updateError } = await supabase
+    .from("conversations")
+    .update({
+      status: "resolved",
+      updated_at: now,
+      metadata: nextMeta,
+    })
+    .eq("id", parsed.data.conversationId)
+    .eq("organization_id", membership.organizationId);
+
+  if (updateError) {
+    return { error: updateError.message || "No se pudo resolver la conversación." };
+  }
+
+  const admin = getSupabaseAdminClient();
+  const outcomeLabel = parsed.data.outcome === "successful" ? "Culminada con éxito" : "Conversación resuelta";
+  const summaryPart = parsed.data.summary ? ` — "${parsed.data.summary}"` : "";
+
+  await admin.from("messages").insert({
+    organization_id: membership.organizationId,
+    conversation_id: parsed.data.conversationId,
+    direction: "outbound",
+    sender_type: "system",
+    content: `✓ ${outcomeLabel}: ${parsed.data.reason}${summaryPart}`,
+    metadata: {
+      kind: "resolution",
+      outcome: parsed.data.outcome,
+      reason: parsed.data.reason,
+      summary: parsed.data.summary || null,
+      resolved_by: user.id,
+    },
+    created_at: now,
+  });
+
+  revalidatePath("/inbox");
+  revalidatePath("/contacts");
+  if (conversation.contact_id) {
+    revalidatePath(`/contacts/${conversation.contact_id}`);
+  }
+  revalidatePath("/home");
+  return { success: "Conversación culminada con éxito y archivada en el historial." };
+};
+
+export const reopenConversationAction = async (rawValues: unknown): Promise<ActionResult> => {
+  const parsed = reopenConversationSchema.safeParse(rawValues);
+  if (!parsed.success) {
+    return { error: "La conversación no es válida." };
+  }
+
+  const membership = await getCurrentMembership();
+  if (!membership || !hasOrganizationRole(membership, ["owner", "admin", "agent"])) {
+    return { error: "No tienes permisos para reabrir conversaciones." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return sessionExpiredResult();
+  }
+
+  const { data: conversation, error: fetchError } = await supabase
+    .from("conversations")
+    .select("id, contact_id, metadata")
+    .eq("id", parsed.data.conversationId)
+    .eq("organization_id", membership.organizationId)
+    .maybeSingle();
+
+  if (fetchError || !conversation?.id) {
+    return { error: fetchError?.message || "La conversación no existe." };
+  }
+
+  const now = new Date().toISOString();
+  const currentMeta = asMetadata(conversation.metadata);
+  const nextMeta = {
+    ...currentMeta,
+    reopened_at: now,
+    reopened_by: user.id,
+  };
+
+  const { error: updateError } = await supabase
+    .from("conversations")
+    .update({
+      status: "in_progress",
+      updated_at: now,
+      metadata: nextMeta,
+    })
+    .eq("id", parsed.data.conversationId)
+    .eq("organization_id", membership.organizationId);
+
+  if (updateError) {
+    return { error: updateError.message || "No se pudo reabrir la conversación." };
+  }
+
+  const admin = getSupabaseAdminClient();
+  await admin.from("messages").insert({
+    organization_id: membership.organizationId,
+    conversation_id: parsed.data.conversationId,
+    direction: "outbound",
+    sender_type: "system",
+    content: "Conversación reabierta.",
+    metadata: {
+      kind: "reopened",
+      reopened_by: user.id,
+    },
+    created_at: now,
+  });
+
+  revalidatePath("/inbox");
+  revalidatePath("/contacts");
+  if (conversation.contact_id) {
+    revalidatePath(`/contacts/${conversation.contact_id}`);
+  }
+  return { success: "Conversación reabierta." };
+};
+
 

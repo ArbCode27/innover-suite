@@ -1,7 +1,7 @@
 import { parseMessageAttachment } from "@/lib/media/parse";
 import type { MessageAttachmentKind, MessageAttachmentStatus, MessageLocation } from "@/lib/media/types";
 
-export type InboxFilter = "all" | "unread" | "ai" | "human" | "mine" | "unassigned";
+export type InboxFilter = "all" | "unread" | "ai" | "human" | "resolved" | "mine" | "unassigned";
 
 export type AttachmentKind = MessageAttachmentKind;
 export type FileAttachmentKind = "image" | "video" | "audio" | "document";
@@ -21,6 +21,10 @@ export type InboxConversation = {
   contactPhone: string | null;
   lastMessagePreview: string;
   unreadCount: number;
+  resolvedAt?: string | null;
+  resolutionOutcome?: string | null;
+  resolutionReason?: string | null;
+  resolutionSummary?: string | null;
 };
 
 export type InboxMessage = {

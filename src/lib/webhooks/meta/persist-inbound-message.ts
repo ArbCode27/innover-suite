@@ -273,7 +273,7 @@ const resolveConversationId = async (
     throw createError || new Error("Failed to create conversation");
   }
 
-  const { data: raced, error: racedError } = await supabase
+  const { data: raced } = await supabase
     .from("conversations")
     .select("id")
     .eq("contact_id", contactId)
@@ -281,13 +281,42 @@ const resolveConversationId = async (
     .in("status", ["open", "in_progress"])
     .order("updated_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
-  if (racedError || !raced?.id) {
-    throw racedError || new Error("Failed to resolve conversation after unique conflict");
+  if (raced?.id) {
+    return raced.id as number;
   }
 
-  return raced.id as number;
+  // Si existe una restricción única por (contact_id, canal) y la conversación previa fue resuelta,
+  // reactivamos la conversación existente para este cliente preservando todo su historial.
+  const { data: existingResolved, error: resolvedLookupError } = await supabase
+    .from("conversations")
+    .select("id, metadata")
+    .eq("contact_id", contactId)
+    .eq("channel", event.channel)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (resolvedLookupError || !existingResolved?.id) {
+    throw resolvedLookupError || new Error("Failed to resolve conversation after unique conflict");
+  }
+
+  const existingMeta = asMetadata(existingResolved.metadata);
+  await supabase
+    .from("conversations")
+    .update({
+      status: "open",
+      mode: "ai",
+      updated_at: new Date().toISOString(),
+      metadata: {
+        ...existingMeta,
+        reopened_at: new Date().toISOString(),
+      },
+    })
+    .eq("id", existingResolved.id);
+
+  return existingResolved.id as number;
 };
 
 const enrichContactIdentity = async (

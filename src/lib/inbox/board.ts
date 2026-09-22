@@ -61,6 +61,7 @@ export const mapConversationListRow = (
 
   const storedPreview = row.last_message_preview?.trim() || readStoredPreview(row.metadata);
   const contactPhone = row.contacts?.phone || row.customer_phone || null;
+  const meta = asRecord(row.metadata);
 
   return {
     id: row.id,
@@ -76,6 +77,10 @@ export const mapConversationListRow = (
     contactPhone,
     lastMessagePreview: latestPreview?.trim() || storedPreview || "Sin mensajes recientes",
     unreadCount: readUnreadCount(row.metadata),
+    resolvedAt: typeof meta.resolved_at === "string" ? meta.resolved_at : null,
+    resolutionOutcome: typeof meta.resolution_outcome === "string" ? meta.resolution_outcome : null,
+    resolutionReason: typeof meta.resolution_reason === "string" ? meta.resolution_reason : null,
+    resolutionSummary: typeof meta.resolution_summary === "string" ? meta.resolution_summary : null,
   };
 };
 

@@ -29,6 +29,7 @@ import {
   Mic,
   MoreVertical,
   Paperclip,
+  RotateCcw,
   Search,
   SendHorizontal,
   Smile,
@@ -71,12 +72,22 @@ import {
 import { attachmentPreviewLabel } from "@/lib/media/parse";
 import { MESSAGE_ATTACHMENTS_BUCKET } from "@/lib/media/types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  format,
+  isAfter,
+  isToday,
+  isYesterday,
+  startOfMonth,
+  subDays,
+} from "date-fns";
+import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { createFunnelCardFromConversationAction } from "../funnels/actions";
 import {
   assignConversationAction,
   deleteConversationAction,
   markConversationReadAction,
+  reopenConversationAction,
   sendConversationMessageAction,
   setConversationModeAction,
 } from "./actions";
@@ -87,6 +98,11 @@ import {
   previewFromMessageRow,
   type ConversationListRow,
 } from "@/lib/inbox/board";
+import { ResolveConversationDialog } from "@/components/inbox/resolve-conversation-dialog";
+import {
+  InboxDateFilter,
+  type InboxDateFilterKey,
+} from "@/components/inbox/inbox-date-filter";
 import { MessageMedia } from "./message-media";
 import type {
   FileAttachmentKind,
@@ -121,7 +137,19 @@ const inboxFilters: Array<{ key: InboxFilter; label: string }> = [
   { key: "unread", label: "No leídas" },
   { key: "ai", label: "Bot IA" },
   { key: "human", label: "Humano" },
+  { key: "resolved", label: "Resueltas" },
 ];
+
+const getDateSeparatorLabel = (value: string) => {
+  try {
+    const date = new Date(value);
+    if (isToday(date)) return "Hoy";
+    if (isYesterday(date)) return "Ayer";
+    return format(date, "EEEE, d 'de' MMMM, yyyy", { locale: es });
+  } catch {
+    return value;
+  }
+};
 
 const emojiOptions = [
   "😀",
@@ -221,6 +249,7 @@ export const InboxPanel = ({
 }: InboxPanelProps) => {
   const [conversations, setConversations] = useState(initialConversations);
   const [activeFilter, setActiveFilter] = useState<InboxFilter>("all");
+  const [dateFilter, setDateFilter] = useState<InboxDateFilterKey>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedConversationId, setSelectedConversationId] = useState<
     number | null
@@ -253,8 +282,16 @@ export const InboxPanel = ({
 
   const filteredConversations = useMemo(() => {
     const loweredTerm = searchTerm.trim().toLowerCase();
+    const now = new Date();
+
     return conversations
       .filter((conversation) => {
+        if (activeFilter === "resolved") {
+          return conversation.status === "resolved";
+        }
+        if (conversation.status === "resolved") {
+          return false;
+        }
         if (activeFilter === "all") return true;
         if (activeFilter === "ai") return conversation.mode === "ai";
         if (activeFilter === "human") return conversation.mode === "human";
@@ -265,12 +302,25 @@ export const InboxPanel = ({
         return conversation.unreadCount > 0;
       })
       .filter((conversation) => {
+        if (dateFilter === "all") return true;
+        const convDateStr = conversation.lastMessageAt || conversation.updatedAt;
+        if (!convDateStr) return false;
+        const date = new Date(convDateStr);
+        if (Number.isNaN(date.getTime())) return false;
+
+        if (dateFilter === "today") return isToday(date);
+        if (dateFilter === "yesterday") return isYesterday(date);
+        if (dateFilter === "week") return isAfter(date, subDays(now, 7));
+        if (dateFilter === "month") return isAfter(date, startOfMonth(now));
+        return true;
+      })
+      .filter((conversation) => {
         if (!loweredTerm) return true;
         const haystack =
           `${conversation.contactName} ${conversation.contactUsername ?? ""} ${conversation.contactPhone ?? ""} ${CHANNEL_LABELS[conversation.channel]} ${conversation.lastMessagePreview}`.toLowerCase();
         return haystack.includes(loweredTerm);
       });
-  }, [activeFilter, conversations, currentUserId, searchTerm]);
+  }, [activeFilter, conversations, currentUserId, dateFilter, searchTerm]);
 
   const activeConversationId = useMemo(() => {
     if (!selectedConversationId) return null;
@@ -890,6 +940,38 @@ export const InboxPanel = ({
     });
   };
 
+  const handleReopenConversation = () => {
+    if (!selectedConversation) return;
+    const conversationId = selectedConversation.id;
+    startTransition(async () => {
+      const result = await reopenConversationAction({ conversationId });
+      if (result.error) {
+        toastActionError(result);
+        return;
+      }
+      toast.success(result.success ?? "Conversación reabierta.");
+      setConversations((current) =>
+        current.map((item) =>
+          item.id === conversationId
+            ? { ...item, status: "in_progress", updatedAt: new Date().toISOString() }
+            : item,
+        ),
+      );
+    });
+  };
+
+  const handleConversationResolved = () => {
+    if (!selectedConversation) return;
+    const conversationId = selectedConversation.id;
+    setConversations((current) =>
+      current.map((item) =>
+        item.id === conversationId
+          ? { ...item, status: "resolved", updatedAt: new Date().toISOString() }
+          : item,
+      ),
+    );
+  };
+
   const handleSuggestReply = () => {
     if (!activeConversationId) return;
     startTransition(async () => {
@@ -1084,15 +1166,18 @@ export const InboxPanel = ({
             </p>
           ) : null}
 
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              aria-label="Buscar conversación"
-              className="h-8 pl-9"
-              placeholder="Buscar por nombre, teléfono o texto"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-            />
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                aria-label="Buscar conversación"
+                className="h-8 pl-9"
+                placeholder="Buscar por nombre, teléfono o texto"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+            </div>
+            <InboxDateFilter value={dateFilter} onChange={setDateFilter} />
           </div>
           <div className="flex flex-wrap gap-1.5">
             {inboxFilters.map((filter) => (
@@ -1157,6 +1242,14 @@ export const InboxPanel = ({
                           </p>
                           <div className="mt-1.5 flex items-center gap-1.5">
                             <ChannelBadge channel={conversation.channel} />
+                            {conversation.status === "resolved" ? (
+                              <Badge
+                                variant="outline"
+                                className="h-7 gap-1 border-emerald-500/35 bg-emerald-500/10 px-2 text-[12px] text-emerald-600 dark:border-emerald-500/40 dark:text-emerald-400">
+                                <CheckCircle2 className="size-3" />
+                                Resuelta
+                              </Badge>
+                            ) : null}
                             <Badge
                               variant="outline"
                               className={cn(
@@ -1258,6 +1351,35 @@ export const InboxPanel = ({
                     }}
                   />
                 </div>
+
+                {selectedConversation.status === "resolved" ? (
+                  <div className="flex items-center gap-1.5">
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-emerald-500/35 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-600 dark:border-emerald-500/40 dark:text-emerald-400"
+                    >
+                      <CheckCircle2 className="size-3.5" />
+                      <span>Resuelta</span>
+                    </Badge>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={handleReopenConversation}
+                      disabled={isPending}
+                    >
+                      <RotateCcw className="size-3.5" />
+                      Reabrir
+                    </Button>
+                  </div>
+                ) : (
+                  <ResolveConversationDialog
+                    conversationId={selectedConversation.id}
+                    contactName={selectedConversation.contactName}
+                    onSuccess={handleConversationResolved}
+                  />
+                )}
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -1271,6 +1393,28 @@ export const InboxPanel = ({
                   <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Conversación</DropdownMenuLabel>
                     <DropdownMenuSeparator />
+                    {selectedConversation.status === "resolved" ? (
+                      <DropdownMenuItem
+                        onClick={handleReopenConversation}
+                        disabled={isPending}>
+                        <RotateCcw />
+                        Reabrir conversación
+                      </DropdownMenuItem>
+                    ) : (
+                      <ResolveConversationDialog
+                        conversationId={selectedConversation.id}
+                        contactName={selectedConversation.contactName}
+                        onSuccess={handleConversationResolved}
+                        trigger={
+                          <DropdownMenuItem
+                            onSelect={(e) => e.preventDefault()}
+                            disabled={isPending}>
+                            <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                            Culminar y resolver
+                          </DropdownMenuItem>
+                        }
+                      />
+                    )}
                     <DropdownMenuItem
                       onClick={handleSendToFunnel}
                       disabled={isPending}>
@@ -1321,69 +1465,79 @@ export const InboxPanel = ({
                 </div>
               ) : selectedMessages.length ? (
                 <div className="space-y-2.5 pb-1">
-                  {selectedMessages.map((message) => {
+                  {selectedMessages.map((message, index) => {
                     const isOutbound = message.direction === "outbound";
-
-                    if (message.senderType === "system") {
-                      return (
-                        <p
-                          key={message.id}
-                          className="px-4 py-1 text-center text-[11px] text-muted-foreground">
-                          {message.content}
-                        </p>
-                      );
-                    }
+                    const prevMessage = index > 0 ? selectedMessages[index - 1] : null;
+                    const showDateSeparator =
+                      !prevMessage ||
+                      new Date(message.createdAt).toDateString() !==
+                        new Date(prevMessage.createdAt).toDateString();
 
                     return (
-                      <div
-                        key={message.id}
-                        className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
-                        <article
-                          className={`max-w-[min(22rem,85%)] overflow-hidden rounded-2xl border px-3 py-2 text-sm shadow-sm ${
-                            isOutbound
-                              ? "border-primary/30 bg-primary/15 text-foreground"
-                              : "border-border bg-background"
-                          }`}>
-                          {message.senderType === "ai" ? (
-                            <p className="mb-1 flex items-center gap-1 text-[11px] font-medium text-primary">
-                              <Bot className="size-3" aria-hidden />
-                              Agente IA
-                            </p>
-                          ) : null}
-                          {message.content &&
-                          message.attachmentKind !== "location" ? (
-                            <p className="whitespace-pre-wrap">
-                              {message.content}
-                            </p>
-                          ) : null}
-
-                          <MessageMedia message={message} />
-
-                          <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
-                            <span suppressHydrationWarning>
-                              {formatTime(message.createdAt)}
+                      <div key={message.id} className="space-y-2.5">
+                        {showDateSeparator ? (
+                          <div className="flex items-center justify-center py-2">
+                            <span className="rounded-full border border-border/60 bg-muted/80 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-2xs backdrop-blur-xs">
+                              {getDateSeparatorLabel(message.createdAt)}
                             </span>
-                            {isOutbound &&
-                            message.deliveryStatus === "failed" ? (
-                              <AlertCircle
-                                className="size-3 text-destructive"
-                                aria-label="No se entregó al canal"
-                              />
-                            ) : null}
-                            {isOutbound &&
-                            message.deliveryStatus === "pending" ? (
-                              <Clock className="size-3" aria-label="Enviando" />
-                            ) : null}
-                            {isOutbound &&
-                            message.deliveryStatus !== "failed" &&
-                            message.deliveryStatus !== "pending" ? (
-                              <CheckCircle2
-                                className="size-3"
-                                aria-label="Enviado"
-                              />
-                            ) : null}
                           </div>
-                        </article>
+                        ) : null}
+
+                        {message.senderType === "system" ? (
+                          <p className="px-4 py-1 text-center text-[11px] font-medium text-muted-foreground">
+                            {message.content}
+                          </p>
+                        ) : (
+                          <div
+                            className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
+                            <article
+                              className={`max-w-[min(22rem,85%)] overflow-hidden rounded-2xl border px-3 py-2 text-sm shadow-sm ${
+                                isOutbound
+                                  ? "border-primary/30 bg-primary/15 text-foreground"
+                                  : "border-border bg-background"
+                              }`}>
+                              {message.senderType === "ai" ? (
+                                <p className="mb-1 flex items-center gap-1 text-[11px] font-medium text-primary">
+                                  <Bot className="size-3" aria-hidden />
+                                  Agente IA
+                                </p>
+                              ) : null}
+                              {message.content &&
+                              message.attachmentKind !== "location" ? (
+                                <p className="whitespace-pre-wrap">
+                                  {message.content}
+                                </p>
+                              ) : null}
+
+                              <MessageMedia message={message} />
+
+                              <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
+                                <span suppressHydrationWarning>
+                                  {formatTime(message.createdAt)}
+                                </span>
+                                {isOutbound &&
+                                message.deliveryStatus === "failed" ? (
+                                  <AlertCircle
+                                    className="size-3 text-destructive"
+                                    aria-label="No se entregó al canal"
+                                  />
+                                ) : null}
+                                {isOutbound &&
+                                message.deliveryStatus === "pending" ? (
+                                  <Clock className="size-3" aria-label="Enviando" />
+                                ) : null}
+                                {isOutbound &&
+                                message.deliveryStatus !== "failed" &&
+                                message.deliveryStatus !== "pending" ? (
+                                  <CheckCircle2
+                                    className="size-3"
+                                    aria-label="Enviado"
+                                  />
+                                ) : null}
+                              </div>
+                            </article>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1395,6 +1549,25 @@ export const InboxPanel = ({
                 </div>
               )}
             </div>
+
+            {selectedConversation.status === "resolved" ? (
+              <div className="mx-3 my-2 flex items-center justify-between rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-800 dark:text-emerald-300">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                  Conversación culminada con éxito y archivada en historial.
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  className="h-6 gap-1 text-xs text-emerald-700 hover:text-emerald-900 dark:text-emerald-300"
+                  onClick={handleReopenConversation}
+                  disabled={isPending}>
+                  <RotateCcw className="size-3" />
+                  Reabrir
+                </Button>
+              </div>
+            ) : null}
 
             <div
               className={`shrink-0 border-t border-primary/10 px-2 ${
